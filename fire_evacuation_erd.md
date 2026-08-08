@@ -33,7 +33,7 @@ erDiagram
     user_devices {
         UUID id PK
         UUID user_id FK
-        VARCHAR guest_token
+        VARCHAR device_uuid
         VARCHAR device_model
         VARCHAR os_version
         VARCHAR app_version
@@ -74,6 +74,7 @@ erDiagram
     building_floors {
         UUID id PK
         UUID building_id FK
+        UUID organization_id FK
         INT floor_number
         VARCHAR floor_name
         TEXT floor_plan_url
@@ -112,6 +113,7 @@ erDiagram
     source_documents {
         UUID id PK
         UUID revision_id FK
+        UUID floor_id FK "nullable"
         UUID uploaded_by FK
         VARCHAR original_filename
         file_type_enum file_type
@@ -187,6 +189,7 @@ erDiagram
     release_qr_codes {
         UUID id PK
         UUID release_id FK
+        UUID organization_id FK
         UUID floor_id FK "nullable"
         UUID created_by FK
         VARCHAR qr_hash
@@ -258,10 +261,12 @@ erDiagram
 
     sessions {
         UUID id PK
-        UUID campaign_id FK
-        UUID user_id FK "nullable"
-        UUID device_id FK "nullable"
+        UUID campaign_id FK "nullable"
+        UUID scenario_version_id FK
         UUID organization_id FK
+        UUID user_id FK "nullable"
+        VARCHAR guest_token "nullable"
+        UUID device_id FK
         UUID qr_code_id FK "nullable"
         UUID assignment_id FK "nullable"
         session_mode_enum mode
@@ -277,8 +282,12 @@ erDiagram
         INT time_taken_seconds
         INT wrong_exits
         DECIMAL hazard_exposure_score
+        DECIMAL total_distance_meters
         BOOLEAN reached_exit
         VARCHAR exit_point_id "Unity scene object name"
+        JSONB path_traveled
+        TIMESTAMPTZ client_started_at
+        TIMESTAMPTZ client_ended_at
         BOOLEAN is_synced
         TIMESTAMPTZ synced_at
         TIMESTAMPTZ created_at
@@ -290,6 +299,8 @@ erDiagram
         UUID session_id FK
         INT sequence_number
         JSONB player_transform
+        JSONB player_status
+        JSONB world_interactive_states
         INT hazard_time_step
         JSONB npc_states
         JSONB active_objectives
@@ -368,6 +379,7 @@ erDiagram
     building_floors ||--o{ release_qr_codes : "placed on"
 
     scenario_versions ||--o{ campaigns : "configured by"
+    scenario_versions ||--o{ sessions : "used in"
     
     campaigns ||--o{ assignments : "has assignments"
     campaigns ||--o{ sessions : "contains"
