@@ -1,7 +1,12 @@
 -- ==============================================================================
 -- Project : Fire Evacuation Training 3D
--- Version : 3.2 (Full Complete Schema with Detailed Standard Inline Comments)
+-- Version : 4.0 (Production-Ready — Gap Analysis Applied)
 -- Engine  : PostgreSQL 14+
+-- Changes : + memberships table, + debrief_artifacts table,
+--           + campaigns.mode/allowed_modes, + releases.safety_thresholds,
+--           + revision_reviews.annotation_set_id, + sessions.app_version/unity_version,
+--           + building_floors.elevation_meters/is_basement/metadata,
+--           + organizations.metadata, + 8 indexes mới
 -- ==============================================================================
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
@@ -157,6 +162,7 @@ CREATE TABLE organizations (
     slug        VARCHAR(100) UNIQUE NOT NULL,               -- Đường dẫn định danh URL tĩnh của tổ chức
     plan        VARCHAR(50) DEFAULT 'free',                  -- Gói dịch vụ đăng ký (free, premium, enterprise)
     is_active   BOOLEAN DEFAULT true,                       -- Cờ trạng thái hoạt động của tổ chức
+    metadata    JSONB DEFAULT '{}',                         -- Thông tin bổ sung (logo URL, địa chỉ VP, mã số thuế...)
     created_at  TIMESTAMPTZ DEFAULT NOW(),                  -- Thời điểm khởi tạo tổ chức
     updated_at  TIMESTAMPTZ DEFAULT NOW(),                  -- Thời điểm cập nhật thông tin tổ chức gần nhất
     deleted_at  TIMESTAMPTZ                                 -- Thời điểm xóa mềm tổ chức
@@ -165,14 +171,14 @@ CREATE TABLE organizations (
 CREATE TABLE users (
     -- Định danh và liên kết tổ chức
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Khóa chính định danh người dùng
-    organization_id UUID REFERENCES organizations(id) ON DELETE RESTRICT, -- ID tổ chức chứa người dùng (PlatformAdmin thì NULL)
-    
+    organization_id UUID REFERENCES organizations(id) ON DELETE RESTRICT, -- ID tổ chức chính (PlatformAdmin thì NULL)
+
     -- Thông tin xác thực
     email           VARCHAR(255) UNIQUE NOT NULL,               -- Địa chỉ email đăng nhập
     password_hash   VARCHAR(255) NOT NULL,                      -- Mật khẩu đã mã hóa (bcrypt/argon2)
     full_name       VARCHAR(255),                               -- Họ và tên đầy đủ
-    role            user_role_enum NOT NULL,                    -- Vai trò phân quyền (PlatformAdmin, OrgOwner, BimOperator...)
-    
+    role            user_role_enum NOT NULL,                    -- Vai trò phân quyền chính
+
     -- Trạng thái & Lịch sử
     is_active       BOOLEAN DEFAULT true,                       -- Cờ trạng thái tài khoản
     last_login_at   TIMESTAMPTZ,                                -- Thời điểm đăng nhập thành công gần nhất
@@ -185,13 +191,28 @@ CREATE TABLE users (
     )
 );
 
+-- Quản lý tư cách thành viên và mời vào tổ chức
+CREATE TABLE memberships (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Khóa chính định danh thành viên
+    organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE NOT NULL, -- ID tổ chức
+    user_id         UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,          -- ID người dùng
+    role            user_role_enum NOT NULL,                    -- Vai trò của thành viên trong tổ chức này
+    status          VARCHAR(20) NOT NULL DEFAULT 'Active',      -- Trạng thái: 'Invited' | 'Active' | 'Suspended' | 'Removed'
+    invited_by      UUID REFERENCES users(id),                  -- ID người gửi lời mời
+    invited_at      TIMESTAMPTZ DEFAULT NOW(),                  -- Thời điểm gửi lời mời
+    accepted_at     TIMESTAMPTZ,                                -- Thời điểm chấp nhận lời mời
+    created_at      TIMESTAMPTZ DEFAULT NOW(),                  -- Thời điểm tạo
+    updated_at      TIMESTAMPTZ DEFAULT NOW(),                  -- Thời điểm cập nhật gần nhất
+    UNIQUE (organization_id, user_id)
+);
+
 CREATE TABLE user_devices (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Khóa chính định danh đăng ký thiết bị
     user_id        UUID REFERENCES users(id) ON DELETE SET NULL, -- ID người dùng đăng nhập gần nhất (NULL nếu chưa đăng nhập)
     device_uuid    VARCHAR(255) NOT NULL UNIQUE,                -- Mã định danh phần cứng duy nhất (IMEI/AndroidID/IDFV)
     device_model   VARCHAR(255),                               -- Tên dòng máy/model (VD: "iPad Air 5", "Samsung S23")
     os_version     VARCHAR(50),                                -- Hệ điều hành và phiên bản (VD: "iOS 17.2", "Android 14")
-    app_version    VARCHAR(50),                                -- Phiên bản ứng dụng Mobile/Unity
+    app_version    VARCHAR(50),                                -- Phiên bản ứng dụng Mobile/Unity khi đăng ký
     last_seen_at   TIMESTAMPTZ DEFAULT NOW(),                  -- Lần cuối cùng thiết bị kết nối Server
     created_at     TIMESTAMPTZ DEFAULT NOW()                   -- Ngày ghi nhận thiết bị lần đầu
 );
@@ -216,7 +237,7 @@ CREATE TABLE buildings (
 CREATE TABLE building_locations (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Khóa chính định danh vị trí địa lý
     building_id UUID REFERENCES buildings(id) ON DELETE CASCADE UNIQUE, -- Khóa ngoại trỏ đến tòa nhà (1-1)
-    
+
     -- Địa chỉ hành chính & GPS
     address     TEXT,                                       -- Địa chỉ chi tiết số nhà, tên đường
     city        VARCHAR(255),                               -- Tên Tỉnh/Thành phố
@@ -229,15 +250,18 @@ CREATE TABLE building_locations (
 );
 
 CREATE TABLE building_floors (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Khóa chính định danh tầng
-    building_id     UUID REFERENCES buildings(id) ON DELETE CASCADE, -- ID tòa nhà chứa tầng này
-    organization_id UUID REFERENCES organizations(id) NOT NULL, -- ID tổ chức sở hữu tòa nhà (Cô lập dữ liệu)
-    floor_number    INT NOT NULL,                               -- Số thứ tự tầng (-1 = Hầm 1, 1 = Tầng 1)
-    floor_name      VARCHAR(100),                               -- Tên gợi nhớ tầng ("Tầng Trệt", "Tầng Kỹ Thuật")
-    floor_plan_url  TEXT,                                       -- Đường dẫn URL sơ đồ tầng 2D gốc
-    area_sqm        DECIMAL(10, 2),                             -- Diện tích sàn (m2)
-    created_at      TIMESTAMPTZ DEFAULT NOW(),                  -- Thời điểm tạo
-    updated_at      TIMESTAMPTZ DEFAULT NOW(),                  -- Thời điểm cập nhật gần nhất
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Khóa chính định danh tầng
+    building_id      UUID REFERENCES buildings(id) ON DELETE CASCADE, -- ID tòa nhà chứa tầng này
+    organization_id  UUID REFERENCES organizations(id) NOT NULL, -- ID tổ chức sở hữu (Cô lập dữ liệu)
+    floor_number     INT NOT NULL,                               -- Số thứ tự tầng (-1 = Hầm 1, 0 = Trệt, 1 = Tầng 1)
+    floor_name       VARCHAR(100),                               -- Tên gợi nhớ tầng ("Tầng Trệt", "Tầng Kỹ Thuật")
+    floor_plan_url   TEXT,                                       -- Đường dẫn URL sơ đồ tầng 2D gốc
+    area_sqm         DECIMAL(10, 2),                             -- Diện tích sàn (m2)
+    elevation_meters DECIMAL(6, 2),                             -- Cao độ thực của tầng so với mặt đất (m)
+    is_basement      BOOLEAN DEFAULT false,                     -- Cờ đánh dấu tầng hầm
+    metadata         JSONB DEFAULT '{}',                        -- Thông tin mở rộng (loại tầng, ghi chú kỹ thuật)
+    created_at       TIMESTAMPTZ DEFAULT NOW(),                  -- Thời điểm tạo
+    updated_at       TIMESTAMPTZ DEFAULT NOW(),                  -- Thời điểm cập nhật gần nhất
     UNIQUE (building_id, floor_number)
 );
 
@@ -271,9 +295,9 @@ CREATE TABLE revisions (
 CREATE TABLE source_documents (
     id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Khóa chính định danh file gốc
     revision_id        UUID REFERENCES revisions(id) ON DELETE CASCADE, -- ID phiên bản BIM chứa file này
-    floor_id           UUID REFERENCES building_floors(id) ON DELETE SET NULL, -- ID tầng tương ứng (nếu là bản vẽ 2D tầng lẻ)
+    floor_id           UUID REFERENCES building_floors(id) ON DELETE SET NULL, -- ID tầng (nếu là bản vẽ 2D tầng lẻ)
     uploaded_by        UUID REFERENCES users(id),                  -- ID người tải file lên
-    
+
     -- Metadata file & Lưu trữ
     original_filename  VARCHAR(500) NOT NULL,                      -- Tên file gốc ban đầu ("MatBang_Tang1.dwg")
     file_type          file_type_enum NOT NULL,                    -- Loại định dạng file (IFC, RVT, DWG, PDF...)
@@ -281,7 +305,7 @@ CREATE TABLE source_documents (
     storage_url        TEXT NOT NULL,                              -- Đường dẫn lưu Cloud Storage (S3/MinIO)
     mime_type          VARCHAR(100),                               -- Định dạng MIME
     sha256_hash        VARCHAR(64),                                -- Mã checksum SHA256 chống trùng lặp
-    
+
     -- Kiểm tra an toàn & bản quyền
     quarantine_status  quarantine_status_enum NOT NULL DEFAULT 'Pending', -- Trạng thái quét Virus/Mã độc
     quarantine_note    TEXT,                                       -- Ghi chú chi tiết từ dịch vụ antivirus
@@ -313,12 +337,13 @@ CREATE TABLE revision_processing_logs (
 );
 
 CREATE TABLE revision_reviews (
-    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Khóa chính định danh lượt duyệt mô hình
-    revision_id    UUID REFERENCES revisions(id) ON DELETE CASCADE, -- ID phiên bản BIM được duyệt
-    reviewed_by    UUID REFERENCES users(id),                  -- ID chuyên gia PCCC / FireReviewer
-    action         review_action_enum NOT NULL,                -- Kết quả duyệt (Approved, Rejected)
-    review_message TEXT,                                       -- Nhận xét chuyên môn hoặc lý do yêu cầu sửa
-    reviewed_at    TIMESTAMPTZ DEFAULT NOW(),                  -- Thời điểm duyệt
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Khóa chính định danh lượt duyệt mô hình
+    revision_id       UUID REFERENCES revisions(id) ON DELETE CASCADE, -- ID phiên bản BIM được duyệt
+    reviewed_by       UUID REFERENCES users(id),                  -- ID chuyên gia PCCC / FireReviewer
+    annotation_set_id UUID REFERENCES annotation_sets(id),        -- Phiên bản annotation được duyệt tại thời điểm này
+    action            review_action_enum NOT NULL,                -- Kết quả duyệt (Approved, Rejected)
+    review_message    TEXT,                                       -- Nhận xét chuyên môn hoặc lý do yêu cầu sửa
+    reviewed_at       TIMESTAMPTZ DEFAULT NOW(),                  -- Thời điểm duyệt
     CONSTRAINT check_reject_message CHECK (
         action != 'Rejected' OR (review_message IS NOT NULL AND review_message != '')
     )
@@ -329,18 +354,19 @@ CREATE TABLE revision_reviews (
 -- ------------------------------------------------------------------------------
 
 CREATE TABLE releases (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Khóa chính định danh bản phát hành
-    revision_id     UUID REFERENCES revisions(id) UNIQUE,       -- ID phiên bản BIM tương ứng đã duyệt
-    building_id     UUID REFERENCES buildings(id),              -- ID tòa nhà phát hành
-    organization_id UUID REFERENCES organizations(id) NOT NULL, -- ID tổ chức quản lý bản phát hành
-    
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Khóa chính định danh bản phát hành
+    revision_id       UUID REFERENCES revisions(id) UNIQUE,       -- ID phiên bản BIM tương ứng đã duyệt
+    building_id       UUID REFERENCES buildings(id),              -- ID tòa nhà phát hành
+    organization_id   UUID REFERENCES organizations(id) NOT NULL, -- ID tổ chức quản lý bản phát hành
+
     -- Phê duyệt & Thu hồi
-    approved_by     UUID REFERENCES users(id),                  -- ID quản trị viên duyệt phát hành
-    revoked_by      UUID REFERENCES users(id),                  -- ID người thu hồi bản phát hành (nếu có lỗi)
-    status          release_status_enum NOT NULL DEFAULT 'Built', -- Trạng thái (Built, Active, Revoked...)
-    revoked_reason  TEXT,                                       -- Lý do thu hồi/hủy bỏ
-    published_at    TIMESTAMPTZ DEFAULT NOW(),                  -- Thời điểm xuất bản
-    updated_at      TIMESTAMPTZ DEFAULT NOW(),                  -- Thời điểm cập nhật gần nhất
+    approved_by       UUID REFERENCES users(id),                  -- ID quản trị viên duyệt phát hành
+    revoked_by        UUID REFERENCES users(id),                  -- ID người thu hồi bản phát hành (nếu có lỗi)
+    status            release_status_enum NOT NULL DEFAULT 'Built', -- Trạng thái (Built, Active, Revoked...)
+    safety_thresholds JSONB DEFAULT '{}',                         -- Ngưỡng an toàn FireReviewer pin: max_npc, spawn_bounds, exposure_limit...
+    revoked_reason    TEXT,                                       -- Lý do thu hồi/hủy bỏ
+    published_at      TIMESTAMPTZ DEFAULT NOW(),                  -- Thời điểm xuất bản
+    updated_at        TIMESTAMPTZ DEFAULT NOW(),                  -- Thời điểm cập nhật gần nhất
     CONSTRAINT check_revoke_fields CHECK (
         (status NOT IN ('Revoked', 'ArchivedWarning'))
         OR (revoked_reason IS NOT NULL AND revoked_reason != '' AND revoked_by IS NOT NULL)
@@ -361,10 +387,10 @@ CREATE TABLE release_packages (
 CREATE TABLE release_qr_codes (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Khóa chính định danh điểm quét QR
     release_id      UUID REFERENCES releases(id) ON DELETE CASCADE, -- ID bản phát hành tòa nhà liên kết
-    organization_id UUID REFERENCES organizations(id) NOT NULL, -- ID tổ chức quản lý (Multi-tenant)
+    organization_id UUID REFERENCES organizations(id) NOT NULL, -- ID tổ chức quản lý (Multi-tenant isolation)
     floor_id        UUID REFERENCES building_floors(id),        -- ID tầng dán mã QR
     created_by      UUID REFERENCES users(id),                  -- ID người tạo mã QR
-    
+
     -- Cấu hình mã QR
     qr_hash         VARCHAR(255) UNIQUE NOT NULL,               -- Chuỗi mã hóa tĩnh duy nhất in trên QR
     label           VARCHAR(255),                               -- Tên vị trí dán ("Cột A1 - Sảnh Tầng 2")
@@ -384,20 +410,20 @@ CREATE TABLE scenario_versions (
     organization_id                   UUID REFERENCES organizations(id) NOT NULL, -- ID tổ chức tạo kịch bản
     version_number                    INT NOT NULL DEFAULT 1,                     -- Phiên bản kịch bản (1, 2, 3...)
     name                              VARCHAR(255),                               -- Tên kịch bản ("Cháy phòng Server tầng 3")
-    
+
     -- Cấu hình mô phỏng đám cháy & NPC
     fire_source_config                JSONB DEFAULT '{}',                        -- Vị trí, thời điểm bắt đầu
     npc_config                        JSONB DEFAULT '{}',                        -- Archetypes, mật độ, hành vi
     blocked_elements                  JSONB DEFAULT '[]',                        -- Cửa/cầu thang bị chặn theo thời gian
     guidance_level                    VARCHAR(50) DEFAULT 'full',                -- Full | partial | none
-    
+
     -- Ngưỡng an toàn & Cấu hình tính điểm
     safety_thresholds                 JSONB DEFAULT '{}',                        -- Ngưỡng chịu đựng khói/nhiệt độ của người chơi
     replan_interval_seconds           INT DEFAULT 5,                             -- Tần suất tính lại đường đi Risk-aware A* (giây)
     score_wrong_exit_penalty          INT DEFAULT 10,                            -- Điểm trừ khi chạy nhầm vào cửa bị khóa
     score_hazard_per_second_penalty   DECIMAL(5, 2) DEFAULT 0.50,                -- Điểm trừ cho mỗi giây đứng trong khói
     score_time_bonus_threshold_seconds INT DEFAULT 120,                           -- Mốc thời gian (giây) để thưởng điểm thoát nhanh
-    
+
     -- Phê duyệt
     is_approved                       BOOLEAN DEFAULT false,                     -- Cờ duyệt kịch bản từ FireReviewer
     approved_by                       UUID REFERENCES users(id),                 -- ID người duyệt
@@ -418,6 +444,8 @@ CREATE TABLE campaigns (
     start_date          TIMESTAMPTZ,                                -- Ngày bắt đầu
     end_date            TIMESTAMPTZ,                                -- Ngày kết thúc
     status              campaign_status_enum NOT NULL DEFAULT 'Draft', -- Trạng thái (Draft, Active, Closed...)
+    mode                session_mode_enum NOT NULL DEFAULT 'Guided', -- Chế độ mặc định của chiến dịch
+    allowed_modes       TEXT[] DEFAULT ARRAY['Learn','Guided','Assessment'], -- Các chế độ Member được phép chọn
     max_attempts        INT DEFAULT 1,                              -- Số lần diễn tập tối đa cho mỗi học viên
     created_by          UUID REFERENCES users(id),                  -- ID người tạo chiến dịch
     created_at          TIMESTAMPTZ DEFAULT NOW(),                  -- Ngày tạo
@@ -448,14 +476,18 @@ CREATE TABLE sessions (
     campaign_id         UUID REFERENCES campaigns(id),             -- ID chiến dịch (NULL nếu là Ad-hoc QR drill)
     scenario_version_id UUID REFERENCES scenario_versions(id) NOT NULL, -- ID kịch bản PCCC được tải vào phiên
     organization_id     UUID REFERENCES organizations(id) NOT NULL, -- ID tổ chức sở hữu phiên
-    
+
     -- Định danh người chơi & thiết bị
     user_id             UUID REFERENCES users(id),                 -- ID học viên (NULL nếu là Guest)
     guest_token         VARCHAR(255),                              -- Token tạm thời của Guest không có tài khoản
     device_id           UUID REFERENCES user_devices(id),          -- ID thiết bị phần cứng đang chơi
     qr_code_id          UUID REFERENCES release_qr_codes(id),      -- ID điểm dán QR khởi chạy phiên (nếu quét QR)
     assignment_id       UUID REFERENCES assignments(id),           -- ID bài tập tương ứng được giao (nếu có)
-    
+
+    -- Phiên bản ứng dụng tại thời điểm bắt đầu (phục vụ debug crash)
+    app_version         VARCHAR(50),                               -- Phiên bản Flutter app tại lúc bắt đầu session
+    unity_version       VARCHAR(50),                               -- Phiên bản Unity runtime tại lúc bắt đầu session
+
     -- Trạng thái phiên
     mode                session_mode_enum NOT NULL,                -- Chế độ (Learn | Guided | Assessment)
     status              session_status_enum NOT NULL DEFAULT 'Created', -- Trạng thái (Created, Running, Completed, Crashed...)
@@ -467,7 +499,7 @@ CREATE TABLE sessions (
 CREATE TABLE session_results (
     id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Khóa chính định danh kết quả bài tập
     session_id            UUID REFERENCES sessions(id) ON DELETE CASCADE UNIQUE, -- ID phiên diễn tập (1-1)
-    
+
     -- Chỉ số chấm điểm
     score                 DECIMAL(10, 2) DEFAULT 0,            -- Tổng điểm đạt được (0 - 100 điểm)
     time_taken_seconds    INT,                                 -- Tổng thời gian thoát nạn (giây)
@@ -476,7 +508,7 @@ CREATE TABLE session_results (
     total_distance_meters DECIMAL(8, 2) DEFAULT 0,             -- Quãng đường di chuyển (m)
     reached_exit          BOOLEAN DEFAULT false,               -- Cờ xác nhận đã thoát ra an toàn
     exit_point_id         VARCHAR(100),                        -- ID lối thoát hiểm cuối cùng đi ra
-    
+
     -- Replay & Offline Sync
     path_traveled         JSONB DEFAULT '[]',                  -- Chuỗi tọa độ [{x,y,z,t}] phục vụ Replay 2D/3D
     client_started_at     TIMESTAMPTZ,                         -- Giờ bắt đầu thực tế ở Mobile (chống lệch giờ Offline)
@@ -491,7 +523,7 @@ CREATE TABLE session_checkpoints (
     id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Khóa chính định danh điểm lưu (Auto-save)
     session_id               UUID REFERENCES sessions(id) ON DELETE CASCADE, -- ID phiên diễn tập
     sequence_number          INT NOT NULL,                     -- Số thứ tự checkpoint (1, 2, 3...)
-    
+
     -- Snapshot sinh tồn & thế giới (Crash Recovery)
     player_transform         JSONB NOT NULL,                   -- Tọa độ (x,y,z) và góc quay (rotation)
     player_status            JSONB DEFAULT '{}',               -- Máu, Oxy còn lại, chỉ số khói độc đã hít
@@ -499,12 +531,25 @@ CREATE TABLE session_checkpoints (
     hazard_time_step         INT NOT NULL,                     -- Step thời gian lây lan đám cháy
     npc_states               JSONB DEFAULT '[]',               -- Tọa độ và trạng thái tâm lý đám đông NPC
     active_objectives        JSONB DEFAULT '[]',               -- Danh sách nhiệm vụ phụ đang làm dở
-    
+
     -- Verification
     release_hash             VARCHAR(64),                      -- Hash gói bản đồ để verify khi Resume
     scenario_hash            VARCHAR(64),                      -- Hash kịch bản để verify khi Resume
     created_at               TIMESTAMPTZ DEFAULT NOW(),        -- Thời điểm tự động lưu checkpoint
     UNIQUE (session_id, sequence_number)
+);
+
+-- Artifact phân tích sau mỗi phiên: heatmap, replay path, so sánh A*
+CREATE TABLE debrief_artifacts (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Khóa chính định danh artifact phân tích
+    session_id          UUID REFERENCES sessions(id) ON DELETE CASCADE UNIQUE, -- ID phiên diễn tập (1-1)
+    trajectory_heatmap  JSONB DEFAULT '{}',    -- {floor_id: [{x,y,intensity}]} - heatmap đường di chuyển
+    optimal_path        JSONB DEFAULT '[]',    -- Tuyến A* tham chiếu [{x,y,z,floor_id}]
+    wrong_decisions     JSONB DEFAULT '[]',    -- [{type, timestamp, location, penalty}]
+    hazard_timeline     JSONB DEFAULT '[]',    -- Hazard exposure theo thời gian [{t, level, zone}]
+    npc_summary         JSONB DEFAULT '{}',    -- Tổng kết NPC: tỷ lệ được cứu, archetype stats
+    is_public           BOOLEAN DEFAULT false, -- true = Reviewer đã cấp quyền xem cho participant
+    generated_at        TIMESTAMPTZ DEFAULT NOW() -- Thời điểm backend tính toán xong artifact
 );
 
 CREATE TABLE session_events (
@@ -541,6 +586,10 @@ CREATE INDEX idx_users_org    ON users(organization_id);
 CREATE INDEX idx_users_active ON users(deleted_at) WHERE deleted_at IS NULL;
 CREATE INDEX idx_users_role   ON users(role);
 
+CREATE INDEX idx_memberships_org    ON memberships(organization_id);
+CREATE INDEX idx_memberships_user   ON memberships(user_id);
+CREATE INDEX idx_memberships_status ON memberships(status);
+
 CREATE INDEX idx_devices_user ON user_devices(user_id);
 CREATE INDEX idx_devices_uuid ON user_devices(device_uuid);
 
@@ -567,10 +616,12 @@ CREATE INDEX idx_releases_revision ON releases(revision_id);
 CREATE INDEX idx_releases_building ON releases(building_id);
 CREATE INDEX idx_releases_org      ON releases(organization_id);
 CREATE INDEX idx_releases_status   ON releases(status);
+CREATE INDEX idx_releases_building_active ON releases(building_id, status) WHERE status = 'Active';
 
 CREATE UNIQUE INDEX idx_qr_hash   ON release_qr_codes(qr_hash);
 CREATE INDEX idx_qr_release       ON release_qr_codes(release_id);
 CREATE INDEX idx_qr_org           ON release_qr_codes(organization_id);
+CREATE INDEX idx_qr_active        ON release_qr_codes(qr_hash) WHERE is_active = true;
 
 CREATE INDEX idx_scenario_release  ON scenario_versions(release_id);
 CREATE INDEX idx_scenario_org      ON scenario_versions(organization_id);
@@ -587,17 +638,23 @@ CREATE INDEX idx_sessions_scenario   ON sessions(scenario_version_id);
 CREATE INDEX idx_sessions_user       ON sessions(user_id);
 CREATE INDEX idx_sessions_guest      ON sessions(guest_token);
 CREATE INDEX idx_sessions_org        ON sessions(organization_id);
+CREATE INDEX idx_sessions_running    ON sessions(status, started_at) WHERE status IN ('Running', 'Launching');
 
 CREATE INDEX idx_results_session  ON session_results(session_id);
 CREATE INDEX idx_results_unsynced ON session_results(is_synced) WHERE is_synced = false;
 
 CREATE INDEX idx_checkpoints_session ON session_checkpoints(session_id);
+CREATE INDEX idx_checkpoints_latest  ON session_checkpoints(session_id, sequence_number DESC);
 
-CREATE INDEX idx_events_session ON session_events(session_id);
-CREATE INDEX idx_events_type    ON session_events(event_type);
+CREATE INDEX idx_debrief_session ON debrief_artifacts(session_id);
+
+CREATE INDEX idx_events_session  ON session_events(session_id);
+CREATE INDEX idx_events_type     ON session_events(event_type);
+CREATE INDEX idx_events_timeline ON session_events(session_id, recorded_at);
 
 CREATE INDEX idx_audit_user   ON audit_logs(user_id);
 CREATE INDEX idx_audit_target ON audit_logs(target_entity, target_id);
+CREATE INDEX idx_audit_time   ON audit_logs(created_at DESC);
 
 -- ==============================================================================
 -- SECTION 5: TRIGGERS & RULES
@@ -605,6 +662,7 @@ CREATE INDEX idx_audit_target ON audit_logs(target_entity, target_id);
 
 CREATE TRIGGER set_ts_organizations BEFORE UPDATE ON organizations FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 CREATE TRIGGER set_ts_users BEFORE UPDATE ON users FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+CREATE TRIGGER set_ts_memberships BEFORE UPDATE ON memberships FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 CREATE TRIGGER set_ts_buildings BEFORE UPDATE ON buildings FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 CREATE TRIGGER set_ts_building_locations BEFORE UPDATE ON building_locations FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 CREATE TRIGGER set_ts_building_floors BEFORE UPDATE ON building_floors FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
