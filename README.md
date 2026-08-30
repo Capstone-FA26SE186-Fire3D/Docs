@@ -1,25 +1,29 @@
 # Danh Mục Tài Liệu Dự Án (Docs)
 
-Thư mục này chứa toàn bộ các tài liệu đặc tả, thiết kế cơ sở dữ liệu và luồng nghiệp vụ cho dự án **Fire Evacuation Training 3D**. 
+Thư mục này chứa tài liệu sản phẩm và kiến trúc cho **Fire Evacuation Training 3D (FET3D)**, một đồ án hỗ trợ tập huấn và đánh giá trải nghiệm sơ tán trong môi trường 3D của công trình.
 
-Dưới đây là mô tả ngắn gọn cho từng file để dễ dàng tra cứu:
+## Tài liệu chính
 
-### 1. Tài Liệu Đặc Tả & Thiết Kế (Markdown)
-* **`fire-evacuation-training-features.md`**
-  Đặc tả chi tiết các tính năng của sản phẩm, phân quyền người dùng, các chế độ huấn luyện (Learn, Guided Drill, Assessment), và định vị sản phẩm.
-* **`fire-evacuation-training-technology.md`**
-  Đặc tả kỹ thuật hệ thống, kiến trúc tổng thể, stack công nghệ (ASP.NET Core, Flutter, Unity, PostgreSQL), logic định tuyến A* và các ràng buộc kỹ thuật.
-* **`fire-evacuation-training-workflows.md`**
-  Mô tả chi tiết các luồng nghiệp vụ (User Flow & System Flow) - từ khi BIM Operator tải bản vẽ lên cho đến khi kết thúc một buổi tập huấn và xuất báo cáo.
-* **`fire_evacuation_requirements.md`**
-  Tài liệu Requirements tổng hợp các yêu cầu chức năng (FR) và phi chức năng (NFR) của hệ thống.
+| Tệp | Nội dung |
+| :--- | :--- |
+| `fire_evacuation_requirements.md` | Yêu cầu chức năng, phi chức năng, phạm vi Phase 1 và Phase 2. |
+| `fire-evacuation-training-features.md` | Giá trị sản phẩm, ba loại tài khoản, tính năng và giới hạn sử dụng. |
+| `fire-evacuation-training-workflows.md` | Luồng từ mô hình IFC đến package, QR, buổi tập huấn và dữ liệu kết quả. |
+| `fire-evacuation-training-technology.md` | Kiến trúc, pipeline IFC, runtime Android và các quyết định kỹ thuật. |
+| `fire_evacuation_schema.sql` | Thiết kế cơ sở dữ liệu. |
+| `fire_evacuation_erd.md` | Sơ đồ thực thể–quan hệ. |
+| `3D-Fire-Evacuation-Training-IDEA2.docx` | Bản phác thảo ý tưởng gốc; được lưu nguyên trạng. |
 
-### 2. Thiết Kế Cơ Sở Dữ Liệu (Database)
-* **`fire_evacuation_schema.sql`**
-  Script PostgreSQL hoàn chỉnh (v3.0) tạo 23 bảng, các kiểu ENUM, index, rules và trigger cho hệ thống. Dùng để deploy trực tiếp vào DB.
-* **`fire_evacuation_erd.md`**
-  Mã nguồn sơ đồ Mermaid (ERD v3.0) thể hiện trực quan các bảng và mối quan hệ trong CSDL. (Copy nội dung dán vào mermaid.live để xem ảnh).
+## Phạm vi thống nhất
 
-### 3. Tài Liệu Cũ / Khởi Tạo
-* **`3D-Fire-Evacuation-Training-IDEA2.docx`**
-  Bản phác thảo ý tưởng gốc và mô tả chung ban đầu của dự án.
+- Ba loại tài khoản là `PlatformAdmin`, `OrganizationUser` và `Trainee`. Không có cơ chế thành viên tổ chức, lời mời, truy cập khách hay tập huấn không định danh. Mọi `Trainee` đã xác thực có thể quét bất kỳ QR active pin một `Training` của release đã publish để tham gia.
+- `OrganizationUser` sở hữu toàn bộ nghiệp vụ của tổ chức: Building, nhập IFC, scenario, publish, QR, analytics và billing.
+- Đầu vào mô hình của sản phẩm là **IFC**. Ứng dụng Android được cài một lần; khi quét QR hợp lệ, ứng dụng tải và xác minh content package của release tương ứng rồi khởi chạy Unity.
+- Headline Phase 1 giữ nguyên: **IFC → 3D → Unity Android → QR → Training → Result**.
+- Lifecycle thực thi là: IFC đạt QA chuyển revision sang `ReadyForScenario`; action `ConfirmForTraining` chuyển nó sang `ConfirmedForTraining`; backend tạo release `Built`, package và `Training` khớp nhau; sau đó publish release rồi mới tạo active QR pin chính xác `trainingId`. `ConfirmForTraining` chỉ là readiness nội bộ, không phải chứng nhận, phê duyệt PCCC, thẩm duyệt thiết kế hoặc chỉ dẫn ứng phó sự cố thực tế.
+- Phase 1 cung cấp luồng core online. Phase 2 bổ sung PayOS production, quotation, transaction, invoice metadata, revenue, feedback/support, basic offline, basic NPC và expanded analytics.
+- Với PayOS Phase 2, backend tạo request `Pending` qua entry point đặc quyền hẹp. Adapter webhook xác thực bằng SDK `webhooks.verify(req.body)` hoặc thuật toán chính thức trên `data` đã canonicalize theo thứ tự tên trường tăng dần trước khi gọi database; `returnUrl` chỉ dùng điều hướng.
+
+## Lưu ý sử dụng
+
+FET3D phục vụ học tập, tập huấn và hoạt động đánh giá của đồ án. Kết quả mô phỏng, analytics và `ConfirmForTraining` không được dùng để kết luận công trình an toàn, đáp ứng quy chuẩn hay thay thế hướng dẫn khẩn cấp tại hiện trường.

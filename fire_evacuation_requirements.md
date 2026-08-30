@@ -1,183 +1,123 @@
-# Tài Liệu Yêu Cầu Dự Án (Requirements Document)
-**Dự án:** Fire Evacuation Training 3D
-**Phiên bản:** v1.0
-**Ngày cập nhật:** 08/08/2026
-**Trạng thái:** Draft / Cần Review
+# Tài Liệu Yêu Cầu Dự Án
 
----
+**Dự án:** Fire Evacuation Training 3D (FET3D)
+**Phiên bản:** v2.0
+**Trạng thái:** Scope đồng bộ cho Phase 1 và Phase 2
 
-## Mục Lục
-1. [Tổng Quan Dự Án](#1-tổng-quan-dự-án)
-2. [Stakeholders & Roles](#2-stakeholders--roles)
-3. [Functional Requirements (Yêu Cầu Chức Năng)](#3-functional-requirements-yêu-cầu-chức-năng)
-4. [Non-Functional Requirements (Yêu Cầu Phi Chức Năng)](#4-non-functional-requirements-yêu-cầu-phi-chức-năng)
-5. [Ngoài Phạm Vi (Out of Scope)](#5-ngoài-phạm-vi-out-of-scope)
-6. [Ràng Buộc & Giả Định (Constraints & Assumptions)](#6-ràng-buộc--giả-định)
-7. [Câu Hỏi Mở (Open Questions)](#7-câu-hỏi-mở)
+## 1. Mục tiêu và giới hạn
 
----
+FET3D là đồ án tạo trải nghiệm tập huấn sơ tán 3D trên Android từ mô hình **IFC** của Building. Ứng dụng Android được cài một lần. Mọi `Trainee` đã xác thực có thể quét bất kỳ QR active pin một `Training` của release đã publish; ứng dụng tải content package, xác minh package và khởi chạy Unity để thực hành scenario.
 
-## 1. Tổng Quan Dự Án (Project Overview)
-Fire Evacuation Training 3D là một nền tảng SaaS Multi-tenant đột phá, được thiết kế để chuyển đổi các mô hình BIM (IFC/RVT) và bản vẽ 2D (DWG/PDF) của các tòa nhà thành môi trường huấn luyện thoát hiểm 3D sống động trên thiết bị di động Android. 
+Headline Phase 1 là **IFC → 3D → Unity Android → QR → Training → Result**. Ở backend, QR chỉ được tạo active sau khi revision/scenario đã readiness, release và `Training` khớp nhau đã được tạo, rồi release được publish.
 
-Hệ thống phục vụ nhiều loại tổ chức (tòa nhà văn phòng, bệnh viện, trung tâm thương mại). Người dùng cuối sẽ sử dụng ứng dụng di động Flutter để quét mã QR tại các vị trí trong tòa nhà, tải xuống môi trường 3D Unity tương ứng, và thực hành các kịch bản thoát hiểm cháy nổ có sự hỗ trợ của AI định tuyến và mô phỏng đám đông (NPC).
+Sản phẩm là công cụ học tập và đánh giá hoạt động của đồ án. Mô phỏng hazard, route, điểm số, analytics và `ConfirmForTraining` không phải chứng nhận an toàn, phê duyệt PCCC, thẩm duyệt thiết kế, tư vấn chuyên môn hay hướng dẫn ứng phó sự cố thực tế.
 
----
+## 2. Tài khoản và quyền
 
-## 2. Stakeholders & Roles
-Hệ thống sử dụng cơ chế Role-Based Access Control (RBAC).
+| Loại tài khoản | Trách nhiệm |
+| :--- | :--- |
+| `PlatformAdmin` | Quản trị nền tảng, tổ chức, tài khoản, cấu hình vận hành và giám sát tổng quan. |
+| `OrganizationUser` | Sở hữu Building, IFC, scenario, publish, QR, analytics và billing của tổ chức. |
+| `Trainee` | Đăng nhập ứng dụng, quét bất kỳ QR active của release đã publish, tải package, thực hiện buổi tập huấn và xem kết quả của chính mình. |
 
-| Role | Mô Tả | Quyền Hạn Chính |
+Không có cơ chế thành viên tổ chức, lời mời tài khoản, token khách, truy cập khách hoặc tập huấn không định danh. Mọi truy cập QR và buổi tập huấn phải gắn với `Trainee` đã xác thực; active QR của release đã publish không dùng account-specific permission, allowlist hoặc đối chiếu `organizationId` làm điều kiện tham gia.
+
+Sau IFC/connectivity QA, revision ở `ReadyForScenario`. `ConfirmForTraining` là action do `OrganizationUser` thực hiện sau khi scenario và candidate package/manifest đạt readiness; action này chuyển revision sang `ConfirmedForTraining`. QR không phải điều kiện đầu vào của action vì QR chỉ tồn tại sau release và `Training`. Action không xác nhận công trình, lối thoát, phương án PCCC hay hiệu lực pháp lý của bất kỳ nội dung nào.
+
+## 3. Functional Requirements
+
+### FR-AUTH: xác thực và phân quyền
+
+| ID | Yêu cầu | Phase |
 | :--- | :--- | :--- |
-| **PlatformAdmin** | Quản trị viên cấp cao nhất của hệ thống SaaS. | Quản lý tenant (tổ chức), cấu hình hệ thống chung, xem báo cáo tổng thể. |
-| **OrgOwner** | Chủ sở hữu / Quản lý của một tổ chức cụ thể (Tenant). | Quản lý thông tin tổ chức, quản lý người dùng trong tổ chức, phân quyền, tạo Campaign, xem báo cáo tổ chức. |
-| **BimOperator** | Nhân sự kỹ thuật phụ trách sơ đồ/BIM của tổ chức. | Upload file BIM/2D, xem trạng thái xử lý pipeline, tạo Revision. |
-| **FireReviewer** | Chuyên gia an toàn PCCC của tổ chức. | Review (xem trước 3D), Approve/Reject các Revision, tạo Campaign, cấu hình độ khó kịch bản. |
-| **Member** | Người dùng nội bộ của tổ chức (nhân viên, cư dân...). | Đăng nhập app di động, quét QR, tham gia huấn luyện đầy đủ các chế độ, xem kết quả cá nhân. |
-| **Guest** | Người dùng vãng lai, khách thăm quan (Không đăng nhập). | Quét QR, chỉ tham gia được môi trường 3D nếu Release cho phép `is_public=true`. Không được chơi chế độ Assessment. |
+| FR-AUTH-01 | Cho phép ba loại tài khoản đăng nhập bằng cơ chế xác thực an toàn; API và giao diện kiểm tra quyền ownership theo loại tài khoản và `organizationId`, ngoại trừ QR participation của `Trainee` theo FR-AUTH-03. | 1 |
+| FR-AUTH-02 | `PlatformAdmin` có thể tạo, khóa hoặc khôi phục tài khoản và organization; `OrganizationUser` không cấp thêm loại tài khoản. | 1 |
+| FR-AUTH-03 | `Trainee` đã xác thực có thể resolve và tham gia mọi active QR của release đã publish; chỉ kết quả cá nhân của chính `Trainee` được hiển thị. | 1 |
 
----
+### FR-BUILD: Building và IFC
 
-## 3. Functional Requirements (Yêu Cầu Chức Năng)
+| ID | Yêu cầu | Phase |
+| :--- | :--- | :--- |
+| FR-BUILD-01 | `OrganizationUser` tạo, cập nhật, lưu trữ Building của organization. | 1 |
+| FR-IFC-01 | `OrganizationUser` tải mô hình IFC cho Building; hệ thống kiểm tra định dạng, kích thước, hash và lưu source riêng tư. | 1 |
+| FR-IFC-02 | Worker phân tích IFC, tạo geometry runtime, semantic graph, NavMesh source, hazard grid và manifest cho revision. | 1 |
+| FR-IFC-03 | Hệ thống hiển thị trạng thái xử lý, issue và log để `OrganizationUser` sửa source IFC rồi xử lý lại. | 1 |
+| FR-IFC-04 | Revision phải kiểm tra floor, cửa, cầu thang, lối thoát, kết nối liên tầng và route từ spawn trước khi chuyển `ReadyForScenario`. | 1 |
 
-### FR-AUTH: Authentication & Authorization
-| ID | Tên Yêu Cầu | Mô Tả | Priority | Notes |
-| :--- | :--- | :--- | :--- | :--- |
-| FR-AUTH-01 | Đăng nhập Web Admin | Cho phép PlatformAdmin, OrgOwner, BimOperator, FireReviewer đăng nhập Web Admin bằng Email/Password. | Must Have | JWT Bearer token |
-| FR-AUTH-02 | Đăng nhập Mobile App | Cho phép Member đăng nhập Flutter app. | Must Have | |
-| FR-AUTH-03 | Guest Mode | Cho phép người dùng mở Mobile app không cần đăng nhập (Guest) và sử dụng DeviceToken để định danh. | Must Have | |
-| FR-AUTH-04 | Phân quyền RBAC | Hệ thống phải giới hạn chức năng dựa trên Role của người dùng (API & UI). | Must Have | |
+### FR-SCENARIO: scenario và readiness
 
-### FR-ORG: Organization & User Management
-| ID | Tên Yêu Cầu | Mô Tả | Priority | Notes |
-| :--- | :--- | :--- | :--- | :--- |
-| FR-ORG-01 | Quản lý Tenant | PlatformAdmin có thể tạo mới, cập nhật, vô hiệu hóa các tổ chức (Tenant). | Must Have | |
-| FR-ORG-02 | Quản lý thành viên tổ chức | OrgOwner có thể thêm, sửa, xóa, cấp role cho các thành viên trong tổ chức của mình. | Must Have | |
+| ID | Yêu cầu | Phase |
+| :--- | :--- | :--- |
+| FR-SCENARIO-01 | `OrganizationUser` tạo và version scenario trên revision hợp lệ: spawn, mục tiêu, hazard surrogate, giới hạn thời gian và rubric. | 1 |
+| FR-SCENARIO-02 | Hệ thống lưu cấu hình risk-aware A* cùng version scenario để replay và so sánh được. | 1 |
+| FR-SCENARIO-03 | `OrganizationUser` thực hiện action `ConfirmForTraining` khi candidate package/manifest, scenario và kiểm tra kết nối đã sẵn sàng; hệ thống persist transition `ReadyForScenario` → `ConfirmedForTraining`. | 1 |
+| FR-SCENARIO-04 | Màn hình readiness phải hiển thị rõ giới hạn của mô phỏng và không dùng ngôn ngữ chứng nhận hoặc phê duyệt PCCC. | 1 |
 
-### FR-BUILD: Building Management
-| ID | Tên Yêu Cầu | Mô Tả | Priority | Notes |
-| :--- | :--- | :--- | :--- | :--- |
-| FR-BUILD-01 | Khởi tạo Tòa nhà | OrgOwner/BimOperator có thể tạo hồ sơ tòa nhà mới (Tên, Vị trí, Số tầng...). | Must Have | |
-| FR-BUILD-02 | Quản lý Tầng (Floors) | Tổ chức cấu trúc Tòa nhà -> Tầng. | Must Have | |
+### FR-RELEASE: publish, QR và content package
 
-### FR-BIM: BIM Upload & Processing Pipeline
-| ID | Tên Yêu Cầu | Mô Tả | Priority | Notes |
-| :--- | :--- | :--- | :--- | :--- |
-| FR-BIM-01 | Upload File BIM | BimOperator upload file IFC/RVT/DWG/PDF qua Web. Hệ thống tạo Revision (trạng thái: Draft) và lưu gốc vào MinIO. | Must Have | Giới hạn dung lượng upload (VD: 500MB) |
-| FR-BIM-02 | Bắt đầu xử lý Pipeline | Chuyển đổi trạng thái Revision từ Draft sang Processing. Kích hoạt Python worker. | Must Have | |
-| FR-BIM-03 | BIM Processing Worker | Worker xử lý file (Parse IFC -> Clean Geometry -> Decimate Mesh -> Gen NavMesh -> Gen Hazard Grid -> Export GLB + Manifest). | Must Have | Chạy ngầm, timeout 30 phút, retry 2 lần |
-| FR-BIM-04 | Cập nhật trạng thái xử lý | Cập nhật trạng thái Revision thành `ReviewRequired` (thành công) hoặc `Failed` (lỗi). Hiển thị log lỗi cho BimOperator. | Must Have | |
+| ID | Yêu cầu | Phase |
+| :--- | :--- | :--- |
+| FR-RELEASE-01 | Sau `ConfirmedForTraining`, hệ thống tạo TrainingRelease `Built`, package và một `Training` khớp revision/scenario/organization; chỉ sau đó mới publish release. Release mới không ghi đè package của phiên đang dùng. | 1 |
+| FR-RELEASE-02 | Sau publish, hệ thống tạo active QR pin đồng thời một release và đúng một `Training`. Mọi `Trainee` đã xác thực có thể resolve QR đó để nhận manifest/package và bắt đầu session của `Training` đã pin; không áp dụng account-specific permission, allowlist hay điều kiện `organizationId` cho participation. | 1 |
+| FR-RELEASE-03 | Android tải package theo manifest, kiểm tra hash/schema/runtime version rồi chuyển trạng thái sẵn sàng. | 1 |
+| FR-RELEASE-04 | `OrganizationUser` có thể xem, in, rotate hoặc revoke QR của Building; QR phải bị deactivate trước khi đóng `Training` hoặc chuyển release sang `Superseded`/`Revoked`. | 1 |
 
-### FR-REVIEW: Review & Approval Workflow
-| ID | Tên Yêu Cầu | Mô Tả | Priority | Notes |
-| :--- | :--- | :--- | :--- | :--- |
-| FR-REVIEW-01 | Preview 3D | FireReviewer có thể mở Web Admin xem bản preview 3D dạng GLB. | Must Have | |
-| FR-REVIEW-02 | Kiểm tra kịch bản | Cho phép Reviewer kiểm tra trực quan các yếu tố: Lối thoát, Điểm tập kết, Lưới Hazard. | Should Have | |
-| FR-REVIEW-03 | Phê duyệt (Approve) | FireReviewer Approve bản Revision. Hệ thống kích hoạt gen Addressables package. | Must Have | |
-| FR-REVIEW-04 | Từ chối (Reject) | FireReviewer Reject Revision, bắt buộc nhập lý do. Trạng thái chuyển về Rejected. | Must Have | |
+### FR-TRAINING: buổi tập huấn
 
-### FR-RELEASE: Release & QR Management
-| ID | Tên Yêu Cầu | Mô Tả | Priority | Notes |
-| :--- | :--- | :--- | :--- | :--- |
-| FR-RELEASE-01 | Generate Addressables | Sau khi Approve, hệ thống tạo gói Unity Addressables, mã hóa và upload lên MinIO. | Must Have | |
-| FR-RELEASE-02 | Tạo Release | Hệ thống tạo Release (Active), sinh chuỗi QR hash định danh cho phiên bản môi trường 3D. | Must Have | |
-| FR-RELEASE-03 | Config Public Access | Có thể set `is_public=true/false` cho Release để kiểm soát Guest có được tham gia hay không. | Must Have | |
-| FR-RELEASE-04 | Quản lý và In QR | Cung cấp giao diện để OrgOwner/BimOperator tải xuống/in QR Code hiển thị tại hiện trường. | Must Have | |
+| ID | Yêu cầu | Phase |
+| :--- | :--- | :--- |
+| FR-TRAINING-01 | Hỗ trợ Learn, Guided Drill và Assessment với luật scenario nhất quán. | 1 |
+| FR-TRAINING-02 | Flutter gọi Unity với `sessionId`, manifest path, launch grant ngắn hạn và protocol version; Unity trả event và result có schema version. | 1 |
+| FR-TRAINING-03 | Runtime cung cấp risk-aware A*, hazard surrogate và debrief cơ bản; không trình bày output là hướng dẫn thoát nạn thực tế. | 1 |
+| FR-TRAINING-04 | Basic offline: package đã xác minh có thể khởi chạy khi mất mạng, event/result được xếp hàng và đồng bộ khi có mạng. | 2 |
+| FR-TRAINING-05 | Basic NPC: scenario hỗ trợ số lượng NPC giới hạn, state đơn giản và budget hiệu năng trên Android. | 2 |
 
-### FR-CAMPAIGN: Campaign Management
-| ID | Tên Yêu Cầu | Mô Tả | Priority | Notes |
-| :--- | :--- | :--- | :--- | :--- |
-| FR-CAMPAIGN-01 | Tạo Campaign | OrgOwner/FireReviewer tạo Campaign dựa trên một Release. | Must Have | |
-| FR-CAMPAIGN-02 | Cấu hình Campaign | Cấu hình mật độ NPC (NPC density), ngưỡng an toàn (safety thresholds), thời gian bắt đầu/kết thúc Campaign. | Must Have | |
-| FR-CAMPAIGN-03 | Theo dõi tiến độ | Liệt kê danh sách các Sessions (lượt chơi) của Campaign. | Must Have | |
+### FR-ANALYTICS: analytics
 
-### FR-TRAINING: Training Session & Modes
-| ID | Tên Yêu Cầu | Mô Tả | Priority | Notes |
-| :--- | :--- | :--- | :--- | :--- |
-| FR-TRAINING-01 | Chế độ Learn | Chế độ tự do, không hazard, highlight đường, không tính điểm. | Must Have | |
-| FR-TRAINING-02 | Chế độ Guided Drill | Có hazard ngẫu nhiên, AI gợi ý đường, có NPC, có tính điểm. | Must Have | |
-| FR-TRAINING-03 | Chế độ Assessment | Không gợi ý, hazard cố định theo kịch bản, chấm điểm khắt khe, không được retry. Khóa đối với Guest. | Must Have | |
-| FR-TRAINING-04 | Scan QR & Xác thực | Flutter app quét QR, gọi API bằng QR Hash, trả về Signed URL tải Manifest (TTL 1-4 giờ). | Must Have | |
-| FR-TRAINING-05 | Download & Init | Flutter download Addressables, gọi Unity truyền path và config. | Must Have | |
-| FR-TRAINING-06 | Unity Gameplay | Unity load Scene, NavMesh, Hazard, NPC theo chế độ đã chọn. | Must Have | |
-| FR-TRAINING-07 | Hand-off Kết quả | Unity kết thúc vòng chơi, trả JSON kết quả về Flutter. | Must Have | |
+| ID | Yêu cầu | Phase |
+| :--- | :--- | :--- |
+| FR-ANALYTICS-01 | `OrganizationUser` xem aggregate cơ bản: số phiên, thời lượng, kết quả, route decision và modeled exposure. | 1 |
+| FR-ANALYTICS-02 | `Trainee` xem kết quả của chính mình theo policy của mode. | 1 |
+| FR-ANALYTICS-03 | Expanded analytics bổ sung filter theo Building/scenario/thời gian, so sánh cohort, export và debrief aggregate. | 2 |
 
-### FR-AI: AI Routing & NPC Behavior
-| ID | Tên Yêu Cầu | Mô Tả | Priority | Notes |
-| :--- | :--- | :--- | :--- | :--- |
-| FR-AI-01 | Thuật toán Risk-aware A* | Tính toán đường đi tối ưu dựa trên: khoảng cách, hazard exposure, độ tắc nghẽn. | Must Have | |
-| FR-AI-02 | Hazard Handling | Xử lý các loại Hazard: Lửa (không thể qua), Khói (tăng cost), Tắc nghẽn (tăng cost). | Must Have | |
-| FR-AI-03 | Dynamic Replanning | Thuật toán tự động tính lại đường đi sau mỗi N giây hoặc khi hazard mới xuất hiện. | Must Have | |
-| FR-AI-04 | NPC States | NPC chuyển đổi các trạng thái: Idle -> Alarmed -> PathChoosing -> Moving -> Stuck -> ReportingError. | Must Have | |
-| FR-AI-05 | NPC Pathfinding & Congestion | NPC sử dụng NavMesh riêng, có thể cản đường người chơi tạo congestion. | Must Have | Số lượng NPC phụ thuộc config Campaign. |
+### FR-BILLING: quotation, thanh toán và hỗ trợ
 
-### FR-SYNC: Offline Sync & Resilience
-| ID | Tên Yêu Cầu | Mô Tả | Priority | Notes |
-| :--- | :--- | :--- | :--- | :--- |
-| FR-SYNC-01 | Offline Package Cache | Flutter lưu cache các Addressables package theo cơ chế LRU. Cấu hình dung lượng max. | Must Have | Giảm tải download lần sau |
-| FR-SYNC-02 | Local Result Queue | Flutter lưu JSON kết quả vào SQLite/Hive nội bộ ngay sau khi chơi. | Must Have | |
-| FR-SYNC-03 | Sync Results | Flutter đồng bộ dữ liệu kết quả lên Backend tự động khi có mạng. | Must Have | Offline-first approach |
-| FR-SYNC-04 | Crash Recovery | Nếu Unity crash, Flutter giữ state, cho resume nếu chưa quá thời gian timeout (default 30 phút). | Should Have | |
-| FR-SYNC-05 | Ghi nhận Crash | Nếu crash hoàn toàn, đánh dấu Session là `Crashed`, không tính vào điểm. | Must Have | |
+| ID | Yêu cầu | Phase |
+| :--- | :--- | :--- |
+| FR-BILLING-01 | `OrganizationUser` xem quotation cho dịch vụ tổ chức. | 2 |
+| FR-BILLING-02 | Tích hợp PayOS production: backend tạo duy nhất request `Pending` qua `SECURITY DEFINER` entry point dành cho NOLOGIN executor, không có table DML; webhook adapter dùng SDK `webhooks.verify(req.body)` hoặc canonicalize và sắp xếp tăng dần các trường trong `data` theo thuật toán chính thức trước khi gọi entry point webhook idempotent. Database không tự xác thực mật mã. | 2 |
+| FR-BILLING-03 | Lưu invoice metadata, trạng thái thanh toán và revenue aggregate theo organization. | 2 |
+| FR-BILLING-04 | `returnUrl`/`cancelUrl` chỉ điều hướng; chỉ trusted webhook đã được adapter xác thực và khớp `orderCode`, amount, currency mới có thể ghi `Paid`. | 2 |
+| FR-SUPPORT-01 | `OrganizationUser` và `Trainee` gửi feedback/support; `PlatformAdmin` theo dõi và phản hồi ticket. | 2 |
 
-### FR-ANALYTICS: Analytics & Reporting
-| ID | Tên Yêu Cầu | Mô Tả | Priority | Notes |
-| :--- | :--- | :--- | :--- | :--- |
-| FR-ANALYTICS-01 | Dashboard Tổ chức | Hiển thị thống kê tổng quan: điểm số, số người tham gia, lỗi lối sai (wrong exits). | Must Have | |
-| FR-ANALYTICS-02 | Báo cáo chi tiết | Thống kê hazard exposure, thời gian thoát hiểm theo cá nhân và theo thời gian. | Must Have | |
-| FR-ANALYTICS-03 | Báo cáo Guest | Phân tích Session của Guest dựa trên DeviceToken (ẩn danh). | Should Have | |
+### FR-AUDIT: truy vết
 
-### FR-AUDIT: Audit Log
-| ID | Tên Yêu Cầu | Mô Tả | Priority | Notes |
-| :--- | :--- | :--- | :--- | :--- |
-| FR-AUDIT-01 | System Audit Trail | Ghi log mọi hành động nhạy cảm: Approve/Reject Revision, Upload BIM, Tạo Campaign. | Must Have | |
+| ID | Yêu cầu | Phase |
+| :--- | :--- | :--- |
+| FR-AUDIT-01 | Lưu audit cho tải IFC, xử lý revision, scenario, `ConfirmForTraining`, publish, QR, billing và các thao tác quản trị. | 1 |
 
----
+## 4. Non-Functional Requirements
 
-## 4. Non-Functional Requirements (Yêu Cầu Phi Chức Năng)
+- **Performance:** mục tiêu tối thiểu 30 FPS trên Android tầm trung cho content package Phase 1; Phase 2 benchmark basic NPC theo ngân sách thiết bị đã công bố.
+- **Security:** raw IFC chỉ nằm ở backend/workstation; mobile nhận package runtime qua manifest và URL ký có TTL. Mọi query tenant-scoped phải lọc `organizationId`.
+- **Integrity:** package, manifest, event batch và webhook thanh toán phải có hash, schema/version hoặc idempotency key phù hợp.
+- **Privacy:** chỉ thu thập dữ liệu cần cho tập huấn, analytics và vận hành; `Trainee` không xem dữ liệu của người khác.
+- **Availability:** backend stateless, worker retry có kiểm soát; lỗi processing hoặc hash mismatch không được publish im lặng.
+- **Compatibility:** Android 10 trở lên; web vận hành trên các trình duyệt hiện đại.
 
-### NFR-PERF: Performance
-- **Unity 3D Engine**: Đạt mức tối thiểu **30 FPS ổn định** trên thiết bị Android tầm trung. Chạy ổn định không crash trong ít nhất 15 phút. Có cơ chế xử lý OOM (Out Of Memory) gracefully.
-- **Package Size**: Mỗi Addressables package không vượt quá **150MB** (sau khi decimate mesh và nén).
-- **API Response**: 95th percentile < **500ms** cho các endpoint thông thường (như auth, quét QR, sync kết quả).
-- **BIM Processing Worker**: Có khả năng scale ngang; xử lý tối đa 30 phút/file, tự động retry 2 lần nếu failed.
+## 5. Phạm vi theo phase
 
-### NFR-SEC: Security
-- **Bảo vệ File BIM gốc**: File IFC/RVT nguyên bản chỉ Backend được quyền đọc. Tuyệt đối không expose ra public link.
-- **Bảo vệ Addressables Package**: Gói Addressables phải được mã hóa trước khi lên MinIO. Chỉ tải được qua Signed URL với Time-to-Live (TTL) ngắn (1-4 giờ).
-- **API Security**: Sử dụng JWT Bearer authentication, validate token trên mọi request.
+| Phase 1 — core online | Phase 2 — mở rộng vận hành |
+| :--- | :--- |
+| Tài khoản, Building, IFC pipeline, scenario, `ConfirmForTraining`, publish, QR, Android/Unity online session, analytics cơ bản và audit. | PayOS production, quotation, transaction, invoice metadata, revenue, feedback/support, basic offline, basic NPC và expanded analytics. |
 
-### NFR-AVAIL: Availability
-- Hệ thống thiết kế chịu lỗi, MinIO / Postgres / Web server deploy theo cụm. Backend .NET thiết kế stateless.
+## 6. Ngoài phạm vi
 
-### NFR-PRIVACY: Data Privacy
-- **Guest Data**: Dữ liệu chơi của Guest chỉ lưu gắn với DeviceToken, hoàn toàn không thu thập/gắn định danh cá nhân (PII).
-- **Multi-tenant Data Isolation**: Dữ liệu của tổ chức nào chỉ tổ chức đó truy cập được. Áp dụng TenantID ở level Database (PostgreSQL RLS hoặc qua Entity Framework Global Query Filter).
+- Chứng nhận, phê duyệt, kiểm định hoặc kết luận tuân thủ PCCC.
+- Chuyển đổi tự động từ định dạng mô hình ngoài IFC.
+- Truy cập không có tài khoản xác thực hoặc chia sẻ dữ liệu vượt phạm vi organization.
+- Hướng dẫn quyết định trong tình huống cháy nổ thực tế.
 
-### NFR-COMPAT: Compatibility
-- **Mobile**: Android (Version 10.0 trở lên).
-- **Web Admin**: Tương thích các trình duyệt hiện đại (Chrome, Edge, Firefox, Safari phiên bản 2 năm gần nhất).
+## 7. Đánh giá đồ án
 
----
-
-## 5. Ngoài Phạm Vi (Out of Scope)
-- Hỗ trợ nền tảng iOS hoặc WebGL cho trải nghiệm người dùng cuối (Giai đoạn 1 chỉ tập trung Android).
-- Tích hợp thiết bị VR/AR (Kính thực tế ảo).
-- Xây dựng công cụ vẽ bản vẽ ngay trên hệ thống Web (Chỉ hỗ trợ upload file vẽ sẵn từ Revit/AutoCAD).
-
----
-
-## 6. Ràng Buộc & Giả Định (Constraints & Assumptions)
-- **Ràng buộc**: Quá trình giải mã Addressables và Unity handoff phải nằm hoàn toàn trong Flutter app cục bộ, không streaming hình ảnh từ server.
-- **Giả định**: Các file BIM upload lên phải tuân thủ một chuẩn đặt tên (Naming Convention) nhất định để Python worker có thể tự động nhận dạng các yếu tố kiến trúc (như `IfcDoor`, `IfcStair`).
-- **Giả định**: Điện thoại của người dùng cuối có tối thiểu 2GB RAM trống để chạy engine 3D.
-
----
-
-## 7. Câu Hỏi Mở (Open Questions)
-1. Cơ chế tính điểm trong *Assessment Mode* cụ thể sẽ trừ/cộng điểm dựa trên công thức toán học nào? (Cần FireReviewer chuyên gia cung cấp).
-2. Chuẩn nén mã hóa nào (AES-128 hay AES-256) sẽ được sử dụng cho Addressables package trên app di động để cân bằng giữa bảo mật và tốc độ load?
-3. Với các file RVT (Revit) độc quyền, Python worker sẽ trực tiếp parse hay cần một dịch vụ trung gian (như Autodesk Forge / APS) trước khi đẩy vào pipeline cục bộ?
-
----
-*Tài liệu này là phiên bản nội bộ, chỉ dành cho Development Team và các Stakeholders liên quan.*
+Hoạt động đánh giá chuyên môn và user study là hoạt động thu thập phản hồi cho đồ án. Chúng kiểm tra tính dễ sử dụng, độ rõ ràng của scenario, hiệu năng và cách người học tương tác với mô phỏng; chúng không tạo quyền hệ thống và không thay thế quy trình pháp lý hoặc nghiệp vụ PCCC.
