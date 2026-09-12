@@ -13,6 +13,8 @@ Thư mục này chứa tài liệu sản phẩm và kiến trúc cho **Fire Evac
 | `fire_evacuation_schema.sql` | Thiết kế cơ sở dữ liệu. |
 | `fire_evacuation_erd.md` | Sơ đồ thực thể–quan hệ. |
 | `3D-Fire-Evacuation-Training-IDEA2.docx` | Bản phác thảo ý tưởng gốc; được lưu nguyên trạng. |
+| `fire_evacuation_project_overview.md` | Tổng quan thống nhất về mục tiêu, phạm vi, workflow và giới hạn của FET3D. |
+| `fire_evacuation_bim_rag_pccc.md` | Thiết kế RAG Python dùng BIM để tạo gợi ý PCCC cần chuyên gia thẩm tra. |
 
 ## Phạm vi thống nhất
 
