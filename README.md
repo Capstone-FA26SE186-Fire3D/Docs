@@ -28,4 +28,29 @@ Thư mục này chứa tài liệu sản phẩm và kiến trúc cho **Fire Evac
 
 ## Lưu ý sử dụng
 
+### Quy trình Git của team
+
+- Docs là repo độc lập. Mỗi task tài liệu mới tạo nhánh `docs/<task>` hoặc `chore/<task>` từ `origin/develop` đã cập nhật; không sửa trực tiếp trên `main` hoặc `develop`.
+- Trước task: kiểm tra `git status --short --branch`, `git branch -vv` và `git fetch origin --prune`. Khi worktree an toàn, cập nhật local `develop` theo `origin/develop` bằng fast-forward rồi tạo nhánh task. Nếu đang tiếp tục task, kiểm tra nhánh hiện tại thay vì tạo nhánh trùng.
+- Giữ nguyên thay đổi đang dở; không tự stash/reset/clean hoặc bỏ file. Nếu local develop diverged hoặc remote không truy cập được, báo rõ và dừng thao tác đồng bộ/merge/push cần trạng thái mới nhất.
+- Fetch lại trước cập nhật PR, merge hoặc push. Nếu nhánh đích có commit mới, merge vào nhánh task, giải quyết conflict theo ý nghĩa tài liệu rồi kiểm tra lại. Không tự rebase/force-push lịch sử đã chia sẻ.
+- Task hoàn thành qua PR vào `develop`, có người phụ trách duyệt và bằng chứng kiểm tra. Sau tích hợp, kiểm tra lại tài liệu liên quan trên develop mới nhất: thuật ngữ, vai trò, Phase 1/2, schema, workflow và liên kết theo phạm vi thay đổi.
+- Chỉ phát hành qua PR `develop → main` khi được yêu cầu, kiểm tra tích hợp đạt và người có trách nhiệm duyệt. Commit/push/mở PR khi được yêu cầu; không tự merge hay phát hành sau mỗi task.
+- Đây là quy tắc team trong tài liệu, không phải branch protection/CI đã được thiết lập. Nếu chưa có CI, ghi rõ kiểm tra thủ công; không báo CI đạt.
+
+### Làm việc với Codex và ghi chú
+
+- Khi mới clone/pull: git chỉ tải file, không tự tạo bộ nhớ. Mở một repo code AI/BE/FE/Mobile đã có hướng dẫn và yêu cầu Codex đọc AGENTS.md cùng .codex/bootstrap.md, tạo các phần còn thiếu và giữ nguyên file đã có. Khi có đủ năm repo Fire3D và quyền ghi ở workspace cha, hướng dẫn sẽ dựng AGENTS.md/.codex của workspace đó; không push bộ cha.
+- Nếu chỉ checkout Docs, tiếp tục đọc README và bàn giao trong chat; không tự tạo .codex trong Docs hoặc tạo bộ nhớ trong thư mục cha chưa xác minh.
+
+- Đọc README này và đúng tài liệu trong danh mục trước khi sửa. Không tạo `AGENTS.md`, `.codex` hoặc `.agents/skills` trong Docs; quyết định sản phẩm và sửa lỗi tài liệu cập nhật trực tiếp vào tài liệu tương ứng, tránh tạo bản ghi nhớ nghiệp vụ song song.
+- Khi mở Docs độc lập, chủ động yêu cầu Codex đọc README; file này không được bảo đảm tự nạp như AGENTS.md. Khi làm từ workspace chung, AGENTS.md tại gốc định tuyến đến README này.
+- Nếu có workspace cha Fire3D, ghi chú phiên Docs nằm tại `.codex/local/handoff.md` và `.codex/local/lessons.md` của workspace. Nếu không có, bàn giao trong chat; không tự tạo thêm bộ nhớ trong Docs. Plan Mode không ghi file.
+- Checkpoint sau mốc đáng kể và trước bàn giao; ghi phần đã xong/còn dở, branch/commit, kiểm tra thực tế và bước tiếp theo. Không hứa ghi kịp trước khi hết quota hoặc phiên ngắt đột ngột; không lưu secrets/transcript.
+- Giữ nguyên thư mục `Mẫu report/` đang untracked, không stage, xóa hoặc tự chỉnh file mẫu. Kiểm tra danh sách stage cụ thể, không dùng `git add -A` mù quáng.
+- Task chỉ sửa tài liệu: kiểm tra liên kết, tính nhất quán và `git diff --check`, không chạy toàn bộ build/test ứng dụng. Không có test chạy không đồng nghĩa đã kiểm thử nghiệp vụ.
+- Có khác biệt hiện tại cần giữ rõ: Docs thiết kế Flutter + Unity, trong khi repo Mobile đang có Expo/React Native. Không tự sửa kiến trúc hoặc chuyển stack để che khác biệt; xin quyết định khi task cần lựa chọn.
+
+### Giới hạn sản phẩm
+
 FET3D phục vụ học tập, tập huấn và hoạt động đánh giá của đồ án. Kết quả mô phỏng, analytics và `ConfirmForTraining` không được dùng để kết luận công trình an toàn, đáp ứng quy chuẩn hay thay thế hướng dẫn khẩn cấp tại hiện trường.
