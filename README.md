@@ -21,6 +21,8 @@ Thư mục này chứa tài liệu sản phẩm và kiến trúc cho **Fire Evac
 - Ba loại tài khoản là `PlatformAdmin`, `OrganizationUser` và `Trainee`. Không có cơ chế thành viên tổ chức, lời mời, truy cập khách hay tập huấn không định danh. Mọi `Trainee` đã xác thực có thể quét bất kỳ QR active pin một `Training` của release đã publish để tham gia.
 - `OrganizationUser` sở hữu toàn bộ nghiệp vụ của tổ chức: Building, nhập IFC, scenario, publish, QR, analytics và billing.
 - Đầu vào mô hình của sản phẩm là **IFC**. Ứng dụng Android được cài một lần; khi quét QR hợp lệ, ứng dụng tải và xác minh content package của release tương ứng rồi khởi chạy Unity.
+- Mỗi Building có một QR canonical để người dân mở đúng training của tòa nhà đó. QR chỉ mang mã opaque/deep link để backend resolve release; không chứa model, credential hoặc file cài đặt. Khi đổi release, QR được rotate/revoke theo lifecycle publish.
+- Three.js chỉ dùng cho hiệu ứng landing/giới thiệu trên web. Gameplay BIM 3D/2.5D chạy trong Unity runtime của Mobile, không chạy thành game Three.js trên trình duyệt.
 - Headline Phase 1 giữ nguyên: **IFC → 3D → Unity Android → QR → Training → Result**.
 - Lifecycle thực thi là: IFC đạt QA chuyển revision sang `ReadyForScenario`; action `ConfirmForTraining` chuyển nó sang `ConfirmedForTraining`; backend tạo release `Built`, package và `Training` khớp nhau; sau đó publish release rồi mới tạo active QR pin chính xác `trainingId`. `ConfirmForTraining` chỉ là readiness nội bộ, không phải chứng nhận, phê duyệt PCCC, thẩm duyệt thiết kế hoặc chỉ dẫn ứng phó sự cố thực tế.
 - Phase 1 cung cấp luồng core online. Phase 2 bổ sung PayOS production, quotation, transaction, invoice metadata, revenue, feedback/support, basic offline, basic NPC và expanded analytics.
