@@ -39,6 +39,8 @@ Không có guest, lời mời thành viên, reviewer PCCC hoặc training không
 7. Sau publish, QR active pin chính xác release và `Training`. Android resolve QR, tải manifest/package, xác minh rồi mở Unity.
 8. Unity gửi event/result versioned về backend; `Trainee` xem debrief cá nhân, `OrganizationUser` xem aggregate thuộc organization.
 
+Mỗi Building có một QR canonical để người dân mở đúng training của tòa nhà đó. QR không tải/cài APK riêng cho từng tòa nhà: Mobile app cài một lần rồi tải content package Unity theo release đã resolve. Three.js chỉ dùng cho landing/giới thiệu trên web, không dùng làm gameplay.
+
 `ConfirmForTraining` chỉ là trạng thái readiness nội bộ, không phải xác nhận, phê duyệt hoặc thẩm duyệt PCCC.
 
 ## Kiến trúc
