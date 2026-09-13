@@ -8,6 +8,13 @@ Headline Phase 1: **IFC → 3D → Unity Android → QR → Training → Result*
 
 Kiến trúc phục vụ mô phỏng và tập huấn của đồ án. Nó không thực hiện CFD thiết kế, hệ thống điều khiển khẩn cấp, thẩm duyệt hoặc chứng nhận PCCC.
 
+### 1.1. QR theo tòa nhà và ranh giới web/mobile
+
+- Mỗi `Building` có một QR canonical để mở đúng training của tòa nhà. QR có thể được rotate/revoke khi release thay đổi; ở mỗi thời điểm chỉ QR active của release đã publish mới được dùng.
+- QR chỉ chứa mã opaque hoặc deep link công khai để backend resolve `Building`/`TrainingRelease`; không nhúng model BIM, access token, credential hay APK.
+- Mobile app được cài một lần. Sau khi quét, backend trả manifest và URL ngắn hạn để app tải, xác minh và cache content package của đúng tòa nhà; không tải/cài một game APK hoặc Unity runtime mới cho từng QR.
+- FE dùng Three.js cho hiệu ứng landing/giới thiệu trên web. Gameplay BIM 3D với góc nhìn 2.5D chạy trong Unity runtime của Mobile, không phải game Three.js trên web. Nếu chưa cài app, landing chỉ dẫn tới kênh cài đặt hợp lệ.
+
 ## 2. Ba loại tài khoản và ownership
 
 | Tài khoản | Quyền kiến trúc cần hỗ trợ |
@@ -48,7 +55,7 @@ Backend là nguồn sự thật cho ownership scope, Building, revision, scenari
 
 | Lớp | Công nghệ | Trách nhiệm |
 | :--- | :--- | :--- |
-| Web | Next.js | Vận hành Building, IFC, scenario, release, QR, analytics, billing và support. |
+| Web | Next.js + Three.js (landing/intro effects) | Next.js vận hành Building, IFC, scenario, release, QR, analytics, billing và support; Three.js chỉ phục vụ landing/giới thiệu. |
 | API/jobs | ASP.NET Core | AuthZ, domain command, QR resolve, session, audit, billing webhook và job orchestration. |
 | Database | PostgreSQL | Dữ liệu tenant-scoped, revision, release, session/result, analytics, quotation/transaction/invoice metadata. |
 | Object storage | MinIO S3-compatible | Raw IFC private, manifest và content package bất biến. |
@@ -137,6 +144,8 @@ Flutter scan QR
   -> Unity emits versioned events/result
   -> Flutter syncs API
 ```
+
+QR vật lý được gắn với Building/training cụ thể nhưng chỉ là điểm resolve. Luồng quét không mở gameplay trên web và không cài APK mới; app dùng release đã pin để tải content package Unity tương ứng.
 
 Phase 1 yêu cầu kết nối cho launch và sync. Phase 2 thêm cache state `Missing -> Downloading -> Verified -> ReadyOffline`, local queue có monotonic sequence/idempotency key và reconcile retry khi kết nối trở lại.
 

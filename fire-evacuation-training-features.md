@@ -6,6 +6,8 @@
 
 FET3D biến mô hình **IFC** của một Building thành content package Unity dùng cho tập huấn sơ tán 3D trên Android. Người học cài ứng dụng một lần, đăng nhập và quét bất kỳ QR active pin một `Training` của release đã publish để tải package. Package đã xác minh được Unity dùng để chạy scenario, ghi nhận quyết định và trả result về Flutter.
 
+Mỗi Building có QR canonical để mở đúng training của tòa nhà. Three.js chỉ được dùng cho hiệu ứng landing/giới thiệu trên web; gameplay BIM 3D/2.5D chạy trong Unity của Mobile, không chạy thành game Three.js trên trình duyệt.
+
 Headline Phase 1: **IFC → 3D → Unity Android → QR → Training → Result**.
 
 Giá trị cốt lõi là giúp người học làm quen với không gian đã được mô hình hóa, thử quyết định route trong hazard surrogate và nhận debrief sau buổi tập huấn. FET3D không thay thế biển báo, quy trình ứng phó khẩn cấp, tư vấn chuyên môn hoặc hoạt động PCCC thực tế.

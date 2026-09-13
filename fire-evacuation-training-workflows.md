@@ -73,6 +73,8 @@ ConfirmedForTraining revision + pinned ScenarioVersion
 4. Chỉ sau publish, backend sinh QR opaque pin cả `release_id` và một `training_id` duy nhất; `OrganizationUser` có thể in, rotate hoặc revoke QR.
 5. Active QR bị từ chối nếu release/`Training`/scenario/organization lệch nhau. QR phải được deactivate trước khi đóng `Training` hoặc chuyển release sang `Superseded`/`Revoked`.
 
+Quy ước sản phẩm là mỗi Building có một QR canonical đang active cho release/training được phát hành. QR chỉ là mã resolve công khai; nó không chứa package, access token hoặc APK. Khi phát hành release mới, backend rotate QR và revoke mã cũ theo lifecycle.
+
 ## 6. Workflow quét QR, download và launch
 
 ```text
@@ -91,6 +93,8 @@ Trainee đăng nhập Android app (cài một lần)
 4. Backend tạo session, pin `trainingId`/`releaseId`/`scenarioId`/`qrCodeId` và cấp launch grant ngắn hạn.
 5. Flutter truyền `sessionId`, manifest path, grant và protocol version cho Unity.
 6. Unity không giữ credential dài hạn và không tự chọn release.
+
+Nếu thiết bị chưa cài Mobile app, URL/deep link của QR chỉ mở landing giới thiệu và dẫn tới kênh cài đặt phù hợp; gameplay không chạy bằng Three.js trên trình duyệt. Three.js của FE chỉ phục vụ hiệu ứng landing/intro.
 
 ## 7. Workflow training online — Phase 1
 
