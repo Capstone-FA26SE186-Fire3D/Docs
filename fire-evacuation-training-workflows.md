@@ -84,14 +84,14 @@ Trainee đăng nhập Android app (cài một lần)
   -> tải manifest/content package
   -> verify hash/schema/runtime
   -> create session + launch grant
-  -> Flutter launch Unity
+  -> React Native/Expo native bridge launch Unity
 ```
 
 1. `Trainee` đăng nhập ứng dụng Android và quét QR của hoạt động tập huấn.
 2. Backend kiểm tra `Trainee` đã xác thực, QR active chưa hết hạn, `training_id` đã pin còn `Active`, release đã `Published`, và release/Training/scenario/organization khớp nhau. Mọi `Trainee` đã xác thực đều hợp lệ, không cần account-specific permission, allowlist hoặc đối chiếu `organizationId`. Backend trả manifest/package URL ký ngắn hạn.
-3. Flutter resume download khi kết nối còn hoạt động, xác minh hash rồi lưu package đã verified.
+3. React Native/Expo tiếp tục download khi kết nối còn hoạt động, xác minh hash rồi lưu package đã verified.
 4. Backend tạo session, pin `trainingId`/`releaseId`/`scenarioId`/`qrCodeId` và cấp launch grant ngắn hạn.
-5. Flutter truyền `sessionId`, manifest path, grant và protocol version cho Unity.
+5. Native Android bridge của React Native/Expo truyền `sessionId`, manifest path, grant và protocol version cho Unity.
 6. Unity không giữ credential dài hạn và không tự chọn release.
 
 Nếu thiết bị chưa cài Mobile app, URL/deep link của QR chỉ mở landing giới thiệu và dẫn tới kênh cài đặt phù hợp; gameplay không chạy bằng Three.js trên trình duyệt. Three.js của FE chỉ phục vụ hiệu ứng landing/intro.
@@ -103,22 +103,22 @@ Unity load package
   -> initialize scenario/hazard surrogate/risk-aware A*
   -> learner actions + event batches
   -> complete/abort
-  -> Flutter sends result
+  -> React Native/Expo sends result through the native bridge
   -> backend validates and updates analytics
 ```
 
 1. Unity load scene, navigation graph, hazard surrogate và luật mode từ manifest/scenario đã pin.
 2. Learn cung cấp hướng dẫn; Guided Drill ghi decision và re-plan; Assessment áp dụng rubric đã cấu hình.
-3. Event có sequence, session ID, schema version và idempotency key. Flutter gửi event/result khi online.
+3. Event có sequence, session ID, schema version và idempotency key. React Native/Expo gửi event/result qua native bridge khi online.
 4. Backend validate grant, release pin và sequence rồi đánh dấu `Completed`, `Aborted` hoặc trạng thái lỗi có lý do.
 5. `Trainee` xem debrief cá nhân; `OrganizationUser` xem aggregate cơ bản.
 
 ## 8. Workflow basic offline — Phase 2
 
 1. Chỉ package đã verified khi online mới có thể vào trạng thái `ReadyOffline`.
-2. Khi mất kết nối, Flutter launch package đã pin và Unity tiếp tục ghi event/result local.
-3. Flutter xếp event/result theo thứ tự với idempotency key, retry backoff và giữ release/scenario hash.
-4. Khi có mạng, Flutter gọi reconcile; backend chỉ nhận batch hợp lệ, không nhân đôi dữ liệu.
+2. Khi mất kết nối, React Native/Expo launch package đã pin và Unity tiếp tục ghi event/result local.
+3. React Native/Expo xếp event/result theo thứ tự với idempotency key, retry backoff và giữ release/scenario hash.
+4. Khi có mạng, React Native/Expo gọi reconcile; backend chỉ nhận batch hợp lệ, không nhân đôi dữ liệu.
 5. Nếu release bị revoke hoặc trở thành `Superseded` sau thời điểm start hợp lệ, session được giữ audit với trạng thái lịch sử thay vì bị biến mất.
 
 ## 9. Workflow basic NPC — Phase 2

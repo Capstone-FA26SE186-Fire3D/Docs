@@ -30,7 +30,7 @@ Không triển khai bảng/cơ chế thành viên, lời mời, truy cập khác
 ```text
 PlatformAdmin / OrganizationUser web
             |
-      Next.js web application
+      React/Vite web application
             |
  ASP.NET Core API + background jobs
       |             |              |
@@ -42,7 +42,7 @@ PostgreSQL       MinIO        IFC processing worker
                         |
                   signed QR resolve
                         |
-       Flutter Android shell (installed once)
+       React Native/Expo Android shell with native Unity bridge (installed once)
                         |
          verified content package + Unity runtime
                         |
@@ -55,12 +55,12 @@ Backend là nguồn sự thật cho ownership scope, Building, revision, scenari
 
 | Lớp | Công nghệ | Trách nhiệm |
 | :--- | :--- | :--- |
-| Web | Next.js + Three.js (landing/intro effects) | Next.js vận hành Building, IFC, scenario, release, QR, analytics, billing và support; Three.js chỉ phục vụ landing/giới thiệu. |
+| Web | React/Vite + Three.js (landing/intro effects) | React/Vite vận hành Building, IFC, scenario, release, QR, analytics, billing và support; Three.js chỉ phục vụ landing/giới thiệu. |
 | API/jobs | ASP.NET Core | AuthZ, domain command, QR resolve, session, audit, billing webhook và job orchestration. |
 | Database | PostgreSQL | Dữ liệu tenant-scoped, revision, release, session/result, analytics, quotation/transaction/invoice metadata. |
 | Object storage | MinIO S3-compatible | Raw IFC private, manifest và content package bất biến. |
 | IFC worker | Python + IfcOpenShell + Blender/Bonsai khi cần | Parse IFC, geometry/LOD, graph, QA và package input. |
-| Android shell | Flutter | Login, QR, download/verify/cache, local queue Phase 2, Unity handoff. |
+| Android shell | React Native/Expo + native Android bridge | Login, QR, download/verify/cache, local queue Phase 2 và Unity handoff. |
 | 3D runtime | Unity 6 LTS + URP + Addressables | Scene, navigation, hazard surrogate, A*, basic NPC Phase 2 và event emission. |
 | Payments | PayOS production (Phase 2) | Quotation flow, transaction, invoice metadata và revenue signals. |
 
@@ -134,7 +134,7 @@ Manifest tối thiểu gồm:
 ```
 
 ```text
-Flutter scan QR
+React Native/Expo scan QR
   -> API validates authenticated Trainee + active QR
   -> resolve exactly one pinned Active Training + Published release
   -> receive short-lived manifest/package URL
@@ -142,7 +142,7 @@ Flutter scan QR
   -> create TrainingSession and launch grant
   -> launch Unity(sessionId, manifestPath, grant, protocolVersion)
   -> Unity emits versioned events/result
-  -> Flutter syncs API
+  -> React Native/Expo syncs API
 ```
 
 QR vật lý được gắn với Building/training cụ thể nhưng chỉ là điểm resolve. Luồng quét không mở gameplay trên web và không cài APK mới; app dùng release đã pin để tải content package Unity tương ứng.
@@ -186,7 +186,7 @@ Các endpoint quotation, PayOS, transaction, invoice metadata, revenue, feedback
 
 | Phase 1 | Phase 2 |
 | :--- | :--- |
-| Web/API core, IFC worker, private storage, release/package/QR, Flutter–Unity online flow, hazard/A*, session/result, audit và analytics cơ bản. | PayOS production, quotation, transaction, invoice metadata, revenue, feedback/support, basic offline, basic NPC và expanded analytics. |
+| Web/API core, IFC worker, private storage, release/package/QR, React Native/Expo–Unity online flow, hazard/A*, session/result, audit và analytics cơ bản. | PayOS production, quotation, transaction, invoice metadata, revenue, feedback/support, basic offline, basic NPC và expanded analytics. |
 
 ## 12. Kiểm thử và đánh giá capstone
 

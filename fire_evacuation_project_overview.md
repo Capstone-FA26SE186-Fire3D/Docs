@@ -50,14 +50,14 @@ IFC private storage
   -> processing worker (geometry, graph, QA, package)
   -> backend metadata + object storage
   -> signed manifest/content URL
-  -> Flutter Android shell -> Unity runtime
+  -> React Native/Expo Android shell + native Unity bridge -> Unity runtime
   -> event/result sync + analytics
 ```
 
 - Back office quản lý Building/IFC/scenario, trạng thái xử lý, publish, QR và analytics.
 - Backend phụ trách authentication, tenant scoping, lifecycle revision/release/training, session, audit và URL ngắn hạn.
 - Worker parse IFC, tạo runtime data, chạy connectivity QA và build package.
-- Flutter xử lý login, QR, download/cache và handoff; Unity thực hiện scene, hazard surrogate, routing và tương tác training.
+- React Native/Expo xử lý login, QR, download/cache và handoff qua native Android bridge; Unity thực hiện scene, hazard surrogate, routing và tương tác training.
 
 ## Dữ liệu và an toàn
 

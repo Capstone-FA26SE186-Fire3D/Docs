@@ -4,7 +4,7 @@
 
 ## 1. Định vị sản phẩm
 
-FET3D biến mô hình **IFC** của một Building thành content package Unity dùng cho tập huấn sơ tán 3D trên Android. Người học cài ứng dụng một lần, đăng nhập và quét bất kỳ QR active pin một `Training` của release đã publish để tải package. Package đã xác minh được Unity dùng để chạy scenario, ghi nhận quyết định và trả result về Flutter.
+FET3D biến mô hình **IFC** của một Building thành content package Unity dùng cho tập huấn sơ tán 3D trên Android. Người học cài ứng dụng một lần, đăng nhập và quét bất kỳ QR active pin một `Training` của release đã publish để tải package. Package đã xác minh được Unity dùng để chạy scenario, ghi nhận quyết định và trả result về React Native/Expo qua native Android bridge.
 
 Mỗi Building có QR canonical để mở đúng training của tòa nhà. Three.js chỉ được dùng cho hiệu ứng landing/giới thiệu trên web; gameplay BIM 3D/2.5D chạy trong Unity của Mobile, không chạy thành game Three.js trên trình duyệt.
 
@@ -51,8 +51,8 @@ Mô hình quyền không dùng cơ chế thành viên, lời mời, truy cập k
 1. Cài ứng dụng Android một lần và đăng nhập.
 2. Quét QR được phát cho hoạt động tập huấn.
 3. Ứng dụng resolve active, published release cho `Trainee` đã xác thực, tải manifest/content package và xác minh hash.
-4. Flutter mở Unity với session và protocol version đã cấp.
-5. Người học hoàn thành Learn, Guided Drill hoặc Assessment; Unity trả event/result cho Flutter đồng bộ backend.
+4. React Native/Expo mở Unity qua native Android bridge với session và protocol version đã cấp.
+5. Người học hoàn thành Learn, Guided Drill hoặc Assessment; Unity trả event/result qua bridge để Mobile đồng bộ backend.
 6. Người học xem debrief của chính mình theo policy của mode.
 
 Trong Phase 1, buổi tập huấn chạy online sau khi package được tải. Phase 2 bổ sung basic offline: package đã verify có thể mở khi mất mạng, event/result vào local queue và được đồng bộ lại khi kết nối trở lại.
@@ -83,7 +83,7 @@ Trong Phase 1, buổi tập huấn chạy online sau khi package được tải.
 | :--- | :--- |
 | Authoring | Building, IFC pipeline, geometry/connectivity QA, revision và scenario. |
 | Readiness/release | `ConfirmForTraining`, publish, manifest, package versioning và QR. |
-| Runtime | Flutter shell, Unity, hazard surrogate, risk-aware A*, online event/result sync. |
+| Runtime | React Native/Expo shell, native Android Unity bridge, Unity, hazard surrogate, risk-aware A*, online event/result sync. |
 | Dữ liệu | session, result, audit và analytics cơ bản. |
 
 Phase 1 không có offline runtime, NPC runtime, PayOS production hoặc luồng hóa đơn/quotation/revenue.

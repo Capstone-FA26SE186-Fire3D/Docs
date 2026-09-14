@@ -51,7 +51,7 @@ Thư mục này chứa tài liệu sản phẩm và kiến trúc cho **Fire Evac
 - Checkpoint sau mốc đáng kể và trước bàn giao; ghi phần đã xong/còn dở, branch/commit, kiểm tra thực tế và bước tiếp theo. Không hứa ghi kịp trước khi hết quota hoặc phiên ngắt đột ngột; không lưu secrets/transcript.
 - Giữ nguyên thư mục `Mẫu report/` đang untracked, không stage, xóa hoặc tự chỉnh file mẫu. Kiểm tra danh sách stage cụ thể, không dùng `git add -A` mù quáng.
 - Task chỉ sửa tài liệu: kiểm tra liên kết, tính nhất quán và `git diff --check`, không chạy toàn bộ build/test ứng dụng. Không có test chạy không đồng nghĩa đã kiểm thử nghiệp vụ.
-- Có khác biệt hiện tại cần giữ rõ: Docs thiết kế Flutter + Unity, trong khi repo Mobile đang có Expo/React Native. Không tự sửa kiến trúc hoặc chuyển stack để che khác biệt; xin quyết định khi task cần lựa chọn.
+- Stack đã chốt cho nhóm: web React/Vite, Mobile React Native/Expo với native Android bridge để gọi Unity; không triển khai Flutter hoặc Next.js. Khi thiết kế và code khác nhau, cập nhật tài liệu/contract theo stack này.
 
 ### Giới hạn sản phẩm
 

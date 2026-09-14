@@ -513,7 +513,7 @@ CREATE TABLE sessions (
     qr_code_id          UUID REFERENCES release_qr_codes(id) NOT NULL, -- QR active dùng để khởi chạy phiên
 
     -- Phiên bản ứng dụng tại thời điểm bắt đầu (phục vụ debug crash)
-    app_version         VARCHAR(50),                               -- Phiên bản Flutter app tại lúc bắt đầu session
+    app_version         VARCHAR(50),                               -- Phiên bản React Native/Expo app tại lúc bắt đầu session
     unity_version       VARCHAR(50),                               -- Phiên bản Unity runtime tại lúc bắt đầu session
 
     -- Trạng thái phiên

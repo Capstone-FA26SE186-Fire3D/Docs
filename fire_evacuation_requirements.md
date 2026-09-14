@@ -67,7 +67,7 @@ Sau IFC/connectivity QA, revision ở `ReadyForScenario`. `ConfirmForTraining` l
 | ID | Yêu cầu | Phase |
 | :--- | :--- | :--- |
 | FR-TRAINING-01 | Hỗ trợ Learn, Guided Drill và Assessment với luật scenario nhất quán. | 1 |
-| FR-TRAINING-02 | Flutter gọi Unity với `sessionId`, manifest path, launch grant ngắn hạn và protocol version; Unity trả event và result có schema version. | 1 |
+| FR-TRAINING-02 | React Native/Expo dùng native Android bridge gọi Unity với `sessionId`, manifest path, launch grant ngắn hạn và protocol version; Unity trả event và result có schema version. | 1 |
 | FR-TRAINING-03 | Runtime cung cấp risk-aware A*, hazard surrogate và debrief cơ bản; không trình bày output là hướng dẫn thoát nạn thực tế. | 1 |
 | FR-TRAINING-04 | Basic offline: package đã xác minh có thể khởi chạy khi mất mạng, event/result được xếp hàng và đồng bộ khi có mạng. | 2 |
 | FR-TRAINING-05 | Basic NPC: scenario hỗ trợ số lượng NPC giới hạn, state đơn giản và budget hiệu năng trên Android. | 2 |
