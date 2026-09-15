@@ -37,7 +37,7 @@ Không có guest, lời mời thành viên, reviewer PCCC hoặc training không
 5. Khi scenario/package sẵn sàng, `ConfirmForTraining` chuyển revision sang `ConfirmedForTraining`.
 6. Backend tạo release `Built`, package bất biến và `Training` khớp revision/scenario/organization; sau đó mới publish.
 7. Sau publish, QR active pin chính xác release và `Training`. Android resolve QR, tải manifest/package, xác minh rồi mở Unity.
-8. Unity gửi event/result versioned về backend; `Trainee` xem debrief cá nhân, `OrganizationUser` xem aggregate thuộc organization.
+8. Unity trả event/result versioned qua native Android bridge về React Native/Expo để Mobile đồng bộ bằng API; `Trainee` xem debrief cá nhân, `OrganizationUser` xem aggregate thuộc organization.
 
 Mỗi Building có một QR canonical để người dân mở đúng training của tòa nhà đó. QR không tải/cài APK riêng cho từng tòa nhà: Mobile app cài một lần rồi tải content package Unity theo release đã resolve. Three.js chỉ dùng cho landing/giới thiệu trên web, không dùng làm gameplay.
 
@@ -50,14 +50,14 @@ IFC private storage
   -> processing worker (geometry, graph, QA, package)
   -> backend metadata + object storage
   -> signed manifest/content URL
-  -> Flutter Android shell -> Unity runtime
+  -> React Native/Expo Android shell + native Unity bridge -> Unity runtime
   -> event/result sync + analytics
 ```
 
-- Back office quản lý Building/IFC/scenario, trạng thái xử lý, publish, QR và analytics.
+- Web Next.js quản lý Building/IFC/scenario, trạng thái xử lý, publish, QR và analytics; Three.js phục vụ hiệu ứng landing/giới thiệu.
 - Backend phụ trách authentication, tenant scoping, lifecycle revision/release/training, session, audit và URL ngắn hạn.
 - Worker parse IFC, tạo runtime data, chạy connectivity QA và build package.
-- Flutter xử lý login, QR, download/cache và handoff; Unity thực hiện scene, hazard surrogate, routing và tương tác training.
+- React Native/Expo xử lý login, QR, download/cache và handoff qua native Android bridge; Unity thực hiện scene, hazard surrogate, routing và tương tác training.
 
 ## Dữ liệu và an toàn
 
