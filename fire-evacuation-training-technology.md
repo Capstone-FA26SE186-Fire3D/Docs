@@ -42,7 +42,7 @@ PostgreSQL       MinIO        IFC processing worker
                         |
                   signed QR resolve
                         |
-       Flutter Android shell (installed once)
+       React Native/Expo Android shell with native Unity bridge (installed once)
                         |
          verified content package + Unity runtime
                         |
@@ -60,7 +60,8 @@ Backend là nguồn sự thật cho ownership scope, Building, revision, scenari
 | Database | PostgreSQL | Dữ liệu tenant-scoped, revision, release, session/result, analytics, quotation/transaction/invoice metadata. |
 | Object storage | MinIO S3-compatible | Raw IFC private, manifest và content package bất biến. |
 | IFC worker | Python + IfcOpenShell + Blender/Bonsai khi cần | Parse IFC, geometry/LOD, graph, QA và package input. |
-| Android shell | Flutter | Login, QR, download/verify/cache, local queue Phase 2, Unity handoff. |
+| Android shell | React Native/Expo + native Android bridge | Login, QR, download/verify/cache, local queue Phase 2 và Unity handoff. |
+| Native Android bridge | Thành phần tích hợp Mobile–Unity | Nhận yêu cầu launch từ Mobile, truyền dữ liệu cho Unity và chuyển callback/event/result về Mobile. |
 | 3D runtime | Unity 6 LTS + URP + Addressables | Scene, navigation, hazard surrogate, A*, basic NPC Phase 2 và event emission. |
 | Payments | PayOS production (Phase 2) | Quotation flow, transaction, invoice metadata và revenue signals. |
 
@@ -134,20 +135,34 @@ Manifest tối thiểu gồm:
 ```
 
 ```text
-Flutter scan QR
+React Native/Expo scan QR
   -> API validates authenticated Trainee + active QR
   -> resolve exactly one pinned Active Training + Published release
   -> receive short-lived manifest/package URL
   -> download and verify hash/schema/runtime
   -> create TrainingSession and launch grant
-  -> launch Unity(sessionId, manifestPath, grant, protocolVersion)
-  -> Unity emits versioned events/result
-  -> Flutter syncs API
+  -> native Android bridge launches Unity(sessionId, manifestPath, grant, protocolVersion)
+  -> Unity emits versioned events/result through bridge to React Native/Expo
+  -> React Native/Expo syncs API
 ```
 
 QR vật lý được gắn với Building/training cụ thể nhưng chỉ là điểm resolve. Luồng quét không mở gameplay trên web và không cài APK mới; app dùng release đã pin để tải content package Unity tương ứng.
 
 Phase 1 yêu cầu kết nối cho launch và sync. Phase 2 thêm cache state `Missing -> Downloading -> Verified -> ReadyOffline`, local queue có monotonic sequence/idempotency key và reconcile retry khi kết nối trở lại.
+
+### 8.1. Contract tích hợp Mobile–Unity–backend
+
+Đây là contract ở mức yêu cầu để nhóm Mobile, Unity và backend triển khai thống nhất. Native Android bridge nối Mobile với Unity trên thiết bị; React Native/Expo chịu trách nhiệm gọi API. Các endpoint tham chiếu nằm ở mục 9; phần phân tích này không thêm endpoint hoặc migration database.
+
+| Bên gửi → bên nhận | Dữ liệu trao đổi | Trách nhiệm |
+| :--- | :--- | :--- |
+| Mobile → backend → Mobile | QR opaque, kết quả resolve pin `Training`/release, manifest và URL package ngắn hạn | Backend kiểm tra tài khoản và lifecycle; Mobile tải, kiểm tra hash/schema/runtime trước khi launch. |
+| Mobile → backend → Mobile | Yêu cầu tạo session cho training đã resolve; `sessionId` và launch `grant` do backend cấp | Backend pin training/release/scenario/QR của session. Mobile dùng đúng package đã xác minh cho session này. |
+| Mobile → bridge → Unity | `sessionId`, `manifestPath`, `grant`, `protocolVersion` | `manifestPath` trỏ đến manifest local đã xác minh mà Unity đọc được; bridge chuyển yêu cầu launch, Unity kiểm tra khả năng nhận protocol và nạp package. |
+| Unity → bridge → Mobile | Event/result có session ID, schema version, sequence và idempotency key; thông tin release/scenario theo mục 10 | Unity phát dữ liệu của phiên; bridge chuyển callback về Mobile, giữ thông tin định danh và thứ tự. Lỗi launch/runtime phải được trả về Mobile với lý do. |
+| Mobile → backend → Mobile | Event batch/result của cùng session; phản hồi chấp nhận hoặc từ chối từ API | Mobile gọi API khi online; backend kiểm tra grant, release pin, schema và chống ghi trùng. Callback Unity chưa phải xác nhận backend đã lưu kết quả. |
+
+Unity không nhận access/refresh token dài hạn. Việc chọn thư viện bridge, phiên bản protocol được hỗ trợ và cấu trúc payload chi tiết phải được đối chiếu với code Mobile/Unity/backend trong đầu việc tích hợp tiếp theo; tài liệu Docs hiện tại không chứng minh các thành phần đó đã hoạt động.
 
 ## 9. API boundary
 
@@ -186,7 +201,7 @@ Các endpoint quotation, PayOS, transaction, invoice metadata, revenue, feedback
 
 | Phase 1 | Phase 2 |
 | :--- | :--- |
-| Web/API core, IFC worker, private storage, release/package/QR, Flutter–Unity online flow, hazard/A*, session/result, audit và analytics cơ bản. | PayOS production, quotation, transaction, invoice metadata, revenue, feedback/support, basic offline, basic NPC và expanded analytics. |
+| Web/API core, IFC worker, private storage, release/package/QR, React Native/Expo–Unity online flow, hazard/A*, session/result, audit và analytics cơ bản. | PayOS production, quotation, transaction, invoice metadata, revenue, feedback/support, basic offline, basic NPC và expanded analytics. |
 
 ## 12. Kiểm thử và đánh giá capstone
 
@@ -194,3 +209,50 @@ Các endpoint quotation, PayOS, transaction, invoice metadata, revenue, feedback
 - Runtime: hash mismatch, invalid grant, revoked QR, route blocked, session retry và Android performance.
 - Phase 2: offline queue/reconcile, basic NPC budget, PayOS webhook idempotency, quotation/transaction/invoice/revenue và support lifecycle.
 - Đánh giá chuyên môn, usability testing và user study thu thập phản hồi cho đồ án; chúng không là quyền trong kiến trúc và không tạo ra chứng nhận hoặc phê duyệt PCCC.
+
+## 13. Phân tích đầu ra SCRUM-520 và bàn giao SCRUM-524
+
+### 13.1. Mục tiêu và phân chia đầu ra
+
+Phạm vi phân tích là tích hợp Phase 1 online, với Web **Next.js**, Mobile **React Native/Expo**, native Android bridge và Unity gameplay. Stack và trách nhiệm nằm ở mục 4; luồng và contract nằm ở mục 8. Offline, NPC và billing production vẫn thuộc Phase 2.
+
+| Công việc | Đầu ra có thể review | Điều kiện nghiệm thu |
+| :--- | :--- | :--- |
+| [SCRUM-520](https://baopgse183233.atlassian.net/browse/SCRUM-520) — phân tích và chia nhỏ yêu cầu | Stack/trách nhiệm, luồng và contract tối thiểu, phụ thuộc, checklist và đầu việc tiếp theo trong tài liệu này | Người review xác định được bên gửi/nhận, dữ liệu, điều kiện launch và cách kiểm tra từng phần; mọi phụ thuộc chưa xác minh được ghi rõ. |
+| [SCRUM-524](https://baopgse183233.atlassian.net/browse/SCRUM-524) — triển khai tài liệu theo phân tích | README, kiến trúc, requirements, features, workflows, overview và chú thích phiên bản app trong schema thống nhất | Next.js/React Native/Unity thống nhất; bridge và API đúng trách nhiệm; liên kết và diff được kiểm tra; có PR vào `develop` để người phụ trách duyệt. |
+
+Yêu cầu truy vết: `FR-AUTH-03` cho participation; `FR-RELEASE-02/03` cho resolve và package; `FR-TRAINING-02` cho handoff/event/result; `FR-ANALYTICS-02` cho kết quả cá nhân trong [tài liệu yêu cầu](fire_evacuation_requirements.md). [Workflow](fire-evacuation-training-workflows.md) mục 6–7 mô tả trình tự thực hiện.
+
+### 13.2. Phụ thuộc và đầu việc code tiếp theo
+
+Các đầu việc dưới đây là đề xuất bàn giao theo thành phần, chưa được gán mã ticket mới. Không suy ra trạng thái code từ việc tài liệu đã hoàn tất.
+
+| Đầu việc đề xuất / nhóm phụ trách | Đầu vào cần có | Đầu ra và bằng chứng cần cung cấp |
+| :--- | :--- | :--- |
+| QR/package/session API — backend phối hợp worker | Training/release đã publish, QR active, tài khoản Trainee, manifest/package mẫu có hash | API resolve và session/grant chạy được; event/result được lưu đúng phiên; fixture và kết quả kiểm tra API. |
+| Nhúng Unity và triển khai bridge — Mobile + Unity | Unity runtime có thể nhúng, package mẫu hợp lệ, contract mục 8.1 | Bản Android mở Unity, truyền launch data, nhận callback/event/result và lỗi; ghi rõ app/Unity/protocol version, kèm log/demo. |
+| Nối luồng online — Mobile + backend | API và bridge đã kiểm tra độc lập | QR → verify → session → Unity → API → debrief cá nhân chạy xuyên suốt, truy vết cùng session/release. |
+| Kiểm thử tích hợp Android — Mobile + Unity + backend | Bản Android, môi trường API, dữ liệu hợp lệ và dữ liệu lỗi | Kết quả từng ca ở mục 13.3, thiết bị/Android version, commit/build và log đã loại credential. |
+
+Trong phạm vi checkout Docs, API session/grant, package mẫu và Unity nhúng **chưa được xác minh**. Nếu thiếu bất kỳ đầu vào tương ứng nào, ghi blocker của đầu việc đó cùng nhóm cần cung cấp, ảnh hưởng và bằng chứng để gỡ blocker. Tài liệu có thể review trước; nghiệm thu tích hợp phải chờ kiểm tra các phụ thuộc và chạy trên Android.
+
+### 13.3. Checklist kiểm thử tích hợp cần bàn giao
+
+Các ca sau là tiêu chí cho đầu việc code tiếp theo, chưa phải kết quả test đã chạy trong repo Docs.
+
+| Ca kiểm tra | Kết quả mong đợi |
+| :--- | :--- |
+| Luồng hợp lệ online | Unity mở đúng package/session, trả event/result qua bridge; Mobile gửi API, backend lưu và Trainee xem được kết quả của mình. |
+| QR hết hạn/revoke hoặc release không còn publish trước launch | Backend từ chối resolve hoặc cấp grant; Mobile hiển thị lý do, không mở training. |
+| Hash package sai | Mobile báo xác minh thất bại và không launch package đó. |
+| Schema/runtime/protocol không tương thích | Thành phần kiểm tra tương ứng từ chối trước gameplay, Mobile nhận được lỗi rõ ràng. |
+| Grant hết hạn hoặc không hợp lệ | Từ chối thao tác yêu cầu grant hợp lệ; Mobile hiển thị lỗi, không coi phiên/kết quả là đã được backend chấp nhận. |
+| Unity không mở được hoặc lỗi runtime | Mobile xử lý lỗi; session lỗi có lý do và không bị ghi thành hoàn thành thành công. |
+| Gửi lại cùng event batch/result | Giữ nguyên session và idempotency key; backend không tạo bản ghi hoặc tính analytics trùng. |
+| Mất mạng lúc launch/sync | Phase 1 báo thiếu kết nối/lỗi đồng bộ, không báo kết quả đã lưu khi API chưa xác nhận; offline runtime thuộc Phase 2. |
+
+### 13.4. Bằng chứng review tài liệu
+
+- Rà stack, chiều dữ liệu bridge/API, thuật ngữ và Phase 1/2 giữa các tài liệu; kiểm tra liên kết local và chạy `git diff --check`.
+- Đính kèm diff/commit và PR vào `develop` khi bàn giao review; ghi kiểm tra đã chạy, phần chưa kiểm tra, phụ thuộc và blocker. Chỉ gắn link PR thực sự đã tạo.
+- Người phụ trách duyệt nội dung và bằng chứng trước khi nghiệm thu ticket. Kiểm tra tài liệu không thay thế build/test Android; không ghi runtime hoặc CI đạt khi chưa có kết quả thực tế.
