@@ -10,7 +10,7 @@ FET3D là đồ án tạo trải nghiệm tập huấn sơ tán 3D trên Android
 
 Headline Phase 1 là **IFC → 3D → Unity Android → QR → Training → Result**. Ở backend, QR chỉ được tạo active sau khi revision/scenario đã readiness, release và `Training` khớp nhau đã được tạo, rồi release được publish.
 
-Sản phẩm là công cụ học tập và đánh giá hoạt động của đồ án. Mô phỏng hazard, route, điểm số, analytics và `ConfirmForTraining` không phải chứng nhận an toàn, phê duyệt PCCC, thẩm duyệt thiết kế, tư vấn chuyên môn hay hướng dẫn ứng phó sự cố thực tế.
+Sản phẩm là công cụ học tập và đánh giá hoạt động của đồ án. Website landing và Learn cung cấp nội dung công khai; việc đọc/tìm nội dung không cần tài khoản. Mô phỏng hazard, route, điểm số, analytics và `ConfirmForTraining` không phải chứng nhận an toàn, phê duyệt PCCC, thẩm duyệt thiết kế, tư vấn chuyên môn hay hướng dẫn ứng phó sự cố thực tế.
 
 ## 2. Tài khoản và quyền
 
@@ -20,11 +20,20 @@ Sản phẩm là công cụ học tập và đánh giá hoạt động của đ�
 | `OrganizationUser` | Sở hữu Building, IFC, scenario, publish, QR, analytics và billing của tổ chức. |
 | `Trainee` | Đăng nhập ứng dụng, quét bất kỳ QR active của release đã publish, tải package, thực hiện buổi tập huấn và xem kết quả của chính mình. |
 
-Không có cơ chế thành viên tổ chức, lời mời tài khoản, token khách, truy cập khách hoặc tập huấn không định danh. Mọi truy cập QR và buổi tập huấn phải gắn với `Trainee` đã xác thực; active QR của release đã publish không dùng account-specific permission, allowlist hoặc đối chiếu `organizationId` làm điều kiện tham gia.
+Không có cơ chế thành viên tổ chức, lời mời tài khoản, guest account, token khách hoặc guest training không định danh. Mọi truy cập QR và buổi tập huấn phải gắn với `Trainee` đã xác thực; active QR của release đã publish không dùng account-specific permission, allowlist hoặc đối chiếu `organizationId` làm điều kiện tham gia. Nội dung landing, Learn và trang giới thiệu Dành cho tổ chức vẫn có thể xem công khai.
 
 Sau IFC/connectivity QA, revision ở `ReadyForScenario`. `ConfirmForTraining` là action do `OrganizationUser` thực hiện sau khi scenario và candidate package/manifest đạt readiness; action này chuyển revision sang `ConfirmedForTraining`. QR không phải điều kiện đầu vào của action vì QR chỉ tồn tại sau release và `Training`. Action không xác nhận công trình, lối thoát, phương án PCCC hay hiệu lực pháp lý của bất kỳ nội dung nào.
 
 ## 3. Functional Requirements
+
+### FR-WEB: website công khai và cổng học tập
+
+| ID | Yêu cầu | Phase |
+| :--- | :--- | :--- |
+| FR-WEB-01 | Website chung cung cấp landing, Khám phá, Dành cho tổ chức, Learn, Về chúng tôi, Đăng nhập và Tải ứng dụng; không bắt người dùng chọn role trước khi xem nội dung công khai. | 1 |
+| FR-WEB-02 | Landing trình bày hành trình POV cuộn qua công trình đang cháy và hai hướng nhu cầu: tập huấn hoặc tổ chức tập huấn. Three.js chỉ phục vụ hiệu ứng web; phải có fallback khi WebGL/reduced motion không dùng được. | 1 |
+| FR-WEB-03 | Learn cho phép khách tìm/đọc bài có nguồn; hỏi AI, hỏi về bài đang đọc và lưu bài yêu cầu đăng nhập. Câu trả lời AI phải kèm nguồn. | TBD |
+| FR-WEB-04 | Góc học tập của Trainee đã xác thực hiển thị AI, bài lưu, lịch sử và kết quả cá nhân; trang Dành cho tổ chức công khai phần giới thiệu nhưng khu quản lý enforce quyền `OrganizationUser` và `organizationId`. | TBD |
 
 ### FR-AUTH: xác thực và phân quyền
 

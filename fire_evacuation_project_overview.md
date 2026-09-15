@@ -26,7 +26,11 @@ Thời lượng, lựa chọn tuyến, trạng thái hoàn thành và modeled ex
 | `OrganizationUser` | Quản lý Building, IFC, scenario, publish, QR, analytics và billing của organization. |
 | `Trainee` | Đăng nhập Android, quét QR active, thực hiện training và xem kết quả của chính mình. |
 
-Không có guest, lời mời thành viên, reviewer PCCC hoặc training không định danh. `Trainee` đã xác thực có thể tham gia QR active pin một `Training` thuộc release đã publish; participation không dùng allowlist theo tài khoản hay điều kiện `organizationId`.
+Landing và Learn trên web là nội dung công khai cho khách. Hệ thống không có guest account, guest training không định danh, lời mời thành viên hoặc reviewer PCCC. `Trainee` đã xác thực có thể tham gia QR active pin một `Training` thuộc release đã publish; participation không dùng allowlist theo tài khoản hay điều kiện `organizationId`.
+
+## Trải nghiệm web
+
+Website chung điều hướng theo nhu cầu với các mục Khám phá, Dành cho tổ chức, Learn, Về chúng tôi, Đăng nhập và Tải ứng dụng. Landing dùng Three.js cho hành trình góc nhìn thứ nhất: cuộn qua công trình đang cháy, khói/lửa bám nguồn trong kiến trúc, rồi gặp hai ngã rẽ. Hướng tập huấn dẫn tới cảnh thu vào điện thoại và Góc học tập; hướng tổ chức nâng camera ra mặt cắt tòa nhà rồi chuyển sang trang Dành cho tổ chức. Learn web cho phép đọc/tìm bài có nguồn không cần tài khoản; hỏi AI, hỏi về bài và lưu bài yêu cầu đăng nhập. Thiết kế chi tiết, màu, font, motion và fallback nằm trong [đặc tả UX web](fire3d-web-ux-design.md).
 
 ## Workflow
 
