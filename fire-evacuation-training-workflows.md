@@ -9,6 +9,22 @@
 - Headline Phase 1: **IFC → 3D → Unity Android → QR → Training → Result**.
 - Hoạt động đánh giá chuyên môn và user study là hoạt động capstone, không tạo system role hoặc quyền duyệt hệ thống.
 
+## 1.1. Workflow website công khai
+
+```text
+Khách mở website chung
+  -> landing POV cuộn qua công trình đang cháy
+  -> đọc các mốc không gian/tập huấn/kết quả
+  -> chọn nhu cầu
+       -> Tôi muốn tập huấn -> đăng nhập nếu cần -> Góc học tập
+       -> Tôi muốn tổ chức tập huấn -> mặt cắt tòa nhà -> Dành cho tổ chức
+```
+
+1. Khách xem landing, Khám phá, Learn và Về chúng tôi mà không cần account hoặc role selection.
+2. Cuộn xuống tiến và cuộn lên lùi theo camera; Three.js chỉ render presentation web, không chạy gameplay Unity.
+3. Nhánh tập huấn đưa khách chưa đăng nhập đến đăng nhập; Trainee đã đăng nhập vào Góc học tập. Nhánh tổ chức dẫn tới trang giới thiệu công khai; thao tác quản lý vẫn đi qua authz `OrganizationUser` và `organizationId`.
+4. Learn web (bài có nguồn, hỏi AI, lưu bài) là luồng riêng với mode Learn trong Unity. Chức năng hỏi AI/lưu bài cần auth và nguồn trả lời.
+
 ## 2. Workflow quản trị nền tảng
 
 1. `PlatformAdmin` tạo organization và ba loại tài khoản cần thiết.
@@ -95,6 +111,13 @@ Trainee đăng nhập Android app (cài một lần)
 6. Unity không giữ credential dài hạn và không tự chọn release.
 
 Nếu thiết bị chưa cài Mobile app, URL/deep link của QR chỉ mở landing giới thiệu và dẫn tới kênh cài đặt phù hợp; gameplay không chạy bằng Three.js trên trình duyệt. Three.js của FE chỉ phục vụ hiệu ứng landing/intro.
+
+### 6.1. Handoff từ Góc học tập sang Android
+
+1. Trainee chọn một hoạt động đã được cấp và bấm **Mở trên điện thoại** trên web.
+2. Web hiển thị QR active của hoạt động. QR chỉ resolve `Training`/release đã publish; web không tạo package, APK hoặc quyền mới.
+3. Điện thoại đã cài Android app quét QR, xác thực nếu cần, resolve release rồi tải/verify content package và mở Unity. Điện thoại chưa cài app đi tới kênh cài đặt hợp lệ và người dùng quét lại QR sau khi cài.
+4. Web không suy đoán hoặc persist trạng thái cài đặt của điện thoại. Quy tắc QR canonical, rotate/revoke và package pin giữ nguyên.
 
 ## 7. Workflow training online — Phase 1
 
