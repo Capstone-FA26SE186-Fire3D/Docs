@@ -6,7 +6,7 @@
 
 FET3D biến mô hình **IFC** của một Building thành content package Unity dùng cho tập huấn sơ tán 3D trên Android. Người học cài ứng dụng một lần, đăng nhập và quét bất kỳ QR active pin một `Training` của release đã publish để tải package. Package đã xác minh được Unity dùng để chạy scenario, ghi nhận quyết định và trả result về React Native/Expo qua native Android bridge.
 
-Mỗi Building có QR canonical để mở đúng training của tòa nhà. Three.js chỉ được dùng cho hiệu ứng landing/giới thiệu trên web; gameplay BIM 3D/2.5D chạy trong Unity của Mobile, không chạy thành game Three.js trên trình duyệt.
+Mỗi Building có QR canonical để mở đúng training của tòa nhà. Three.js chỉ được dùng cho hiệu ứng landing/giới thiệu trên web; gameplay BIM 3D/2.5D chạy trong Unity của Mobile, không chạy thành game Three.js trên trình duyệt. Landing và Learn là nội dung web công khai; không có guest account hoặc guest training không định danh. Xem [đặc tả UX web](fire3d-web-ux-design.md) để biết storyboard POV, nhận diện, motion và hai hướng nhu cầu.
 
 Headline Phase 1: **IFC → 3D → Unity Android → QR → Training → Result**.
 
@@ -56,6 +56,14 @@ Mô hình quyền không dùng cơ chế thành viên, lời mời, truy cập k
 6. Người học xem debrief của chính mình theo policy của mode.
 
 Trong Phase 1, buổi tập huấn chạy online sau khi package được tải. Phase 2 bổ sung basic offline: package đã verify có thể mở khi mất mạng, event/result vào local queue và được đồng bộ lại khi kết nối trở lại.
+
+### 4.1. Cổng web và hai nhu cầu
+
+- Khách có thể khám phá dự án, đọc/tìm Learn và xem cách tham gia tập huấn mà không cần tài khoản.
+- Landing mở bằng hành trình góc nhìn thứ nhất cuộn qua công trình đang cháy. Cuối hành trình, **Tôi muốn tập huấn** dẫn tới cảnh thu vào điện thoại rồi đăng nhập/Góc học tập; **Tôi muốn tổ chức tập huấn** dẫn tới mặt cắt tòa nhà và trang Dành cho tổ chức.
+- Góc học tập của Trainee đã đăng nhập gồm hỏi AI, bài đã lưu, lịch sử và kết quả cá nhân. Hỏi AI, hỏi về bài đang đọc và lưu bài yêu cầu đăng nhập.
+- Trang Dành cho tổ chức công khai giải thích năng lực sản phẩm; thao tác quản lý Building, IFC, scenario, publish, QR, analytics và billing vẫn yêu cầu `OrganizationUser` đúng ownership.
+- Learn web (kiến thức cộng đồng có nguồn) là luồng riêng với mode Learn trong Unity (làm quen không gian/runtime); cổng web và AI cộng đồng là phần mở rộng cần bổ sung vào đặc tả, chưa coi là đã triển khai.
 
 ## 5. Nội dung training
 

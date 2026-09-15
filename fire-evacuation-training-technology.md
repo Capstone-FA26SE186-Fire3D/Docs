@@ -13,7 +13,7 @@ Kiến trúc phục vụ mô phỏng và tập huấn của đồ án. Nó khôn
 - Mỗi `Building` có một QR canonical để mở đúng training của tòa nhà. QR có thể được rotate/revoke khi release thay đổi; ở mỗi thời điểm chỉ QR active của release đã publish mới được dùng.
 - QR chỉ chứa mã opaque hoặc deep link công khai để backend resolve `Building`/`TrainingRelease`; không nhúng model BIM, access token, credential hay APK.
 - Mobile app được cài một lần. Sau khi quét, backend trả manifest và URL ngắn hạn để app tải, xác minh và cache content package của đúng tòa nhà; không tải/cài một game APK hoặc Unity runtime mới cho từng QR.
-- FE dùng Three.js cho hiệu ứng landing/giới thiệu trên web. Gameplay BIM 3D với góc nhìn 2.5D chạy trong Unity runtime của Mobile, không phải game Three.js trên web. Nếu chưa cài app, landing chỉ dẫn tới kênh cài đặt hợp lệ.
+- FE dùng Three.js cho hiệu ứng landing/giới thiệu trên web. Gameplay BIM 3D với góc nhìn 2.5D chạy trong Unity runtime của Mobile, không phải game Three.js trên web. Landing dùng camera POV cuộn qua công trình đang cháy rồi rẽ sang hướng tập huấn hoặc tổ chức; chi tiết màu, font, motion và fallback nằm trong [đặc tả UX web](fire3d-web-ux-design.md). Nếu chưa cài app, landing chỉ dẫn tới kênh cài đặt hợp lệ.
 
 ## 2. Ba loại tài khoản và ownership
 
@@ -64,6 +64,33 @@ Backend là nguồn sự thật cho ownership scope, Building, revision, scenari
 | Native Android bridge | Thành phần tích hợp Mobile–Unity | Nhận yêu cầu launch từ Mobile, truyền dữ liệu cho Unity và chuyển callback/event/result về Mobile. |
 | 3D runtime | Unity 6 LTS + URP + Addressables | Scene, navigation, hazard surrogate, A*, basic NPC Phase 2 và event emission. |
 | Payments | PayOS production (Phase 2) | Quotation flow, transaction, invoice metadata và revenue signals. |
+
+### 4.1. Ranh giới motion và runtime web
+
+- Scene landing giữ một camera path và presentation state riêng. Scroll progress điều khiển camera/copy; khói, lửa và ánh sáng môi trường có animation nhẹ độc lập, dừng khi tab ẩn.
+- WebGL không khả dụng hoặc `prefers-reduced-motion` phải chuyển sang ảnh tĩnh/fade ngắn nhưng giữ menu, nội dung và hai nhánh.
+- ThreeUI (`@designcodeio/threeui@1.2.0`) là thư viện component React phụ trợ ở FE; component phải được kiểm tra trước khi dùng. Không đưa ThreeUI/Three.js vào BE hoặc Mobile và không dùng component có sẵn để giả định gameplay.
+- `motion/react` chỉ xử lý UI/scroll transition; Remotion chỉ là công cụ tùy chọn cho storyboard/teaser dùng `useCurrentFrame()`, không phải dependency runtime đã chốt.
+
+### 4.2. Cấu trúc source FE theo feature
+
+FE tổ chức source theo feature-first để giảm phụ thuộc chéo và hỗ trợ bảo trì:
+
+```text
+src/
+├─ assets/ · components/ · configs/
+├─ features/
+│  ├─ auth/{components,services,types}
+│  ├─ landing/{components,scene,types}
+│  ├─ learn/{components,services,types}
+│  ├─ learning-hub/{components,services,types}
+│  └─ organization/{components,services,types}
+├─ hooks/ · layouts/ · pages/
+├─ services/ · store/ · utils/
+└─ App.tsx
+```
+
+`features/<name>` sở hữu logic nghiệp vụ và type riêng; `components` là UI dùng chung; `services` là client/interceptor và adapter cross-feature; `configs` parse route/env không nhạy cảm; `store` chỉ giữ state liên route; `pages`/`layouts` chỉ composition. Landing scene và asset 3D được lazy-load theo route. Đây là kiến trúc đích cho FE, không phải tuyên bố code hiện tại đã được di chuyển; FE hiện vẫn React/Vite với RAG thử nghiệm.
 
 ## 5. Domain model và trạng thái
 
