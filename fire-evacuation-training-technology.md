@@ -61,7 +61,6 @@ Backend là nguồn sự thật cho ownership scope, Building, revision, scenari
 | Object storage | MinIO S3-compatible | Raw IFC private, manifest và content package bất biến. |
 | IFC worker | Python + IfcOpenShell + Blender/Bonsai khi cần | Parse IFC, geometry/LOD, graph, QA và package input. |
 | Android shell | React Native/Expo + native Android bridge | Login, QR, download/verify/cache, local queue Phase 2 và Unity handoff. |
-
 | Native Android bridge | Thành phần tích hợp Mobile–Unity | Nhận yêu cầu launch từ Mobile, truyền dữ liệu cho Unity và chuyển callback/event/result về Mobile. |
 | 3D runtime | Unity 6 LTS + URP + Addressables | Scene, navigation, hazard surrogate, A*, basic NPC Phase 2 và event emission. |
 | Payments | PayOS production (Phase 2) | Quotation flow, transaction, invoice metadata và revenue signals. |
@@ -72,6 +71,26 @@ Backend là nguồn sự thật cho ownership scope, Building, revision, scenari
 - WebGL không khả dụng hoặc `prefers-reduced-motion` phải chuyển sang ảnh tĩnh/fade ngắn nhưng giữ menu, nội dung và hai nhánh.
 - ThreeUI (`@designcodeio/threeui@1.2.0`) là thư viện component React phụ trợ ở FE; component phải được kiểm tra trước khi dùng. Không đưa ThreeUI/Three.js vào BE hoặc Mobile và không dùng component có sẵn để giả định gameplay.
 - `motion/react` chỉ xử lý UI/scroll transition; Remotion chỉ là công cụ tùy chọn cho storyboard/teaser dùng `useCurrentFrame()`, không phải dependency runtime đã chốt.
+
+### 4.2. Cấu trúc source FE theo feature
+
+FE tổ chức source theo feature-first để giảm phụ thuộc chéo và hỗ trợ bảo trì:
+
+```text
+src/
+├─ assets/ · components/ · configs/
+├─ features/
+│  ├─ auth/{components,services,types}
+│  ├─ landing/{components,scene,types}
+│  ├─ learn/{components,services,types}
+│  ├─ learning-hub/{components,services,types}
+│  └─ organization/{components,services,types}
+├─ hooks/ · layouts/ · pages/
+├─ services/ · store/ · utils/
+└─ App.tsx
+```
+
+`features/<name>` sở hữu logic nghiệp vụ và type riêng; `components` là UI dùng chung; `services` là client/interceptor và adapter cross-feature; `configs` parse route/env không nhạy cảm; `store` chỉ giữ state liên route; `pages`/`layouts` chỉ composition. Landing scene và asset 3D được lazy-load theo route. Đây là kiến trúc đích cho FE, không phải tuyên bố code hiện tại đã được di chuyển; FE hiện vẫn React/Vite với RAG thử nghiệm.
 
 ## 5. Domain model và trạng thái
 

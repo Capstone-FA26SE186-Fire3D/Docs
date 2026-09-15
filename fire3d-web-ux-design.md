@@ -126,7 +126,43 @@ Phân biệt rõ Learn web (kiến thức cộng đồng) với mode Learn trong
 
 Góc học tập là nơi riêng của Trainee sau đăng nhập, gồm hỏi AI, bài đã lưu, lịch sử hoạt động và kết quả tập huấn cá nhân. Trainee chỉ xem dữ liệu của mình; kết quả mô phỏng không phải chứng nhận hoặc kết luận an toàn công trình.
 
-## 7. Công cụ và skill thực thi
+## 7. Cấu trúc source FE
+
+FE áp dụng cấu trúc feature-first giống sơ đồ nhóm đề xuất để dễ tìm code, giới hạn phụ thuộc và bảo trì. `pages/` chỉ ghép route vào layout/feature; logic nghiệp vụ không đặt trong `App.tsx` hoặc page.
+
+```text
+src/
+├─ assets/       # hình ảnh, fonts, global styles
+├─ components/   # UI dùng chung toàn app
+├─ configs/      # routes, constants, env parsing
+├─ features/     # module theo nghiệp vụ
+│  ├─ auth/      # components/, services/, types/
+│  ├─ landing/   # components/, scene/, types/
+│  ├─ learn/     # components/, services/, types/
+│  ├─ learning-hub/ # components/, services/, types/
+│  └─ organization/ # components/, services/, types/
+├─ hooks/        # hooks dùng chung
+├─ layouts/      # MainLayout, AuthLayout, app shell
+├─ pages/        # route-level composition
+├─ services/     # HTTP client, interceptors, cross-feature adapters
+├─ store/        # global state tối thiểu (auth/session/UI)
+├─ utils/        # hàm thuần và helper nhỏ
+└─ App.tsx       # root composition/provider
+```
+
+Quy ước ownership:
+
+- `features/<name>/` giữ UI, service và type chỉ thuộc feature đó; ví dụ camera/scene landing không được import vào Unity Mobile.
+- `components/` không biết API hoặc role; các component có dữ liệu nghiệp vụ nhận props/type rõ ràng từ feature.
+- `services/` giữ cấu hình Axios/fetch, auth interceptor, error mapping và adapter API dùng chung; endpoint cụ thể của feature ở `features/<name>/services/`.
+- `configs/` chỉ parse env và constant không nhạy cảm; không commit secret. `store/` chỉ chứa state thực sự dùng qua nhiều route, còn state cục bộ ở feature.
+- `pages/` và `layouts/` làm nhiệm vụ composition, loading/error boundary và accessibility; không chứa truy vấn dài hoặc logic Three.js.
+- `assets/` chứa font Be Vietnam Pro, ảnh concept/fallback và style tokens. Asset 3D lớn phải lazy-load theo landing route.
+- Khi chuyển FE hiện tại từ Vite sang Next.js, `pages/` có thể map sang App Router route modules; giữ nguyên ownership feature-first, không nhân bản business logic.
+
+Các thư mục là target architecture cho task triển khai tiếp theo; task này không tự tạo placeholder hoặc di chuyển code RAG hiện tại.
+
+## 8. Công cụ và skill thực thi
 
 | Phần | Công cụ/skill | Ranh giới |
 |---|---|---|
@@ -140,7 +176,7 @@ Góc học tập là nơi riêng của Trainee sau đăng nhập, gồm hỏi AI
 
 FE hiện tại là React/TypeScript/Vite với RAG client thử nghiệm. Docs định hướng web đích là Next.js; việc chuyển stack và triển khai landing/Learn cần task kỹ thuật riêng.
 
-## 8. Tiêu chí nghiệm thu thiết kế
+## 9. Tiêu chí nghiệm thu thiết kế
 
 - Khách mở landing và Learn mà không bị buộc chọn vai trò hoặc đăng nhập.
 - Menu và hai nhánh dùng nhãn nhu cầu, có keyboard focus và vùng bấm đủ lớn.
@@ -151,7 +187,7 @@ FE hiện tại là React/TypeScript/Vite với RAG client thử nghiệm. Docs 
 - Cảnh có fallback ảnh tĩnh, reduced motion và phương án mobile; không trình bày mô phỏng như hướng dẫn chữa cháy hoặc chứng nhận PCCC.
 - Bản dựng phải kiểm tra ảnh chụp ở desktop/mobile, frame sáng nhất để đo tương phản, loading WebGL, tab ẩn, cuộn nhanh/ngược, focus keyboard và tài nguyên renderer.
 
-## 9. Tài liệu liên quan
+## 10. Tài liệu liên quan
 
 - [Yêu cầu dự án](fire_evacuation_requirements.md)
 - [Tính năng và phase](fire-evacuation-training-features.md)
