@@ -1,7 +1,8 @@
 # Fire3D — đặc tả UX web và hướng hình ảnh
 
-**Trạng thái:** quyết định thiết kế đã thống nhất, chưa phải tính năng đã triển khai  
-**Cập nhật:** 2026-09-15  
+**Trạng thái:** thiết kế và prototype FE đã triển khai; chưa nghiệm thu đầy đủ chất lượng hình ảnh/hiệu năng
+
+**Cập nhật:** 2026-09-16
 **Phạm vi:** website công khai, cổng Learn, Góc học tập và khu quản lý tổ chức
 
 ## 1. Ý tưởng sản phẩm
@@ -78,14 +79,14 @@ Hai lựa chọn hiện bằng nhãn nhu cầu, không bằng tên role:
 - **Tôi muốn tập huấn**
 - **Tôi muốn tổ chức tập huấn**
 
-Người dùng có thể chọn bằng nút, bàn phím hoặc liên kết trong menu. Nếu không chọn, cuộn tiếp sẽ giữ cảnh ở trạng thái chờ và giải thích ngắn hai hướng.
+Trong cảnh 3D, hai lựa chọn là chữ sơn trên tường với mũi tên và vùng bấm trong suốt có nhãn truy cập. Khi đã chọn nhánh, các liên kết chữ cho phép đổi lựa chọn; nút Tiếp tục chỉ điều hướng khi chuyển cảnh ổn định. Bản reduced motion dùng điều khiển HTML thông thường. Nếu không chọn, cảnh giữ trạng thái chờ.
 
 ## 4. Motion và tương tác
 
 - Cuộn xuống tiến và cuộn lên lùi theo cùng một đường camera. Dừng cuộn thì camera dừng tại vị trí hiện tại; khói, lửa và ánh sáng môi trường tiếp tục chuyển động nhẹ.
 - Không phát lùi video cháy. Nếu dùng clip tham khảo hoặc video dựng sẵn, clip chỉ chạy theo chiều tiến; trạng thái lùi dùng frame seek hoặc lớp 3D tương ứng.
 - Camera dùng nội suy mượt, không rung đầu liên tục, không scroll-jacking và không tự kéo trang vượt quyền điều khiển của người dùng.
-- Chỉ có một cao trào thị giác: hành lang đang cháy chuyển thành điểm nhìn mở ra hai nhánh. Các đoạn đọc trước đó phải yên hơn.
+- Cao trào của hành trình POV là điểm mở ra hai nhánh. Theo cập nhật prototype, nhánh tổ chức có thêm diễn tiến cháy đen và sụp từng khu khi người xem ở lại đủ lâu; không áp dụng cảnh sụp cho POV/điện thoại.
 - Chuyển nhánh có thể bị ngắt; thao tác mới tiếp tục từ vị trí camera hiện tại và kết thúc ở lựa chọn cuối cùng, không snap về một nhánh cũ.
 - Hiệu ứng lặp phải dừng khi tab ẩn. Tải cảnh theo vùng nhìn, giải phóng tài nguyên khi rời landing và tránh khởi tạo nhiều renderer.
 - `prefers-reduced-motion: reduce` tắt camera transform, particle và biến dạng; thay bằng ảnh tĩnh, fade tối đa 200 ms và các liên kết vẫn hoạt động.
@@ -106,7 +107,9 @@ Camera rẽ vào một vùng sáng hơn; cảnh công trình thu nhỏ thành m�
 
 ### 5.2. Tổ chức muốn tổ chức tập huấn
 
-Camera quay và nâng ra khỏi hành lang, lộ mặt cắt tòa nhà vừa đi qua. Các tầng, cầu thang, điểm spawn và khu vực kịch bản tách nhẹ; đường liên kết ember được vẽ dần để giải thích quy trình. Mô hình giữ cùng vị trí trong lúc tiêu đề **Dành cho tổ chức** xuất hiện, tạo chuyển tiếp liền mạch vào trang chi tiết.
+Camera quay và nâng ra khỏi hành lang, lộ mặt cắt tòa nhà vừa đi qua. Các tầng giữ kết nối thật, không tách nổi; lớp vỏ phía quan sát ẩn để thấy hành lang và cầu thang. Người xem kéo để xoay hoặc click/Tab vào vùng mô hình rồi dùng phím mũi tên; Home đặt lại góc. Theo phản hồi, bỏ khung viền vùng xoay cả khi dùng bàn phím, nhưng giữ focus và handler. Footer riêng dưới landing đã bỏ; footer trang nội dung vẫn dùng theo route.
+
+Nhánh tổ chức đếm thời gian riêng sau khi cảnh ổn định: sạm đen khoảng giây 65–105, sụp nối tiếp bốn khu khoảng giây 110–143; tầng dưới theo sau tầng trên cùng khu. Lửa nguồn và mảnh vỡ dùng chung lịch từng khu; lửa thể tích giảm tại khu đang đổ. Đổi khỏi nhánh tổ chức đặt lại giai đoạn hư hại. Đây là hoạt cảnh dựng sẵn, không phải dự báo kết cấu hoặc thời gian an toàn thực tế. Snapshot bàn giao route đã có cơ chế nhưng tính liên tục mọi chuyển cảnh vẫn cần nghiệm thu trực quan.
 
 Trang công khai giải thích năng lực chuẩn bị công trình, nhập IFC, kiểm tra revision, tạo scenario, publish release/QR và xem analytics. Khu quản lý thực tế yêu cầu `OrganizationUser` đúng `organizationId`; landing không cấp quyền và không thay thế kiểm tra backend.
 
@@ -120,7 +123,7 @@ Trang công khai giải thích năng lực chuẩn bị công trình, nhập IFC
 - **Hỏi về bài này** mở chat mang theo ngữ cảnh bài đang đọc.
 - **Lưu bài** đưa bài vào Góc học tập và yêu cầu đăng nhập.
 
-Phân biệt rõ Learn web (kiến thức cộng đồng) với mode Learn trong Unity (làm quen không gian/runtime). Cổng Learn và AI kiến thức cộng đồng là phần mở rộng sản phẩm cần bổ sung vào đặc tả, chưa gán mốc Phase hoặc coi là đã có trong FE hiện tại.
+Phân biệt rõ Learn web (kiến thức cộng đồng) với mode Learn trong Unity (làm quen không gian/runtime). FE đã có prototype Learn và chat mẫu; tích hợp AI kiến thức cộng đồng/backend thực vẫn là phần mở rộng cần đặc tả, chưa gán mốc Phase.
 
 ### Góc học tập
 
@@ -128,7 +131,7 @@ Góc học tập là nơi riêng của Trainee sau đăng nhập, gồm hỏi AI
 
 ## 7. Cấu trúc source FE
 
-FE áp dụng cấu trúc feature-first giống sơ đồ nhóm đề xuất để dễ tìm code, giới hạn phụ thuộc và bảo trì. `pages/` chỉ ghép route vào layout/feature; logic nghiệp vụ không đặt trong `App.tsx` hoặc page.
+FE đã chuyển từ Vite sang Next.js App Router, giữ feature-first. `app/` chỉ ghép route/layout/provider; logic nghiệp vụ và Three.js thuộc feature.
 
 ```text
 src/
@@ -143,11 +146,11 @@ src/
 │  └─ organization/ # components/, services/, types/
 ├─ hooks/        # hooks dùng chung
 ├─ layouts/      # MainLayout, AuthLayout, app shell
-├─ pages/        # route-level composition
+├─ app/          # Next.js App Router, layout, metadata và route composition
 ├─ services/     # HTTP client, interceptors, cross-feature adapters
 ├─ store/        # global state tối thiểu (auth/session/UI)
 ├─ utils/        # hàm thuần và helper nhỏ
-└─ App.tsx       # root composition/provider
+└─ (không có App.tsx; root composition ở app/layout.tsx)
 ```
 
 Quy ước ownership:
@@ -156,11 +159,11 @@ Quy ước ownership:
 - `components/` không biết API hoặc role; các component có dữ liệu nghiệp vụ nhận props/type rõ ràng từ feature.
 - `services/` giữ cấu hình Axios/fetch, auth interceptor, error mapping và adapter API dùng chung; endpoint cụ thể của feature ở `features/<name>/services/`.
 - `configs/` chỉ parse env và constant không nhạy cảm; không commit secret. `store/` chỉ chứa state thực sự dùng qua nhiều route, còn state cục bộ ở feature.
-- `pages/` và `layouts/` làm nhiệm vụ composition, loading/error boundary và accessibility; không chứa truy vấn dài hoặc logic Three.js.
+- `app/` và `layouts/` làm nhiệm vụ composition, loading/error boundary và accessibility; không chứa truy vấn dài hoặc logic Three.js.
 - `assets/` chứa font Be Vietnam Pro, ảnh concept/fallback và style tokens. Asset 3D lớn phải lazy-load theo landing route.
-- Khi chuyển FE hiện tại từ Vite sang Next.js, `pages/` có thể map sang App Router route modules; giữ nguyên ownership feature-first, không nhân bản business logic.
+- Không tạo lại `pages/`, `App.tsx` hoặc cấu hình Vite. Chỉ tạo thư mục có code sử dụng.
 
-Các thư mục là target architecture cho task triển khai tiếp theo; task này không tự tạo placeholder hoặc di chuyển code RAG hiện tại.
+RAG được tổ chức trong `features/rag` và route `/demo/rag`; giữ `POST /chat` với `{question}` và `POST /documents` multipart `file`, answer/sources/loading/error. Env đổi thành `NEXT_PUBLIC_RAG_API_URL`, dev port vẫn 5173, pnpm 10.28.2.
 
 ## 8. Công cụ và skill thực thi
 
@@ -168,13 +171,13 @@ Các thư mục là target architecture cho task triển khai tiếp theo; task 
 |---|---|---|
 | Nhận diện và bố cục | `design-taste-frontend`, `web-design-guidelines`, `vercel-react-best-practices` | Xây token, hierarchy, accessibility, loading và responsive; không tự biến đề xuất thành backend contract |
 | Cảnh 3D | Three.js, `3dviz-pro-max` | Custom building scene, camera path, fire source, smoke depth, occlusion, light response; Three.js chỉ ở FE landing |
-| Component hiệu ứng | `@designcodeio/threeui@1.2.0` | Đã có trong FE và khóa bằng pnpm. Có thể kiểm tra `EmberStorm`, `ParticleDrift`, `WireframeForms` làm phụ trợ; không coi component có sẵn là toàn bộ cảnh cháy công trình |
+| Component hiệu ứng | ThreeUI tham khảo | Đã khảo sát component chạy iframe riêng; runtime FE hiện không phụ thuộc ThreeUI. Cảnh chính là Three.js custom |
 | Cuộn và UI motion | `motion/react`, `ecc:motion-foundations`, `ecc:motion-advanced`, `scroll-craft` | Scroll progress, focus transition, reduced motion, cleanup và visibility; không dùng CSS layout animation hoặc scroll-jacking |
 | Concept/ảnh fallback | `imagegen` | Tạo concept plate, texture và fallback still khi cần; copy chính luôn là HTML |
 | Storyboard/video | `remotion-best-practices` | Dùng `useCurrentFrame()` để dựng teaser hoặc kiểm tra storyboard. Không bắt buộc runtime dependency và không thay thế scene Three.js tương tác |
 | Handoff | `fire3d-fe-handoff` | Ghi checkpoint, bằng chứng và giới hạn; local notes không push |
 
-FE hiện tại là React/TypeScript/Vite với RAG client thử nghiệm. Docs định hướng web đích là Next.js; việc chuyển stack và triển khai landing/Learn cần task kỹ thuật riêng.
+FE hiện tại dùng Next.js App Router, TypeScript strict, Tailwind 4, Radix/shadcn và Three.js. Learn, đăng nhập/Góc học tập là dữ liệu demo với sessionStorage; chat định sẵn có nguồn, không đồng nghĩa AI/backend nghiệp vụ đã tích hợp. QR/APK chưa phát hành thì hiển thị chưa khả dụng. Xem [báo cáo triển khai và bài học](fire3d-web-implementation.md) để phân biệt thay đổi, kiểm chứng và hạn chế.
 
 ## 9. Tiêu chí nghiệm thu thiết kế
 
