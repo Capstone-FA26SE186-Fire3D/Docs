@@ -92,6 +92,37 @@ src/
 
 `features/<name>` sở hữu logic nghiệp vụ và type riêng; `components` là UI dùng chung; `services` là client/interceptor và adapter cross-feature; `configs` parse route/env không nhạy cảm; `store` chỉ giữ state liên route; `pages`/`layouts` chỉ composition. Landing scene và asset 3D được lazy-load theo route. Đây là kiến trúc đích cho FE, không phải tuyên bố code hiện tại đã được di chuyển; FE hiện vẫn React/Vite với RAG thử nghiệm.
 
+### 4.3. Kinh nghiệm triển khai Mobile Expo/React Native và bảo trì
+
+Prototype Mobile dùng Expo Router nhưng giữ route mỏng: `app/` chỉ khai báo URL, layout và redirect; màn hình, model, service và test nằm trong `src/features/<feature>`. UI nền, theme token và store demo chỉ đặt ở `src/components`, `src/theme` và `src/store` khi thực sự dùng lại. Không tạo sẵn các thư mục `navigation`, `hooks`, `utils` rỗng; thêm chúng khi có logic dùng chung để tránh một nơi chứa “mọi thứ”.
+
+Ranh giới runtime phải được giữ rõ:
+
+- React Native/Expo chịu login, QR, cache metadata, điều hướng và trạng thái phiên. Three.js/ThreeUI là phụ thuộc DOM/CSS của FE, không đưa vào native UI.
+- Hình low-poly ở lobby là PNG sprite tĩnh để tải nhanh và có fallback; 3D gameplay, hazard, A* và event vẫn thuộc Unity qua native bridge. Không dựng mesh Unity trong Expo để mô phỏng tính năng gameplay.
+- Demo chỉ dùng allowlist QR và `AsyncStorage` cho session giả. Bản production phải resolve QR opaque qua API, kiểm tra `TrainingRelease`/`Training` đang active và xác minh quyền trước khi tải content; token đăng nhập phải dùng SecureStore, không lưu secret trong AsyncStorage hoặc deep link.
+
+Nguyên tắc hiệu năng và độ bền:
+
+- Import trực tiếp từng font/icon và chỉ nạp weight cần dùng; tránh barrel import toàn bộ family. Dùng `FlatList` khi danh sách tòa nhà tăng, giữ style/token ổn định ngoài hot path và giới hạn vùng map/sprite trong kích thước màn hình.
+- Khóa callback camera sau lần QR hợp lệ, pause preview và reset lock khi unmount/scan lại để không tạo nhiều session. Mọi route nhận `id` từ deep link phải kiểm tra lại id đã lưu/API, không tin dữ liệu URL.
+- Animation dùng Reanimated/native transition, tôn trọng `prefers-reduced-motion`/Reduce Motion và dừng camera khi screen mất focus hoặc app xuống nền. Chỉ tắt animation trong screenshot test; không tắt transition của runtime.
+- State persist phải có version, validate id/ngày và migration rõ ràng. Khi backend sẵn sàng, thay demo provider bằng adapter API nhưng giữ interface của feature để màn hình không phụ thuộc transport.
+
+Bảng lỗi đã gặp và cách phòng tái phát trong prototype:
+
+| Triệu chứng | Nguyên nhân đã xác minh | Khắc phục và kiểm tra |
+| :--- | :--- | :--- |
+| Quét QR xong quay lại thấy hai lobby/nhãn trùng | `router.replace('/(tabs)')` đẩy một tab root mới vào stack | Dùng `router.dismissTo('/(tabs)')`; E2E kiểm tra không có duplicate label |
+| TypeScript báo thiếu `absoluteFillObject` | Kiểu public SDK57/RN 0.86 expose `StyleSheet.absoluteFill` | Dùng `absoluteFill` và chạy typecheck + Android export |
+| TypeScript 6 cảnh báo `baseUrl` deprecated | Cấu hình cũ dùng `baseUrl` chỉ để phục vụ alias | Bỏ `baseUrl`, giữ `paths` alias `@/*`; chạy typecheck sạch |
+| Android bundle phình do nhiều asset font/icon | Barrel import nạp cả family dù chỉ dùng vài glyph/weight | Import trực tiếp; export giảm từ 67 xuống 35 asset (HBC khoảng 3.7 MB ở prototype) |
+| Screenshot bottom sheet bị chụp giữa transition | Playwright chụp trước khi animation kết thúc | Chờ trạng thái ổn định; chỉ disable animation trong screenshot capture |
+| Camera gọi nhiều lần cùng một mã | Callback `onBarcodeScanned` lặp trong lúc preview còn chạy | `scanLocked` + pause preview + reset lifecycle; test mã hợp lệ/không hợp lệ/lặp |
+| Expo checker báo lệch patch | `expo` không khớp patch SDK trong lockfile | Chạy `expo install --check`, cập nhật patch tương thích rồi frozen install/typecheck/export |
+
+Bằng chứng kiểm tra của prototype: `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm format:check`, `pnpm test` (5 model tests), Playwright Chrome (6 E2E tests), `expo install --check` và `expo export --platform android` đều đạt. Chưa nghiệm thu camera native, APK trên thiết bị, Unity bridge, auth backend hoặc tải content package; các hạng mục đó phải có smoke test riêng trước khi gọi là production-ready.
+
 ## 5. Domain model và trạng thái
 
 Các aggregate cốt lõi là `Organization`, `Account`, `Building`, `BuildingRevision`, `IfcSource`, `ScenarioVersion`, `TrainingRelease`, `Training`, `QrCode`, `TrainingSession`, `TrainingResult`, `AuditLog`, `Quotation`, `Transaction`, `InvoiceMetadata`, `FeedbackTicket`.
