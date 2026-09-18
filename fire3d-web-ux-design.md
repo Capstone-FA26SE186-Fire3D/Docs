@@ -102,8 +102,10 @@ Camera rẽ vào một vùng sáng hơn; cảnh công trình thu nhỏ thành m�
 
 - Khách chưa đăng nhập: chọn tiếp tục sẽ đưa tới đăng nhập, sau đó về Góc học tập.
 - Trainee đã đăng nhập: đi thẳng tới Góc học tập với AI, bài lưu, lịch sử và kết quả cá nhân.
-- Chọn một hoạt động và **Mở trên điện thoại** để web hiển thị QR active của hoạt động. Điện thoại đã cài app mở/resolve training; chưa cài app thì mở kênh cài đặt hợp lệ và người dùng quét lại sau khi cài.
-- Web không suy đoán hoặc ghi nhận trạng thái “đã cài app”. Android cài một lần, tải và xác minh content package Unity theo release đã resolve.
+- QR công khai là QR ổn định của **Building**, không pin một Training. QR mở landing web/app để xem danh sách bài đã phát hành; Trainee chọn bài rồi phiên mới pin `training/release/scenario` cụ thể.
+- Chưa cài app: QR mở trang web của tòa nhà, có đăng ký/đăng nhập và hướng dẫn tải app. Đã cài nhưng chưa đăng nhập: mở app và yêu cầu Google Sign-In/Firebase Auth. Đã đăng nhập: chỉ bắt đầu phiên sau khi backend kiểm tra service entitlement online.
+- Nếu service hết hạn, QR và landing vẫn mở được nhưng chặn phát hành/bắt đầu phiên mới; phiên đang chạy có thể hoàn tất. Mất mạng sau khi bắt đầu thì app giữ kết quả và đồng bộ lại; mất mạng trước khi bắt đầu không được mở phiên.
+- Web không suy đoán trạng thái “đã cài app”. Không hứa giữ deep link xuyên cài đặt nếu chưa kiểm chứng; có nút quay lại trang tòa nhà hoặc quét lại QR.
 
 ### 5.2. Tổ chức muốn tổ chức tập huấn
 
@@ -112,6 +114,14 @@ Camera quay và nâng ra khỏi hành lang, lộ mặt cắt tòa nhà vừa đi
 Nhánh tổ chức đếm thời gian riêng sau khi cảnh ổn định: sạm đen khoảng giây 65–105, sụp nối tiếp bốn khu khoảng giây 110–143; tầng dưới theo sau tầng trên cùng khu. Lửa nguồn và mảnh vỡ dùng chung lịch từng khu; lửa thể tích giảm tại khu đang đổ. Đổi khỏi nhánh tổ chức đặt lại giai đoạn hư hại. Đây là hoạt cảnh dựng sẵn, không phải dự báo kết cấu hoặc thời gian an toàn thực tế. Snapshot bàn giao route đã có cơ chế nhưng tính liên tục mọi chuyển cảnh vẫn cần nghiệm thu trực quan.
 
 Trang công khai giải thích năng lực chuẩn bị công trình, nhập IFC, kiểm tra revision, tạo scenario, publish release/QR và xem analytics. Khu quản lý thực tế yêu cầu `OrganizationUser` đúng `organizationId`; landing không cấp quyền và không thay thế kiểm tra backend.
+
+### 5.3. Editor 3D và khu vận hành tổ chức
+
+Khu `OrganizationUser` dùng Three.js cho preview/editor: chọn tầng, xoay/zoom, ẩn lớp, chọn đối tượng, đặt và chỉnh các thành phần kịch bản được runtime hỗ trợ. Editor có lưu nháp, undo/redo, validation, issue và tạo scenario version; nhiều scenario có thể dùng chung geometry. Fire, smoke, spread, wind, blocked route, extinguisher/towel/water, spawn, goal và thời lượng được lưu tách khỏi geometry. Wind theo khu vực/cửa là đề xuất mô hình game, không phải mô phỏng thông gió đã kiểm chứng.
+
+Preview web chỉ minh họa timeline và hiệu ứng. Playtest đầy đủ dùng app Unity với quyền thử riêng, không phát hành bản nháp qua QR Trainee. Trợ lý AI của tổ chức có thể đề xuất hoặc tạo draft có nguồn, nhưng không tự sửa editor hay publish.
+
+Khu billing/AI usage hiển thị dịch vụ theo từng Building, ngày hiệu lực/hết hạn, lượt AI được cấp/đã dùng/còn/vượt, đơn giá snapshot, chi phí tạm tính, kỳ đối soát và lịch sử. Phân biệt learner session với organization playtest; playtest không vào thống kê học. Điều khoản và sự đồng ý vượt hạn mức phải hiển thị trước khi phát sinh phí.
 
 ## 6. Learn và Góc học tập
 
@@ -123,7 +133,9 @@ Trang công khai giải thích năng lực chuẩn bị công trình, nhập IFC
 - **Hỏi về bài này** mở chat mang theo ngữ cảnh bài đang đọc.
 - **Lưu bài** đưa bài vào Góc học tập và yêu cầu đăng nhập.
 
-Phân biệt rõ Learn web (kiến thức cộng đồng) với mode Learn trong Unity (làm quen không gian/runtime). FE đã có prototype Learn và chat mẫu; tích hợp AI kiến thức cộng đồng/backend thực vẫn là phần mở rộng cần đặc tả, chưa gán mốc Phase.
+Phân biệt rõ Learn web (kiến thức cộng đồng) với mode Learn trong Unity (làm quen không gian/runtime). FE đã có prototype Learn và chat mẫu; tích hợp AI kiến thức cộng đồng/backend thực còn pending implementation, nhưng thuộc mục tiêu bản cuối và không được coi là ngoài scope.
+
+AI Trainee hoạt động trên web/mobile ngoài gameplay, dùng quota ngày do Admin cấu hình, chỉ truy cập kho kiến thức chung đã duyệt và dữ liệu cá nhân được phép. AI tổ chức dùng corpus riêng theo tenant và dữ liệu BIM được cấp quyền; hai nhóm không dùng chung phạm vi truy xuất.
 
 ### Góc học tập
 
@@ -170,7 +182,7 @@ RAG được tổ chức trong `features/rag` và route `/demo/rag`; giữ `POST
 | Phần | Công cụ/skill | Ranh giới |
 |---|---|---|
 | Nhận diện và bố cục | `design-taste-frontend`, `web-design-guidelines`, `vercel-react-best-practices` | Xây token, hierarchy, accessibility, loading và responsive; không tự biến đề xuất thành backend contract |
-| Cảnh 3D | Three.js, `3dviz-pro-max` | Custom building scene, camera path, fire source, smoke depth, occlusion, light response; Three.js chỉ ở FE landing |
+| Cảnh 3D | Three.js, `3dviz-pro-max` | Custom building scene, camera path, fire source, smoke depth, occlusion, light response; dùng cho landing và editor/preview tổ chức, không thay gameplay Unity |
 | Component hiệu ứng | ThreeUI tham khảo | Đã khảo sát component chạy iframe riêng; runtime FE hiện không phụ thuộc ThreeUI. Cảnh chính là Three.js custom |
 | Cuộn và UI motion | `motion/react`, `ecc:motion-foundations`, `ecc:motion-advanced`, `scroll-craft` | Scroll progress, focus transition, reduced motion, cleanup và visibility; không dùng CSS layout animation hoặc scroll-jacking |
 | Concept/ảnh fallback | `imagegen` | Tạo concept plate, texture và fallback still khi cần; copy chính luôn là HTML |
@@ -185,7 +197,9 @@ FE hiện tại dùng Next.js App Router, TypeScript strict, Tailwind 4, Radix/s
 - Menu và hai nhánh dùng nhãn nhu cầu, có keyboard focus và vùng bấm đủ lớn.
 - Cuộn tiến/lùi giữ đúng camera, khói lửa bám kiến trúc, có che khuất và phản sáng; dừng cuộn không làm mất trạng thái.
 - Chuyển cảnh sang trainee và organization giữ liên tục không gian; người dùng có thể quay lại và chọn nhánh khác.
-- Trainee chưa đăng nhập được đưa tới đăng nhập; Trainee đã đăng nhập tới Góc học tập; QR chỉ resolve training/release active và không mở gameplay web.
+- QR Building luôn resolve được landing; Trainee xem danh sách bài, chọn bài và chỉ mở phiên mới khi entitlement online còn hạn; không mở gameplay web.
+- Editor organization cho phép chỉnh scenario, lưu draft, undo/redo, issue và version; preview web không được coi là gameplay Unity.
+- Hết hạn service chặn publish/phiên mới nhưng không làm mất khả năng xem landing hoặc hoàn tất phiên đã bắt đầu.
 - OrganizationUser bị backend giới hạn theo `organizationId`; nội dung marketing công khai không cấp quyền nghiệp vụ.
 - Cảnh có fallback ảnh tĩnh, reduced motion và phương án mobile; không trình bày mô phỏng như hướng dẫn chữa cháy hoặc chứng nhận PCCC.
 - Bản dựng phải kiểm tra ảnh chụp ở desktop/mobile, frame sáng nhất để đo tương phản, loading WebGL, tab ẩn, cuộn nhanh/ngược, focus keyboard và tài nguyên renderer.

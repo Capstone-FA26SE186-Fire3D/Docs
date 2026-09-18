@@ -1,17 +1,29 @@
 # Fire Evacuation Training 3D — PostgreSQL ERD
 
-This ERD mirrors `fire_evacuation_schema.sql` version 5.0. SQL is authoritative for defaults and check-constraint expressions; every table, column, enum-backed field, foreign key, and relationship is represented below.
+This ERD mirrors the design target in `fire_evacuation_schema.sql` version 6.6. SQL is authoritative for defaults and check-constraint expressions; every table, column, enum-backed field, foreign key, and relationship is represented below. This is a design document, not a database migration.
 
 ## Contract notes
 
 - `user_role_enum` is exactly `PlatformAdmin | OrganizationUser | Trainee`. `OrganizationUser` requires `organization_id`; `PlatformAdmin` and `Trainee` require it to be null.
+- Firebase Authentication owns login credentials. `users.firebase_uid` maps the verified Firebase identity to FET3D roles/tenant data; the database does not store password hashes or Google refresh tokens. FCM registration tokens belong to device installations and are not authentication credentials.
+- Supabase hosts PostgreSQL and the `pgvector` extension for RAG storage; Supabase Auth is not used. Raw IFC and immutable runtime packages are stored in private AWS S3 buckets.
 - `file_type_enum` is exactly `IFC`.
-- `ConfirmForTraining` is the persisted `revision_reviews.action` that transitions `revisions.status` from `ReadyForScenario` to `ConfirmedForTraining`; it is readiness-only. The executable order is confirmed revision/scenario → `Built` release + package + matching Active `Training` → `Published` release → active QR.
-- Each `release_qr_codes` row pins both `release_id` and exactly one `training_id`. A session directly pins `trainee_user_id`, `training_id`, `scenario_version_id`, `release_id`, and `qr_code_id`; validation requires the QR-pinned Active `Training`, a `Published` release, and matching release/training/scenario/organization. QR participation never compares the Trainee to an organization or allowlist.
+- `ConfirmForTraining` is the persisted `revision_reviews.action` for one revision/ScenarioVersion pair; it may transition the revision from `ReadyForScenario` to `ConfirmedForTraining` but does not prevent authoring other compatible Scenarios. It is readiness-only. The executable order is confirmed revision/scenario → `Built` release + package + matching Active `Training` → Active Building service entitlement → `Published` release → stable Building QR → published training list → selected session pin.
+- `release_qr_codes` is canonical at Building scope and has no release/training FK. Preparation directly pins `trainee_user_id`, selected `training_id`, `scenario_version_id`, `release_id`, and `qr_code_id`; only the explicit online session start requires an Active Building entitlement. QR participation never compares the Trainee to an organization or allowlist.
+- The design keeps at most one active canonical row per Building; physical copies may reuse the same opaque QR value. A management revoke deactivates the QR separately from service expiry.
 - A trusted PayOS adapter verifies `req.body` with the official SDK `webhooks.verify`, or canonicalizes and alphabetically sorts webhook `data` fields using the official algorithm, before database invocation. `apply_verified_payos_webhook` performs no cryptography; it records adapter attestation, deduplicates `webhook_event_id`, and compares `orderCode`, amount, and currency before recording `Paid`.
 - `create_pending_payos_payment_request` derives organization, amount and currency from an unexpired `Accepted` quotation and can create only `Pending`. `fet3d_payos_request_executor` and `fet3d_payos_webhook_executor` are separate function-only `NOLOGIN` roles with no payment-table DML; the function/table owner is a separate `NOLOGIN` ledger role. Deployment must not grant ledger-owner inheritance or direct payment-table DML to runtime logins.
 - `payment_transactions` is append-only once terminal, and an `Applied` transaction plus its `Paid` request provenance is immutable.
-- `return_url` is UI navigation only and is never payment confirmation.
+- `return_url` is UI navigation only and is never payment confirmation. PayOS does not imply automatic recurring debit.
+- Building service periods are independent from organization AI billing periods. AI usage is ledgered by organization/building/user/audience/request type with request/idempotency keys, reservation allocations, overage consent and immutable price snapshots. Trainee daily grants are user-scoped and do not require organization membership.
+- `Scenario` is the logical authoring object; `ScenarioVersion` is an append-only snapshot tied to compatible revision geometry. A revision can host multiple scenarios and can continue authoring after one scenario has been confirmed.
+- `ScenarioDraft` and `ProcessingJob` are non-release working records. `ValidationRun`/`ValidationIssue` hold toolchain/artifact evidence and block publish on open Error/Critical issues. Organization playtest may use a verified draft package within Admin limits or an Active Building entitlement, but it is not a Trainee session and is excluded from learning analytics.
+- `processing_jobs.input_hash` is the canonical logical-job input hash. Attempts add lease/toolchain/output provenance; an attempt may be claimed only when queued or when the current lease has expired. A completed job is replay-safe and is not re-run by duplicate delivery.
+- AI billing snapshots become immutable at `Closed`, while `settlement_quotation_id` is attached only on `Closed → Invoiced` and `settlement_payment_transaction_id` only on `Invoiced → Paid`. Adjustment records are used after close; dispute metadata does not become a settlement status and does not reopen or rewrite the period.
+- `close_ai_billing_period` locks the period, includes only confirmed billable usage, creates immutable items and freezes the totals in one transaction. Items cannot be added, edited or deleted after close; late/uncertain usage becomes an adjustment with its own organization and idempotency key.
+- Runtime capability arrays are valid only when every element is a non-empty string; an explicitly declared empty array is valid. Publish accepts any active catalog runtime that is numerically at least the package minimum and matches protocol/schema.
+- Worker claim returns `Claimed`, `Busy`, `AlreadyCompleted`, `NotClaimable` or `Conflict`; requeue is an explicit idempotent outbox operation. Job identity/input hash, artifact rows, accepted validation provenance and policy versions are immutable.
+- `fet3d_session_owner`, `fet3d_ai_accounting_owner` and `fet3d_processing_owner` are `NOLOGIN` function owners. Runtime executors receive only the listed `EXECUTE` privileges and no direct DML on protected tables.
 
 ## Enum values
 
@@ -54,8 +66,8 @@ erDiagram
     users {
         UUID id PK
         UUID organization_id FK
+        VARCHAR firebase_uid
         VARCHAR email
-        VARCHAR password_hash
         VARCHAR full_name
         user_role_enum role
         BOOLEAN is_active
@@ -72,6 +84,9 @@ erDiagram
         VARCHAR device_model
         VARCHAR os_version
         VARCHAR app_version
+        TEXT fcm_token
+        TIMESTAMPTZ fcm_token_updated_at
+        BOOLEAN notifications_enabled
         TIMESTAMPTZ last_seen_at
         TIMESTAMPTZ created_at
     }
@@ -171,12 +186,38 @@ erDiagram
     revision_processing_logs {
         UUID id PK
         UUID revision_id FK
+        UUID job_id FK
+        UUID attempt_id FK
         processing_step_enum step
         processing_step_status_enum status
         TEXT message
         INT duration_ms
-        INT attempt_number
         TIMESTAMPTZ logged_at
+    }
+
+    revision_artifacts {
+        UUID id PK
+        UUID revision_id FK
+        UUID job_id FK
+        UUID attempt_id FK
+        VARCHAR artifact_type
+        TEXT storage_key
+        VARCHAR sha256_hash
+        JSONB metadata
+        BOOLEAN is_runtime_ready
+        TIMESTAMPTZ created_at
+    }
+
+    bim_facts {
+        UUID id PK
+        UUID revision_id FK
+        VARCHAR ifc_global_id
+        VARCHAR entity_type
+        TEXT property_path
+        JSONB value
+        VARCHAR source_hash
+        JSONB quality_flags
+        TIMESTAMPTZ created_at
     }
 
     revision_reviews {
@@ -190,21 +231,102 @@ erDiagram
         TIMESTAMPTZ reviewed_at
     }
 
-    scenario_versions {
+    processing_jobs {
         UUID id PK
         UUID revision_id FK
+        UUID source_document_id FK
+        UUID scenario_version_id FK
+        VARCHAR kind
+        UUID job_key
+        VARCHAR input_hash
+        VARCHAR status
+        UUID current_attempt_id FK
+        TIMESTAMPTZ created_at
+    }
+
+    validation_runs {
+        UUID id PK
+        UUID revision_id FK
+        UUID scenario_version_id FK
+        UUID processing_job_id FK
+        UUID processing_attempt_id FK
+        UUID artifact_id FK
+        UUID release_id FK
+        VARCHAR scope
+        VARCHAR validator_version
+        VARCHAR status
+        JSONB summary
+        TIMESTAMPTZ started_at
+        TIMESTAMPTZ finished_at
+        TIMESTAMPTZ created_at
+    }
+
+    validation_issues {
+        UUID id PK
+        UUID validation_run_id FK
+        UUID revision_id FK
+        UUID scenario_version_id FK
+        UUID artifact_id FK
+        VARCHAR issue_code
+        VARCHAR severity
+        VARCHAR status
+        TEXT message
+        JSONB evidence
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ resolved_at
+        UUID resolved_by FK
+    }
+
+    scenarios {
+        UUID id PK
+        UUID building_id FK
+        UUID organization_id FK
+        VARCHAR name
+        UUID created_by FK
+        TIMESTAMPTZ created_at
+    }
+
+    scenario_drafts {
+        UUID id PK
+        UUID scenario_id FK
+        UUID revision_id FK
+        UUID building_id FK
+        UUID organization_id FK
+        INT draft_number
+        JSONB state
+        VARCHAR source
+        UUID last_ai_request_id
+        UUID created_by FK
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
+
+    scenario_versions {
+        UUID id PK
+        UUID scenario_id FK
+        UUID revision_id FK
+        UUID building_id FK
         UUID organization_id FK
         INT version_number
         VARCHAR name
+        VARCHAR schema_version
+        VARCHAR algorithm_version
+        BIGINT random_seed
+        JSONB spawn_config
+        JSONB goal_config
         JSONB fire_source_config
+        JSONB smoke_config
+        JSONB wind_config
+        JSONB interaction_anchors
         JSONB npc_config
         JSONB blocked_elements
         VARCHAR guidance_level
         JSONB safety_thresholds
-        INT replan_interval_seconds
-        INT score_wrong_exit_penalty
-        DECIMAL score_hazard_per_second_penalty
-        INT score_time_bonus_threshold_seconds
+        INT time_limit_seconds
+        JSONB routing_config
+        JSONB scoring_config
+        JSONB mode_policy
+        VARCHAR scenario_hash
         UUID created_by FK
         TIMESTAMPTZ created_at
         TIMESTAMPTZ updated_at
@@ -231,15 +353,21 @@ erDiagram
         TEXT manifest_url
         TEXT package_url
         VARCHAR checksum_sha256
+        VARCHAR protocol_version
+        VARCHAR manifest_schema_version
         BIGINT package_size_bytes
         VARCHAR min_runtime_version
+        JSONB required_capabilities
+        VARCHAR build_target
+        UUID candidate_artifact_id FK
+        UUID candidate_validation_run_id FK
+        VARCHAR manifest_sha256
         TIMESTAMPTZ created_at
     }
 
     release_qr_codes {
         UUID id PK
-        UUID release_id FK
-        UUID training_id FK
+        UUID building_id FK
         UUID organization_id FK
         UUID floor_id FK
         UUID created_by FK
@@ -278,10 +406,52 @@ erDiagram
         UUID device_id FK
         UUID qr_code_id FK
         VARCHAR app_version
-        VARCHAR unity_version
+        VARCHAR unity_engine_version
+        VARCHAR package_hash
+        UUID package_artifact_id FK
+        UUID package_validation_run_id FK
+        VARCHAR manifest_sha256
+        VARCHAR build_target
+        VARCHAR protocol_version
+        VARCHAR manifest_schema_version
+        VARCHAR runtime_version
+        UUID runtime_catalog_id FK
+        VARCHAR prepare_idempotency_key
+        VARCHAR start_idempotency_key
         session_mode_enum mode
         session_status_enum status
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ launch_granted_at
         TIMESTAMPTZ started_at
+        TIMESTAMPTZ last_heartbeat_received_at
+        BIGINT last_heartbeat_sequence
+        TIMESTAMPTZ ended_at
+    }
+
+    playtest_sessions {
+        UUID id PK
+        UUID organization_id FK
+        UUID building_id FK
+        UUID revision_id FK
+        UUID scenario_draft_id FK
+        UUID scenario_version_id FK
+        UUID service_entitlement_id FK
+        UUID created_by FK
+        VARCHAR package_hash
+        UUID package_artifact_id FK
+        UUID package_validation_run_id FK
+        VARCHAR manifest_sha256
+        VARCHAR build_target
+        VARCHAR protocol_version
+        VARCHAR manifest_schema_version
+        VARCHAR runtime_version
+        VARCHAR unity_engine_version
+        UUID runtime_catalog_id FK
+        VARCHAR start_idempotency_key
+        VARCHAR status
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ started_at
+        TIMESTAMPTZ last_heartbeat_received_at
         TIMESTAMPTZ ended_at
     }
 
@@ -334,9 +504,12 @@ erDiagram
     session_events {
         UUID id PK
         UUID session_id FK
+        BIGINT sequence_number
+        VARCHAR schema_version
         VARCHAR event_type
         JSONB event_data
         TIMESTAMPTZ recorded_at
+        TIMESTAMPTZ received_at
     }
 
     audit_logs {
@@ -370,7 +543,10 @@ erDiagram
     quotations {
         UUID id PK
         UUID organization_id FK
+        VARCHAR billing_purpose
+        UUID building_id FK
         UUID service_package_id FK
+        INT service_duration_months
         UUID requested_by FK
         UUID issued_by FK
         VARCHAR quotation_number
@@ -382,6 +558,8 @@ erDiagram
         DECIMAL discount_amount
         DECIMAL total_amount
         VARCHAR currency
+        JSONB price_snapshot
+        JSONB terms_snapshot
         TIMESTAMPTZ valid_until
         TIMESTAMPTZ issued_at
         TIMESTAMPTZ accepted_at
@@ -394,6 +572,7 @@ erDiagram
         UUID quotation_id FK
         UUID organization_id FK
         UUID requested_by FK
+        VARCHAR idempotency_key
         BIGINT order_code
         DECIMAL expected_amount
         VARCHAR expected_currency
@@ -425,6 +604,20 @@ erDiagram
         TIMESTAMPTZ processed_at
     }
 
+    payment_provisioning_records {
+        UUID id PK
+        UUID payment_transaction_id FK
+        UUID quotation_id FK
+        UUID organization_id FK
+        VARCHAR provisioning_key
+        VARCHAR status
+        INT attempts
+        TEXT last_error
+        TIMESTAMPTZ provisioned_at
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
+
     invoice_metadata {
         UUID id PK
         UUID payment_transaction_id FK
@@ -442,6 +635,245 @@ erDiagram
         TEXT invoice_url
         TIMESTAMPTZ created_at
         TIMESTAMPTZ updated_at
+    }
+
+    service_entitlements {
+        UUID id PK
+        UUID organization_id FK
+        UUID building_id FK
+        UUID service_package_id FK
+        UUID quotation_id FK
+        UUID payment_transaction_id FK
+        VARCHAR provisioning_key
+        VARCHAR status
+        TIMESTAMPTZ starts_at
+        TIMESTAMPTZ ends_at
+        JSONB price_snapshot
+        JSONB terms_snapshot
+        INT playtest_units_granted
+        INT playtest_units_used
+        UUID created_by FK
+        TIMESTAMPTZ created_at
+    }
+
+    ai_billing_periods {
+        UUID id PK
+        UUID organization_id FK
+        TIMESTAMPTZ period_start
+        TIMESTAMPTZ period_end
+        VARCHAR status
+        UUID settlement_quotation_id FK
+        UUID settlement_payment_transaction_id FK
+        JSONB unit_price_snapshot
+        INT overage_units
+        DECIMAL overage_amount
+        VARCHAR currency
+        TIMESTAMPTZ disputed_at
+        TEXT disputed_reason
+        UUID disputed_by FK
+        TIMESTAMPTZ closed_at
+        TIMESTAMPTZ created_at
+    }
+
+    ai_policy_versions {
+        UUID id PK
+        UUID organization_id FK
+        VARCHAR audience
+        VARCHAR policy_kind
+        VARCHAR version_label
+        JSONB policy_snapshot
+        TIMESTAMPTZ effective_from
+        TIMESTAMPTZ effective_until
+        UUID created_by FK
+        TIMESTAMPTZ created_at
+    }
+
+    ai_quota_grants {
+        UUID id PK
+        UUID organization_id FK
+        UUID building_id FK
+        UUID trainee_user_id FK
+        VARCHAR audience
+        VARCHAR quota_kind
+        INT units_granted
+        INT units_used
+        INT units_reserved
+        UUID policy_version_id FK
+        TIMESTAMPTZ starts_at
+        TIMESTAMPTZ ends_at
+        UUID configured_by FK
+        TIMESTAMPTZ created_at
+    }
+
+    ai_overage_consents {
+        UUID id PK
+        UUID organization_id FK
+        UUID accepted_by FK
+        TIMESTAMPTZ accepted_at
+        JSONB terms_snapshot
+        JSONB scope
+    }
+
+    ai_requests {
+        UUID id PK
+        VARCHAR idempotency_key
+        UUID organization_id FK
+        UUID building_id FK
+        UUID user_id FK
+        VARCHAR audience
+        VARCHAR request_type
+        JSONB source_scope
+        UUID policy_version_id FK
+        VARCHAR input_hash
+        TEXT input_reference
+        VARCHAR status
+        VARCHAR result_type
+        TEXT result_reference
+        JSONB response_snapshot
+        VARCHAR result_hash
+        JSONB citations
+        VARCHAR model_provider
+        VARCHAR model_version
+        JSONB technical_usage
+        VARCHAR failure_code
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ completed_at
+        TIMESTAMPTZ last_reconciled_at
+    }
+
+    ai_usage_ledger {
+        UUID id PK
+        UUID request_id FK
+        VARCHAR idempotency_key
+        UUID organization_id FK
+        UUID building_id FK
+        UUID user_id FK
+        UUID session_id FK
+        VARCHAR audience
+        VARCHAR request_type
+        UUID policy_version_id FK
+        INT units
+        UUID overage_consent_id FK
+        BOOLEAN billable
+        JSONB unit_price_snapshot
+        UUID billing_period_id FK
+        VARCHAR status
+        JSONB source_scope
+        TIMESTAMPTZ created_at
+    }
+
+    ai_billing_period_items {
+        UUID id PK
+        UUID billing_period_id FK
+        UUID usage_ledger_id FK
+        INT units
+        JSONB unit_price_snapshot
+        DECIMAL amount
+        VARCHAR status
+        TIMESTAMPTZ created_at
+    }
+
+    ai_billing_adjustments {
+        UUID id PK
+        UUID billing_period_id FK
+        UUID organization_id FK
+        UUID usage_ledger_id FK
+        UUID original_item_id FK
+        VARCHAR adjustment_type
+        INT units
+        DECIMAL amount
+        TEXT reason
+        VARCHAR idempotency_key
+        UUID created_by FK
+        TIMESTAMPTZ created_at
+    }
+
+    runtime_compatibility_catalog {
+        UUID id PK
+        VARCHAR runtime_version
+        VARCHAR protocol_version
+        VARCHAR manifest_schema_version
+        JSONB capabilities
+        BOOLEAN is_active
+        TIMESTAMPTZ created_at
+    }
+
+    ai_usage_reservations {
+        UUID id PK
+        UUID request_id FK, UNIQUE
+        INT units
+        VARCHAR status
+        TIMESTAMPTZ reserved_at
+        TIMESTAMPTZ settled_at
+    }
+
+    ai_usage_reservation_allocations {
+        UUID id PK
+        UUID reservation_id FK
+        UUID quota_grant_id FK
+        INT units
+        TIMESTAMPTZ created_at
+    }
+
+    integration_outbox_events {
+        VARCHAR idempotency_key PK
+        VARCHAR aggregate_type
+        UUID aggregate_id
+        VARCHAR event_type
+        JSONB payload
+        VARCHAR status
+        INT attempts
+        TIMESTAMPTZ available_at
+        VARCHAR lease_owner
+        TIMESTAMPTZ lease_until
+        TEXT last_error
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ published_at
+    }
+
+    processing_job_attempts {
+        UUID id PK
+        UUID processing_job_id FK
+        INT attempt_number
+        VARCHAR input_hash
+        VARCHAR toolchain_version
+        VARCHAR lease_owner
+        UUID lease_token
+        TIMESTAMPTZ lease_until
+        VARCHAR status
+        VARCHAR output_hash
+        UUID output_artifact_id FK
+        UUID result_validation_run_id FK
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ started_at
+        TIMESTAMPTZ finished_at
+        TEXT error_message
+    }
+
+    knowledge_sources {
+        UUID id PK
+        UUID organization_id FK
+        VARCHAR visibility
+        TEXT title
+        VARCHAR version_label
+        VARCHAR source_hash
+        TEXT jurisdiction
+        TIMESTAMPTZ effective_from
+        TIMESTAMPTZ effective_until
+        VARCHAR approval_status
+        UUID approved_by FK
+        TIMESTAMPTZ created_at
+    }
+
+    knowledge_chunks {
+        UUID id PK
+        UUID source_id FK
+        INT chunk_index
+        TEXT content
+        JSONB locator
+        VECTOR embedding
+        JSONB metadata
+        TIMESTAMPTZ created_at
     }
 
     feedback {
@@ -492,13 +924,29 @@ erDiagram
     building_floors o|--o{ source_documents : locates
     users ||--o{ source_documents : uploads
     revisions ||--o{ annotation_sets : annotates
+    revisions ||--o{ revision_artifacts : produces
+    processing_jobs ||--o{ revision_artifacts : produces
+    processing_job_attempts ||--o{ revision_artifacts : attests
+    revisions ||--o{ bim_facts : extracts
     users ||--o{ annotation_sets : creates
     revisions ||--o{ revision_processing_logs : logs
+    processing_jobs ||--o{ revision_processing_logs : attempts
+    processing_jobs ||--o{ validation_runs : validates
+    processing_job_attempts ||--o{ validation_runs : validates
+    revision_artifacts o|--o{ validation_runs : proves
+    validation_runs ||--o{ validation_issues : reports
+    releases o|--o{ validation_runs : gates
     revisions ||--o{ revision_reviews : reviews
     scenario_versions ||--o{ revision_reviews : confirms
     users ||--o{ revision_reviews : performs
     annotation_sets o|--o{ revision_reviews : references
 
+    buildings ||--o{ scenarios : owns
+    organizations ||--o{ scenarios : scopes
+    users ||--o{ scenarios : creates
+    scenarios ||--o{ scenario_drafts : edits
+    revisions ||--o{ scenario_drafts : targets
+    scenarios ||--o{ scenario_versions : versions
     revisions ||--o{ scenario_versions : configures
     organizations ||--o{ scenario_versions : owns
     users ||--o{ scenario_versions : creates
@@ -510,8 +958,9 @@ erDiagram
     users o|--o{ releases : publishes
     users o|--o{ releases : revokes
     releases ||--o| release_packages : packages
-    releases ||--o{ release_qr_codes : exposes
-    trainings ||--o{ release_qr_codes : binds
+    revision_artifacts ||--o{ release_packages : candidates
+    validation_runs ||--o{ release_packages : attests
+    buildings ||--o{ release_qr_codes : identifies
     organizations ||--o{ release_qr_codes : owns
     building_floors o|--o{ release_qr_codes : places
     users ||--o{ release_qr_codes : creates
@@ -528,6 +977,13 @@ erDiagram
     users ||--o{ sessions : participates
     user_devices ||--o{ sessions : runs
     release_qr_codes ||--o{ sessions : starts
+    organizations ||--o{ playtest_sessions : owns
+    buildings ||--o{ playtest_sessions : runs
+    revisions ||--o{ playtest_sessions : uses
+    scenario_drafts o|--o{ playtest_sessions : tests
+    scenario_versions ||--o{ playtest_sessions : runs
+    service_entitlements o|--o{ playtest_sessions : limits
+    users ||--o{ playtest_sessions : starts
     sessions ||--o| session_results : produces
     sessions ||--o{ session_checkpoints : saves
     sessions ||--o| debrief_artifacts : summarizes
@@ -535,7 +991,9 @@ erDiagram
 
     users ||--o{ service_packages : creates
     organizations ||--o{ quotations : receives
+    buildings o|--o{ quotations : bills
     service_packages ||--o{ quotations : prices
+    ai_billing_periods o|--o| quotations : settles
     users ||--o{ quotations : requests
     users o|--o{ quotations : issues
     quotations ||--o{ payos_payment_requests : requests
@@ -544,8 +1002,55 @@ erDiagram
     payos_payment_requests ||--o{ payment_transactions : receives
     payment_transactions o|--o| payos_payment_requests : confirms
     payment_transactions ||--o| invoice_metadata : invoices
+    payment_transactions ||--o| payment_provisioning_records : reconciles
     quotations ||--o{ invoice_metadata : documents
     organizations ||--o{ invoice_metadata : owns
+    organizations ||--o{ service_entitlements : owns
+    buildings ||--o{ service_entitlements : activates
+    service_packages ||--o{ service_entitlements : grants
+    quotations o|--o{ service_entitlements : funds
+    payment_transactions o|--o| service_entitlements : provisions
+    quotations ||--o{ payment_provisioning_records : provisions
+    users ||--o{ service_entitlements : grants
+    organizations ||--o{ ai_billing_periods : settles
+    ai_billing_periods ||--o{ ai_billing_period_items : includes
+    ai_billing_periods ||--o{ ai_billing_adjustments : adjusts
+    ai_usage_ledger ||--o{ ai_billing_period_items : billed
+    ai_usage_ledger o|--o{ ai_billing_adjustments : corrected
+    ai_billing_period_items o|--o{ ai_billing_adjustments : references
+    organizations o|--o{ ai_policy_versions : configures
+    organizations ||--o{ ai_quota_grants : receives
+    buildings o|--o{ ai_quota_grants : scopes
+    users o|--o{ ai_quota_grants : receives
+    users ||--o{ ai_quota_grants : configures
+    organizations ||--o{ ai_overage_consents : accepts
+    users ||--o{ ai_overage_consents : accepts
+    organizations o|--o{ ai_requests : accounts
+    buildings o|--o{ ai_requests : scopes
+    users ||--o{ ai_requests : submits
+    ai_requests ||--o| ai_usage_ledger : charges
+    organizations o|--o{ ai_usage_ledger : accounts
+    buildings o|--o{ ai_usage_ledger : attributes
+    users ||--o{ ai_usage_ledger : requests
+    sessions o|--o{ ai_usage_ledger : debriefs
+    ai_billing_periods o|--o{ ai_usage_ledger : settles
+    ai_policy_versions ||--o{ ai_quota_grants : versions
+    ai_policy_versions ||--o{ ai_usage_ledger : versions
+    ai_quota_grants o|--o{ ai_usage_reservation_allocations : allocates
+    ai_usage_ledger ||--o| ai_usage_reservations : reserves
+    ai_usage_reservations ||--o{ ai_usage_reservation_allocations : allocates
+    ai_overage_consents o|--o{ ai_usage_ledger : authorizes
+    organizations o|--o{ knowledge_sources : owns
+    knowledge_sources ||--o{ knowledge_chunks : chunks
+    users o|--o{ knowledge_sources : approves
+
+    runtime_compatibility_catalog o|--o{ sessions : pins
+    runtime_compatibility_catalog o|--o{ playtest_sessions : pins
+    revision_artifacts ||--o{ sessions : pins
+    validation_runs ||--o{ sessions : verifies
+    revision_artifacts ||--o{ playtest_sessions : pins
+    validation_runs ||--o{ playtest_sessions : verifies
+    processing_jobs ||--o{ processing_job_attempts : retries
 
     users ||--o{ feedback : submits
     organizations o|--o{ feedback : scopes

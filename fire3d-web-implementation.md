@@ -1,6 +1,6 @@
 # Fire3D web — triển khai, thay đổi và bài học
 
-Cập nhật 2026-09-16. Đây là báo cáo prototype, không phải biên bản nghiệm thu toàn bộ sản phẩm. Thiết kế chuẩn ở [UX web](fire3d-web-ux-design.md).
+Cập nhật 2026-09-16. Đây là báo cáo prototype, không phải biên bản nghiệm thu toàn bộ sản phẩm. Thiết kế chuẩn ở [UX web](fire3d-web-ux-design.md). Tài liệu mục tiêu hiện mở rộng website từ landing/Learn/RAG mẫu thành khu editor Three.js, billing/AI usage và QR landing; các năng lực này chưa được coi là đã triển khai chỉ vì đã có trong thiết kế.
 
 ## So với thiết kế ban đầu
 
@@ -48,3 +48,5 @@ Cập nhật 2026-09-16. Đây là báo cáo prototype, không phải biên bả
 Test tổng hợp chuyển cảnh từng vượt 90 giây sau khi qua bước bàn phím; không kết luận assertion sai chỉ từ timeout/session closed. Cần test hẹp hoặc thêm bằng chứng timing. Chưa nghiệm thu trực quan đủ toàn bộ 143 giây, bốn viewport, snapshot continuity, contrast ở frame sáng nhất, hiệu năng production và điện thoại thật. Poster có thể cũ hơn những lần sửa hiệu ứng cuối. Bỏ outline vùng xoay là quyết định UI theo yêu cầu, không phải tuyên bố đạt accessibility đầy đủ.
 
 RAG giữ contract thử nghiệm; dữ liệu học tập/tài khoản/chat mẫu không đại diện backend nghiệp vụ. Không nhập IFC thật hoặc gameplay Unity trên web.
+
+Phạm vi production còn cần nối contract với BE/AI: IFC pipeline IfcOpenShell/IfcConvert → Blender optimization → Unity build worker, editor scenario, PayOS/Building entitlement, canonical Building QR và AI usage ledger. Những phần này là thiết kế mục tiêu; báo cáo prototype chỉ là bằng chứng cho những gì đã chạy trong FE, không phải bằng chứng tích hợp end-to-end hay benchmark Android/Unity.

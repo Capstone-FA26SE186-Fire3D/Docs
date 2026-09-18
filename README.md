@@ -6,29 +6,68 @@ Thư mục này chứa tài liệu sản phẩm và kiến trúc cho **Fire Evac
 
 | Tệp | Nội dung |
 | :--- | :--- |
-| `fire_evacuation_requirements.md` | Yêu cầu chức năng, phi chức năng, phạm vi Phase 1 và Phase 2. |
+| `fire_evacuation_requirements.md` | Yêu cầu chức năng/phi chức năng của bản cuối và thứ tự phase triển khai. |
 | `fire-evacuation-training-features.md` | Giá trị sản phẩm, ba loại tài khoản, tính năng và giới hạn sử dụng. |
 | `fire-evacuation-training-workflows.md` | Luồng từ mô hình IFC đến package, QR, buổi tập huấn và dữ liệu kết quả. |
 | `fire-evacuation-training-technology.md` | Kiến trúc, pipeline IFC, runtime Android và các quyết định kỹ thuật. |
 | `fire_evacuation_schema.sql` | Thiết kế cơ sở dữ liệu. |
 | `fire_evacuation_erd.md` | Sơ đồ thực thể–quan hệ. |
-| `3D-Fire-Evacuation-Training-IDEA2.docx` | Bản phác thảo ý tưởng gốc; được lưu nguyên trạng. |
+| `3D-Fire-Evacuation-Training-IDEA2.docx` | Bản ý tưởng đã đồng bộ với kiến trúc và workflow hiện hành; vẫn giữ vai trò tài liệu ý tưởng, không thay thế requirements. |
 | `fire_evacuation_project_overview.md` | Tổng quan thống nhất về mục tiêu, phạm vi, workflow và giới hạn của FET3D. |
 | `fire_evacuation_bim_rag_pccc.md` | Thiết kế RAG Python dùng BIM để tạo gợi ý PCCC cần chuyên gia thẩm tra. |
 | `fire3d-web-ux-design.md` | Đặc tả UX web, landing POV 3D, hai hướng nhu cầu, Learn, Góc học tập và ranh giới Android/Unity. |
 | `fire3d-web-implementation.md` | Prototype đã triển khai, khác biệt so với thiết kế đầu, lỗi, giải pháp và giới hạn kiểm chứng. |
 
+`fire-evacuation-training-technology.md` (technology) là nguồn chính cho service boundary, transaction boundary và worker/AI contract; schema/ERD biểu diễn dữ liệu/invariant tương ứng, còn requirements/workflows/DOCX mô tả hành vi quan sát được. Schema/ERD hiện ghi target version 6.6; đây là thiết kế chưa chạy migration.
+
+## Tổng quan công nghệ
+
+| Khối | Công nghệ/nhà cung cấp | Trạng thái quyết định |
+| :--- | :--- | :--- |
+| Web frontend | Next.js, React, TypeScript; Three.js cho landing và editor/preview 3D | Đã chốt |
+| Mobile shell | React Native + Expo; native Android bridge để gọi Unity | Đã chốt |
+| 3D training runtime | Unity | Đã chốt |
+| Backend | C# và ASP.NET Core trên .NET | Đã chốt |
+| Reverse proxy | Nginx | Đã chốt; chi tiết tại mục 14.1 của technology, chưa triển khai |
+| AI, RAG và IFC processing | Python + FastAPI; IfcOpenShell cho IFC khi phù hợp | Đã chốt |
+| Database | Supabase Database, dùng PostgreSQL | Đã chốt |
+| Vector database | `pgvector` trong PostgreSQL/Supabase | Đã chốt; thay cho hướng ChromaDB trong prototype cũ |
+| Authentication và push | Firebase Authentication với Google Sign-In; Firebase Cloud Messaging (FCM) | Đã chốt |
+| LLM | OpenAI API hoặc Google Gemini API (khóa/cấu hình qua Google AI Studio) | Chưa chọn nhà cung cấp cuối; chỉ triển khai một adapter production sau đánh giá |
+| Object storage | Amazon S3 (AWS S3) | Đã chốt |
+| AI compute | Azure (AI/RAG); Container Apps là phương án triển khai đề xuất | Đã chốt provider Azure cho AI/RAG; SKU, region và chi phí còn cần spike |
+| BE/worker compute | Chưa chọn | Không suy ra BE, IFC/Blender hoặc Unity worker chạy Azure chỉ vì AI đã chọn Azure |
+
+Supabase chỉ cung cấp PostgreSQL/`pgvector` trong kiến trúc này, không thay Firebase Authentication. Firebase xác thực danh tính và gửi push; backend vẫn là nơi ánh xạ Firebase UID sang ba vai trò FET3D, kiểm tra `organizationId` và thực thi authorization. Azure đã được chọn cho AI/RAG service; LLM, BE/worker compute và các thông số production khác vẫn qua decision gate.
+
+Đây là kiến trúc đích. Prototype AI hiện còn ChromaDB/OpenAI và backend đã có phần xác thực mật khẩu/JWT; các phần đó chưa tự động trở thành Firebase/`pgvector` chỉ vì tài liệu được cập nhật. Việc chuyển code, dữ liệu và migration phải là task triển khai riêng có kiểm thử.
+
 ## Phạm vi thống nhất
 
-- Ba loại tài khoản là `PlatformAdmin`, `OrganizationUser` và `Trainee`. Website landing và Learn là nội dung công khai; không có guest account hoặc guest training không định danh. Mọi `Trainee` đã xác thực có thể quét bất kỳ QR active pin một `Training` của release đã publish để tham gia.
+- Ba loại tài khoản là `PlatformAdmin`, `OrganizationUser` và `Trainee`. Website landing và Learn là nội dung công khai; không có guest account hoặc guest training không định danh. Mọi `Trainee` đã xác thực có thể quét QR canonical của Building, xem danh sách bài đã publish và tạo preparation cho bài đã chọn; chỉ explicit online start mới cấp quyền chơi.
 - `OrganizationUser` sở hữu toàn bộ nghiệp vụ của tổ chức: Building, nhập IFC, scenario, publish, QR, analytics và billing.
-- Đầu vào mô hình của sản phẩm là **IFC**. Ứng dụng Android được cài một lần; khi quét QR hợp lệ, ứng dụng tải và xác minh content package của release tương ứng rồi khởi chạy Unity.
-- Mỗi Building có một QR canonical để người dân mở đúng training của tòa nhà đó. QR chỉ mang mã opaque/deep link để backend resolve release; không chứa model, credential hoặc file cài đặt. Khi đổi release, QR được rotate/revoke theo lifecycle publish.
-- Three.js chỉ dùng cho hiệu ứng landing/giới thiệu trên web. Gameplay BIM 3D/2.5D chạy trong Unity runtime của Mobile, không chạy thành game Three.js trên trình duyệt. Landing dùng góc nhìn thứ nhất cuộn qua công trình đang cháy, sau đó rẽ theo nhu cầu người tập huấn hoặc tổ chức; chi tiết nằm trong [đặc tả UX web](fire3d-web-ux-design.md).
-- Headline Phase 1 giữ nguyên: **IFC → 3D → Unity Android → QR → Training → Result**.
-- Lifecycle thực thi là: IFC đạt QA chuyển revision sang `ReadyForScenario`; action `ConfirmForTraining` chuyển nó sang `ConfirmedForTraining`; backend tạo release `Built`, package và `Training` khớp nhau; sau đó publish release rồi mới tạo active QR pin chính xác `trainingId`. `ConfirmForTraining` chỉ là readiness nội bộ, không phải chứng nhận, phê duyệt PCCC, thẩm duyệt thiết kế hoặc chỉ dẫn ứng phó sự cố thực tế.
-- Phase 1 cung cấp luồng core online. Phase 2 bổ sung PayOS production, quotation, transaction, invoice metadata, revenue, feedback/support, basic offline, basic NPC và expanded analytics.
-- Với PayOS Phase 2, backend tạo request `Pending` qua entry point đặc quyền hẹp. Adapter webhook xác thực bằng SDK `webhooks.verify(req.body)` hoặc thuật toán chính thức trên `data` đã canonicalize theo thứ tự tên trường tăng dần trước khi gọi database; `returnUrl` chỉ dùng điều hướng.
+- Đầu vào mô hình của sản phẩm là **IFC**. Pipeline dùng IfcOpenShell/IfcConvert, Blender script và Unity build worker để tạo nội dung riêng cho từng Building; chủ tòa chỉ thao tác trên web, không cần cài Blender hoặc Unity.
+- Mỗi Building có một QR canonical ổn định. QR mở danh sách bài đã publish; session mới pin `Training`/release/scenario mà Trainee chọn. QR chỉ mang mã opaque/deep link, không chứa model, credential hoặc file cài đặt.
+- Three.js dùng cho landing và editor/preview 3D của organization. Gameplay BIM 3D/2.5D đầy đủ chạy trong Unity runtime của Mobile. Landing dùng góc nhìn thứ nhất cuộn qua công trình đang cháy, sau đó rẽ theo nhu cầu người tập huấn hoặc tổ chức; chi tiết nằm trong [đặc tả UX web](fire3d-web-ux-design.md).
+- Luồng cốt lõi: **IFC → 3D → Unity Android → QR → Training → Result**.
+- Lifecycle thực thi là: IFC đạt QA → revision có thể author nhiều `Scenario` → mỗi scenario có draft và `ScenarioVersion` bất biến → OrganizationUser có thể playtest riêng trong hạn mức thử → `ConfirmForTraining` theo từng revision/version → release `Built` + package → entitlement dịch vụ Building `Active` → publish → QR canonical resolve Building và danh sách bài. `ConfirmForTraining` chỉ là readiness nội bộ, không phải chứng nhận, phê duyệt PCCC, thẩm duyệt thiết kế hoặc chỉ dẫn ứng phó sự cố thực tế.
+- Luồng bản cuối bao gồm editor 3D, payment theo từng Building, AI/RAG cho organization và Trainee, IFC processing, Unity runtime, QR, analytics và cơ chế tiếp tục phiên khi mất mạng. Phase chỉ sắp xếp thứ tự triển khai; không dùng Phase 2 để phủ nhận các capability đã chốt.
+- Mỗi Building có dịch vụ theo tháng với kỳ riêng. Khi hết hạn, hệ thống khóa phát hành và phiên mới; QR vẫn mở landing để đăng nhập/tải app và hiển thị trạng thái dịch vụ. Phiên đã bắt đầu được hoàn tất.
+- Với PayOS, backend tạo request `Pending` qua entry point đặc quyền hẹp. Adapter webhook xác thực bằng SDK `webhooks.verify(req.body)` hoặc thuật toán chính thức trên `data` đã canonicalize theo thứ tự tên trường tăng dần trước khi gọi database; `returnUrl`/`cancelUrl` chỉ dùng điều hướng. Lượt AI vượt hạn mức miễn phí được ghi nhận theo usage và đối soát cuối kỳ của organization, tách khỏi ngày gia hạn từng Building.
+- Playtest OrganizationUser được pin với draft/version và package đã verify, không dùng QR Trainee, không cấp quyền học viên và không tính vào learner analytics.
+
+## Quyết định đã chốt trong phiên thiết kế
+
+- Organization được import IFC, xem preview/editor trên web và tự chỉnh scenario. AI chỉ trả lời có nguồn hoặc tạo draft; không tự sửa editor và không tự publish.
+- Lửa, khói, gió, cháy lan, cửa, bình chữa cháy, khăn, nguồn nước và hành vi nhân vật là thư viện runtime Unity do nhóm xây dựng. Organization chỉ đặt/chọn/cấu hình những capability đã có.
+- Gió và khói tác động theo mô hình game có thể kiểm thử, không phải CFD hoặc mô phỏng thông gió kỹ thuật.
+- Trainee dùng AI trên web và Mobile, ngoài gameplay; quota ngày miễn phí do PlatformAdmin cấu hình và không trừ vào quota AI organization.
+- Tổ chức có quota AI dùng chung; usage vượt mức được thông báo và tính theo kỳ đối soát cuối kỳ. Lỗi hoặc retry không tính trùng.
+- QR ổn định theo Building mở danh sách bài. Session mới phải kiểm tra online; mất mạng sau khi session bắt đầu không làm mất phiên hoặc kết quả.
+
+## Quyết định còn mở trước khi triển khai production
+
+Bảng nguồn chính về quyết định còn mở, tác động và mốc phải chốt nằm tại [tổng quan dự án — bảng quyết định còn mở](fire_evacuation_project_overview.md). Các tài liệu khác dẫn chiếu bảng đó và không tự đặt giá trị thay thế.
 
 ## Lưu ý sử dụng
 
@@ -53,7 +92,7 @@ Thư mục này chứa tài liệu sản phẩm và kiến trúc cho **Fire Evac
 - Checkpoint sau mốc đáng kể và trước bàn giao; ghi phần đã xong/còn dở, branch/commit, kiểm tra thực tế và bước tiếp theo. Không hứa ghi kịp trước khi hết quota hoặc phiên ngắt đột ngột; không lưu secrets/transcript.
 - Giữ nguyên thư mục `Mẫu report/` đang untracked, không stage, xóa hoặc tự chỉnh file mẫu. Kiểm tra danh sách stage cụ thể, không dùng `git add -A` mù quáng.
 - Task chỉ sửa tài liệu: kiểm tra liên kết, tính nhất quán và `git diff --check`, không chạy toàn bộ build/test ứng dụng. Không có test chạy không đồng nghĩa đã kiểm thử nghiệp vụ.
-- Stack đã chốt cho nhóm: web Next.js, Mobile React Native/Expo với native Android bridge để gọi Unity; không triển khai Flutter. Khi thiết kế và code khác nhau, cập nhật tài liệu/contract theo stack này.
+- Stack đã chốt cho nhóm nằm ở bảng Tổng quan công nghệ: web Next.js, Mobile React Native/Expo với native Android bridge gọi Unity, backend C#/.NET, AI/IFC Python/FastAPI, AI/RAG trên Azure, Supabase PostgreSQL + `pgvector`, Firebase Auth/FCM và AWS S3. Không triển khai Flutter. LLM và compute cho BE/worker vẫn phải qua bước chọn/benchmark trước khi gọi là production stack.
 
 ### Giới hạn sản phẩm
 

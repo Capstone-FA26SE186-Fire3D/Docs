@@ -1,12 +1,18 @@
 -- ==============================================================================
 -- Project : Fire Evacuation Training 3D
--- Version : 5.0 (Phase 1 + Phase 2, three-role model)
+-- Version : 6.6 (Canonical field ownership, immutable provenance, fenced attempts and settlement recovery)
 -- Engine  : PostgreSQL 14+
--- Scope   : IFC-only authoring; authenticated Trainee QR sessions; Phase 2
---           commercial, PayOS, invoice, feedback and support records.
+-- Scope   : IFC authoring pipeline; Building-level service entitlement;
+--           canonical Building QR -> published training list -> pinned session;
+--           scenario versions, AI/RAG usage ledger, PayOS, invoice, feedback.
+-- Target  : Supabase PostgreSQL + pgvector, Firebase identity mapping, AWS S3.
+--           This design file is not an automatic migration for an existing DB.
 -- ==============================================================================
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
+-- Supabase PostgreSQL hosts RAG embeddings/indexes through pgvector. The core
+-- transactional tables below do not expose embedding columns directly.
+CREATE EXTENSION IF NOT EXISTS vector;
 
 -- ==============================================================================
 -- SECTION 1: ENUM TYPES
@@ -207,9 +213,9 @@ CREATE TABLE users (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Khóa chính định danh người dùng
     organization_id UUID REFERENCES organizations(id) ON DELETE RESTRICT, -- Chỉ OrganizationUser có organization
 
-    -- Thông tin xác thực
-    email           VARCHAR(255) UNIQUE NOT NULL,               -- Địa chỉ email đăng nhập
-    password_hash   VARCHAR(255) NOT NULL,                      -- Mật khẩu đã mã hóa (bcrypt/argon2)
+    -- Firebase xác thực danh tính; FET3D chỉ lưu mapping và quyền nghiệp vụ
+    firebase_uid    VARCHAR(128) UNIQUE NOT NULL,               -- UID do Firebase Authentication cấp
+    email           VARCHAR(255) UNIQUE NOT NULL,               -- Email đã xác minh/đồng bộ từ Firebase
     full_name       VARCHAR(255),                               -- Họ và tên đầy đủ
     role            user_role_enum NOT NULL,                    -- Vai trò phân quyền chính
 
@@ -232,6 +238,9 @@ CREATE TABLE user_devices (
     device_model   VARCHAR(255),                               -- Tên thiết bị Android (VD: "Samsung S23")
     os_version     VARCHAR(50),                                -- Phiên bản Android (VD: "Android 14")
     app_version    VARCHAR(50),                                -- Phiên bản ứng dụng Android/Unity khi đăng ký
+    fcm_token      TEXT,                                       -- Registration token FCM có thể rotate; không phải credential
+    fcm_token_updated_at TIMESTAMPTZ,                           -- Thời điểm token FCM được cập nhật gần nhất
+    notifications_enabled BOOLEAN NOT NULL DEFAULT true,       -- Người dùng còn cho phép push trên installation này
     last_seen_at   TIMESTAMPTZ DEFAULT NOW(),                  -- Lần cuối cùng thiết bị kết nối Server
     created_at     TIMESTAMPTZ DEFAULT NOW()                   -- Ngày ghi nhận thiết bị lần đầu
 );
@@ -321,7 +330,7 @@ CREATE TABLE source_documents (
     original_filename  VARCHAR(500) NOT NULL,                      -- Tên file IFC gốc
     file_type          file_type_enum NOT NULL DEFAULT 'IFC',      -- Source duy nhất là IFC
     file_size_bytes    BIGINT,                                     -- Dung lượng file (Bytes)
-    storage_url        TEXT NOT NULL,                              -- Đường dẫn lưu Cloud Storage (S3/MinIO)
+    storage_url        TEXT NOT NULL,                              -- AWS S3 object URI/key; runtime dùng signed URL
     mime_type          VARCHAR(100),                               -- Định dạng MIME
     sha256_hash        VARCHAR(64),                                -- Mã checksum SHA256 chống trùng lặp
 
@@ -345,14 +354,60 @@ CREATE TABLE annotation_sets (
 );
 
 CREATE TABLE revision_processing_logs (
+    job_id          UUID,                                       -- Job/attempt cụ thể; FK bổ sung sau khi tạo processing_jobs
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Khóa chính định danh log pipeline
     revision_id    UUID REFERENCES revisions(id) ON DELETE CASCADE NOT NULL, -- ID phiên bản IFC đang xử lý
     step           processing_step_enum NOT NULL,              -- Bước đang chạy (CleanGeometry, GenNavMesh, ExportGLB...)
     status         processing_step_status_enum NOT NULL,       -- Kết quả bước (Started, Success, Failed)
     message        TEXT,                                       -- Chi tiết lỗi hoặc log từ Python Worker
     duration_ms    INT,                                        -- Thời gian xử lý (milisecond)
-    attempt_number INT DEFAULT 1,                              -- Số lần thử lại (Retry attempt)
     logged_at      TIMESTAMPTZ DEFAULT NOW()                   -- Thời gian ghi log
+);
+
+-- Một logical Scenario có thể có nhiều immutable version trên cùng geometry.
+CREATE TABLE processing_jobs (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    revision_id         UUID REFERENCES revisions(id) ON DELETE CASCADE NOT NULL,
+    source_document_id  UUID REFERENCES source_documents(id) ON DELETE RESTRICT NOT NULL,
+    scenario_version_id UUID,
+    kind                VARCHAR(40) NOT NULL, -- Geometry | PlaytestPackage | ReleasePackage | QA
+    job_key             UUID NOT NULL,
+    input_hash          VARCHAR(64) NOT NULL,
+    status              VARCHAR(30) NOT NULL DEFAULT 'Queued',
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT check_processing_job_status CHECK (status IN ('Queued','Running','Succeeded','Failed','Cancelled')),
+    CONSTRAINT check_processing_job_input_hash CHECK (input_hash ~ '^[0-9a-fA-F]{64}$')
+);
+
+ALTER TABLE revision_processing_logs
+    ADD CONSTRAINT fk_revision_processing_logs_job
+    FOREIGN KEY (job_id) REFERENCES processing_jobs(id) ON DELETE CASCADE;
+
+-- Artifacts bất biến do Python/Blender/Unity build worker sinh ra.
+CREATE TABLE revision_artifacts (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    revision_id     UUID REFERENCES revisions(id) ON DELETE CASCADE NOT NULL,
+    job_id          UUID REFERENCES processing_jobs(id) ON DELETE RESTRICT,
+    artifact_type   VARCHAR(80) NOT NULL, -- source_copy, facts, preview_glb, optimized_mesh, unity_package, manifest
+    storage_key     TEXT NOT NULL,        -- AWS S3 object key, client chỉ nhận signed URL
+    sha256_hash     VARCHAR(64) NOT NULL,
+    metadata        JSONB NOT NULL DEFAULT '{}', -- units, coordinate_system, tool versions, QA summary
+    is_runtime_ready BOOLEAN NOT NULL DEFAULT false,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (revision_id, artifact_type, sha256_hash)
+);
+
+CREATE TABLE bim_facts (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    revision_id     UUID REFERENCES revisions(id) ON DELETE CASCADE NOT NULL,
+    ifc_global_id   VARCHAR(255) NOT NULL,
+    entity_type     VARCHAR(100) NOT NULL,
+    property_path   TEXT NOT NULL,
+    value           JSONB,
+    source_hash     VARCHAR(64) NOT NULL,
+    quality_flags   JSONB NOT NULL DEFAULT '[]',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (revision_id, ifc_global_id, property_path)
 );
 
 CREATE TABLE revision_reviews (
@@ -404,16 +459,19 @@ CREATE TABLE release_packages (
     release_id          UUID REFERENCES releases(id) ON DELETE CASCADE UNIQUE NOT NULL, -- ID bản phát hành tương ứng (1-1)
     manifest_url        TEXT NOT NULL,                              -- Đường dẫn file manifest JSON
     package_url         TEXT NOT NULL,                              -- Đường dẫn tải file Zip/AssetBundle 3D
-    checksum_sha256     VARCHAR(64),                                -- Mã checksum SHA256 để Client verify trước khi unpack
+    checksum_sha256     VARCHAR(64) NOT NULL,                       -- Mã checksum SHA256 để Client verify trước khi unpack
+    protocol_version    VARCHAR(50) NOT NULL DEFAULT '1',            -- Protocol runtime dùng để đọc package
+    manifest_schema_version VARCHAR(50) NOT NULL DEFAULT '1',      -- Schema manifest runtime hiểu được
     package_size_bytes  BIGINT,                                     -- Dung lượng gói tải xuống (Bytes)
-    min_runtime_version VARCHAR(20),                                -- Phiên bản app Unity tối thiểu cần để đọc gói này
-    created_at          TIMESTAMPTZ DEFAULT NOW()                   -- Ngày đóng gói hoàn tất
+    min_runtime_version VARCHAR(20) NOT NULL,                       -- Phiên bản app Unity tối thiểu cần để đọc gói này
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),           -- Ngày đóng gói hoàn tất
+    CONSTRAINT check_release_package_checksum CHECK (checksum_sha256 ~ '^[0-9a-fA-F]{64}$'),
+    CONSTRAINT check_release_package_size CHECK (package_size_bytes IS NULL OR package_size_bytes > 0)
 );
 
 CREATE TABLE release_qr_codes (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Khóa chính định danh điểm quét QR
-    release_id      UUID REFERENCES releases(id) ON DELETE CASCADE NOT NULL, -- ID bản phát hành tòa nhà liên kết
-    training_id     UUID NOT NULL,                             -- Một Training duy nhất; FK thêm sau khi trainings được tạo
+    building_id     UUID REFERENCES buildings(id) ON DELETE CASCADE NOT NULL, -- QR ổn định cấp Building
     organization_id UUID REFERENCES organizations(id) NOT NULL, -- ID tổ chức quản lý (Multi-tenant isolation)
     floor_id        UUID REFERENCES building_floors(id),        -- ID tầng dán mã QR
     created_by      UUID REFERENCES users(id) NOT NULL,         -- OrganizationUser tạo mã QR
@@ -422,7 +480,7 @@ CREATE TABLE release_qr_codes (
     qr_hash         VARCHAR(255) UNIQUE NOT NULL,               -- Chuỗi mã hóa tĩnh duy nhất in trên QR
     label           VARCHAR(255),                               -- Tên vị trí dán ("Cột A1 - Sảnh Tầng 2")
     expires_at      TIMESTAMPTZ,                                -- Ngày hết hạn của mã QR
-    is_active       BOOLEAN NOT NULL DEFAULT true,              -- Mọi Trainee xác thực dùng được khi QR active và release Published
+    is_active       BOOLEAN NOT NULL DEFAULT true,              -- QR còn resolve landing/list; entitlement quyết định mở session
     created_at      TIMESTAMPTZ DEFAULT NOW(),                  -- Thời điểm tạo
     CONSTRAINT check_release_qr_hash CHECK (NULLIF(BTRIM(qr_hash), '') IS NOT NULL)
 );
@@ -431,31 +489,132 @@ CREATE TABLE release_qr_codes (
 -- GROUP 5: Scenario & Training
 -- ------------------------------------------------------------------------------
 
+CREATE TABLE scenarios (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    building_id     UUID REFERENCES buildings(id) ON DELETE CASCADE NOT NULL,
+    organization_id UUID REFERENCES organizations(id) ON DELETE RESTRICT NOT NULL,
+    name            VARCHAR(255) NOT NULL,
+    created_by      UUID REFERENCES users(id) ON DELETE RESTRICT NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_scenarios_building_org UNIQUE (id, building_id, organization_id)
+);
+
 CREATE TABLE scenario_versions (
     id                                UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Khóa chính định danh kịch bản PCCC
+    scenario_id                       UUID NOT NULL,                                -- Logical scenario; version mới không tạo lại geometry
     revision_id                       UUID REFERENCES revisions(id) NOT NULL,     -- Revision IFC hợp lệ dùng để author scenario
+    building_id                       UUID REFERENCES buildings(id) NOT NULL,
     organization_id                   UUID REFERENCES organizations(id) NOT NULL, -- ID tổ chức tạo kịch bản
     version_number                    INT NOT NULL DEFAULT 1,                     -- Phiên bản kịch bản (1, 2, 3...)
     name                              VARCHAR(255) NOT NULL,                      -- Tên kịch bản ("Cháy phòng Server tầng 3")
+    schema_version                    VARCHAR(50) NOT NULL DEFAULT '1',
+    algorithm_version                 VARCHAR(50) NOT NULL DEFAULT '1',
+    random_seed                       BIGINT NOT NULL DEFAULT 0,
+    spawn_config                      JSONB NOT NULL DEFAULT '{}',
+    goal_config                       JSONB NOT NULL DEFAULT '{}',
 
     -- Cấu hình mô phỏng đám cháy & NPC
     fire_source_config                JSONB DEFAULT '{}',                        -- Vị trí, thời điểm bắt đầu
+    smoke_config                      JSONB NOT NULL DEFAULT '{}',
+    wind_config                       JSONB NOT NULL DEFAULT '{}',                -- Mô hình game; không phải CFD đã kiểm chứng
+    interaction_anchors               JSONB NOT NULL DEFAULT '[]',
     npc_config                        JSONB DEFAULT '{}',                        -- Archetypes, mật độ, hành vi
     blocked_elements                  JSONB DEFAULT '[]',                        -- Cửa/cầu thang bị chặn theo thời gian
     guidance_level                    VARCHAR(50) DEFAULT 'full',                -- Full | partial | none
 
     -- Ngưỡng an toàn & Cấu hình tính điểm
     safety_thresholds                 JSONB DEFAULT '{}',                        -- Ngưỡng chịu đựng khói/nhiệt độ của người chơi
-    replan_interval_seconds           INT DEFAULT 5,                             -- Tần suất tính lại đường đi Risk-aware A* (giây)
-    score_wrong_exit_penalty          INT DEFAULT 10,                            -- Điểm trừ khi chạy nhầm vào cửa bị khóa
-    score_hazard_per_second_penalty   DECIMAL(5, 2) DEFAULT 0.50,                -- Điểm trừ cho mỗi giây đứng trong khói
-    score_time_bonus_threshold_seconds INT DEFAULT 120,                           -- Mốc thời gian (giây) để thưởng điểm thoát nhanh
+    time_limit_seconds               INT NOT NULL,                               -- Thời lượng tối đa của bài, là nguồn chính trong snapshot
+    routing_config                    JSONB NOT NULL DEFAULT '{}',
+    scoring_config                    JSONB NOT NULL DEFAULT '{}',
+    mode_policy                       JSONB NOT NULL DEFAULT '{}',
+    scenario_hash                    VARCHAR(64) NOT NULL DEFAULT '',
 
     -- Readiness được ghi bằng revision_reviews.action = ConfirmForTraining và revision.status
     created_by                        UUID REFERENCES users(id) NOT NULL,        -- OrganizationUser tạo kịch bản
     created_at                        TIMESTAMPTZ DEFAULT NOW(),                 -- Thời điểm tạo
     updated_at                        TIMESTAMPTZ DEFAULT NOW(),                 -- Thời điểm cập nhật gần nhất
-    UNIQUE (revision_id, version_number)
+    UNIQUE (scenario_id, version_number),
+    CONSTRAINT fk_scenario_versions_scenario
+        FOREIGN KEY (scenario_id, building_id, organization_id)
+        REFERENCES scenarios(id, building_id, organization_id) ON DELETE RESTRICT,
+    CONSTRAINT check_scenario_hash CHECK (scenario_hash <> '')
+);
+
+-- Editor draft không được dùng làm release/session cho tới khi snapshot thành version.
+CREATE TABLE scenario_drafts (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    scenario_id         UUID REFERENCES scenarios(id) ON DELETE CASCADE NOT NULL,
+    revision_id         UUID REFERENCES revisions(id) ON DELETE RESTRICT NOT NULL,
+    organization_id     UUID REFERENCES organizations(id) ON DELETE RESTRICT NOT NULL,
+    building_id         UUID REFERENCES buildings(id) ON DELETE RESTRICT NOT NULL,
+    draft_number        INT NOT NULL DEFAULT 1,
+    state               JSONB NOT NULL DEFAULT '{}',
+    source              VARCHAR(20) NOT NULL DEFAULT 'manual', -- manual | ai
+    last_ai_request_id  UUID,
+    created_by          UUID REFERENCES users(id) ON DELETE RESTRICT NOT NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT check_scenario_draft_source CHECK (source IN ('manual','ai')),
+    UNIQUE (scenario_id, draft_number),
+    CONSTRAINT fk_scenario_drafts_scenario_scope
+        FOREIGN KEY (scenario_id, building_id, organization_id)
+        REFERENCES scenarios(id, building_id, organization_id) ON DELETE RESTRICT
+);
+
+-- Validation là bằng chứng độc lập cho geometry, scenario và package. Một run
+-- không bị ghi đè; issue được giữ lại để publish/reconcile có thể truy vết.
+CREATE TABLE validation_runs (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    revision_id         UUID REFERENCES revisions(id) ON DELETE CASCADE NOT NULL,
+    scenario_version_id UUID REFERENCES scenario_versions(id) ON DELETE RESTRICT,
+    processing_job_id   UUID REFERENCES processing_jobs(id) ON DELETE RESTRICT NOT NULL,
+    artifact_id         UUID REFERENCES revision_artifacts(id) ON DELETE RESTRICT,
+    release_id          UUID REFERENCES releases(id) ON DELETE RESTRICT,
+    scope               VARCHAR(40) NOT NULL, -- Geometry | Scenario | PlaytestPackage | ReleasePackage
+    validator_version   VARCHAR(100) NOT NULL,
+    status              VARCHAR(30) NOT NULL DEFAULT 'Queued',
+    summary             JSONB NOT NULL DEFAULT '{}',
+    started_at          TIMESTAMPTZ,
+    finished_at         TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT check_validation_run_scope CHECK (
+        scope IN ('Geometry','Scenario','PlaytestPackage','ReleasePackage')
+    ),
+    CONSTRAINT check_validation_run_status CHECK (
+        status IN ('Queued','Running','Passed','Failed','Cancelled')
+    ),
+    CONSTRAINT check_validation_run_target CHECK (
+        (scope = 'ReleasePackage' AND release_id IS NOT NULL)
+        OR (scope <> 'ReleasePackage')
+    ),
+    CONSTRAINT check_validation_run_artifact CHECK (
+        (scope IN ('PlaytestPackage','ReleasePackage') AND artifact_id IS NOT NULL)
+        OR (scope NOT IN ('PlaytestPackage','ReleasePackage'))
+    ),
+    CONSTRAINT check_validation_run_scenario_target CHECK (
+        (scope IN ('Scenario','PlaytestPackage','ReleasePackage') AND scenario_version_id IS NOT NULL)
+        OR (scope NOT IN ('Scenario','PlaytestPackage','ReleasePackage'))
+    ),
+    CONSTRAINT uq_validation_run_attempt UNIQUE (processing_job_id, validator_version, scope)
+);
+
+CREATE TABLE validation_issues (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    validation_run_id   UUID REFERENCES validation_runs(id) ON DELETE CASCADE NOT NULL,
+    revision_id         UUID REFERENCES revisions(id) ON DELETE CASCADE NOT NULL,
+    scenario_version_id UUID REFERENCES scenario_versions(id) ON DELETE RESTRICT,
+    artifact_id         UUID REFERENCES revision_artifacts(id) ON DELETE RESTRICT,
+    issue_code          VARCHAR(100) NOT NULL,
+    severity            VARCHAR(20) NOT NULL,
+    status              VARCHAR(20) NOT NULL DEFAULT 'Open',
+    message             TEXT NOT NULL,
+    evidence            JSONB NOT NULL DEFAULT '{}',
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    resolved_at         TIMESTAMPTZ,
+    resolved_by         UUID REFERENCES users(id) ON DELETE RESTRICT,
+    CONSTRAINT check_validation_issue_severity CHECK (severity IN ('Info','Warning','Error','Critical')),
+    CONSTRAINT check_validation_issue_status CHECK (status IN ('Open','Acknowledged','Resolved','Waived'))
 );
 
 -- Review và release pin scenario đã sẵn sàng; FK được khai báo sau đối tượng đích.
@@ -465,6 +624,10 @@ ALTER TABLE revision_reviews
 
 ALTER TABLE releases
     ADD CONSTRAINT fk_releases_scenario_version
+    FOREIGN KEY (scenario_version_id) REFERENCES scenario_versions(id) ON DELETE RESTRICT;
+
+ALTER TABLE processing_jobs
+    ADD CONSTRAINT fk_processing_jobs_scenario_version
     FOREIGN KEY (scenario_version_id) REFERENCES scenario_versions(id) ON DELETE RESTRICT;
 
 CREATE TABLE trainings (
@@ -491,10 +654,8 @@ CREATE TABLE trainings (
     )
 );
 
--- QR được tạo sau Training và chỉ được active sau khi release Published.
-ALTER TABLE release_qr_codes
-    ADD CONSTRAINT fk_release_qr_codes_training
-    FOREIGN KEY (training_id) REFERENCES trainings(id) ON DELETE RESTRICT;
+-- QR cấp Building có thể được tạo trước khi có Training; danh sách bài được
+-- resolve động từ các Training/Release Published của Building.
 
 -- ------------------------------------------------------------------------------
 -- GROUP 6: Session & Results
@@ -515,12 +676,42 @@ CREATE TABLE sessions (
     -- Phiên bản ứng dụng tại thời điểm bắt đầu (phục vụ debug crash)
     app_version         VARCHAR(50),                               -- Phiên bản React Native/Expo app tại lúc bắt đầu session
     unity_version       VARCHAR(50),                               -- Phiên bản Unity runtime tại lúc bắt đầu session
+    package_hash        VARCHAR(64) NOT NULL,                      -- Hash package đã verify ở bước preparation
+    protocol_version    VARCHAR(50) NOT NULL DEFAULT '1',          -- Protocol đã verify trước khi start
+    manifest_schema_version VARCHAR(50) NOT NULL DEFAULT '1',      -- Schema manifest đã verify trước khi start
+    runtime_version     VARCHAR(50),                               -- Runtime Unity được client báo khi start
+    prepare_idempotency_key VARCHAR(255) UNIQUE NOT NULL DEFAULT gen_random_uuid()::TEXT,
+    start_idempotency_key VARCHAR(255) UNIQUE,                     -- Idempotency riêng cho online start
 
     -- Trạng thái phiên
     mode                session_mode_enum NOT NULL,                -- Chế độ (Learn | Guided | Assessment)
     status              session_status_enum NOT NULL DEFAULT 'Created', -- Trạng thái (Created, Running, Completed, Crashed...)
-    started_at          TIMESTAMPTZ DEFAULT NOW(),                  -- Thời điểm Bắt đầu trên App
-    ended_at            TIMESTAMPTZ                                 -- Thời điểm Kết thúc phiên
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),        -- Thời điểm tạo preparation record
+    launch_granted_at   TIMESTAMPTZ,                               -- Chỉ cấp sau online start và entitlement check
+    started_at          TIMESTAMPTZ,                               -- Chỉ ghi khi Mobile/Unity bắt đầu gameplay
+    ended_at            TIMESTAMPTZ                                -- Thời điểm Kết thúc phiên
+);
+
+-- Playtest của OrganizationUser là aggregate riêng; không phải learner session.
+CREATE TABLE playtest_sessions (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id     UUID REFERENCES organizations(id) ON DELETE RESTRICT NOT NULL,
+    building_id         UUID REFERENCES buildings(id) ON DELETE RESTRICT NOT NULL,
+    revision_id         UUID REFERENCES revisions(id) ON DELETE RESTRICT NOT NULL,
+    scenario_draft_id   UUID REFERENCES scenario_drafts(id) ON DELETE RESTRICT,
+    scenario_version_id UUID REFERENCES scenario_versions(id) ON DELETE RESTRICT NOT NULL,
+    service_entitlement_id UUID NOT NULL,
+    created_by          UUID REFERENCES users(id) ON DELETE RESTRICT NOT NULL,
+    package_hash        VARCHAR(64) NOT NULL,
+    protocol_version    VARCHAR(50) NOT NULL DEFAULT '1',
+    manifest_schema_version VARCHAR(50) NOT NULL DEFAULT '1',
+    runtime_version     VARCHAR(50),
+    start_idempotency_key VARCHAR(255) UNIQUE,
+    status              VARCHAR(30) NOT NULL DEFAULT 'Created',
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    started_at          TIMESTAMPTZ,
+    ended_at            TIMESTAMPTZ,
+    CONSTRAINT check_playtest_status CHECK (status IN ('Created','Running','Completed','Aborted','Failed'))
 );
 
 CREATE TABLE session_results (
@@ -580,11 +771,16 @@ CREATE TABLE debrief_artifacts (
 );
 
 CREATE TABLE session_events (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Khóa chính định danh sự kiện
+    id          UUID PRIMARY KEY,                            -- Stable client event id; retry giữ nguyên id
     session_id  UUID REFERENCES sessions(id) ON DELETE CASCADE NOT NULL, -- ID phiên diễn tập
+    sequence_number BIGINT NOT NULL,                        -- Thứ tự tăng dần trong một session
+    schema_version VARCHAR(50) NOT NULL,                     -- Schema của event_data
     event_type  VARCHAR(100) NOT NULL,                      -- Loại sự kiện ('PICKUP_EXTINGUISHER', 'ENTER_SMOKE_ZONE'...)
     event_data  JSONB DEFAULT '{}',                         -- Dữ liệu chi tiết dạng JSON
-    recorded_at TIMESTAMPTZ NOT NULL                        -- Mốc thời gian xảy ra sự kiện
+    recorded_at TIMESTAMPTZ NOT NULL,                       -- Mốc thời gian trên thiết bị
+    received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),         -- Mốc backend nhận event
+    UNIQUE (session_id, sequence_number),
+    UNIQUE (session_id, id)
 );
 
 -- ------------------------------------------------------------------------------
@@ -605,7 +801,7 @@ CREATE TABLE audit_logs (
 );
 
 -- ------------------------------------------------------------------------------
--- GROUP 8: Phase 2 Commercial, Payment, Feedback & Support
+-- GROUP 8: Commercial Entitlement, Payment, AI Usage, Feedback & Support
 -- ------------------------------------------------------------------------------
 
 CREATE TABLE service_packages (
@@ -629,7 +825,10 @@ CREATE TABLE service_packages (
 CREATE TABLE quotations (
     id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id    UUID REFERENCES organizations(id) ON DELETE RESTRICT NOT NULL,
-    service_package_id UUID REFERENCES service_packages(id) ON DELETE RESTRICT NOT NULL,
+    billing_purpose    VARCHAR(30) NOT NULL DEFAULT 'BuildingService', -- BuildingService | AIUsage
+    building_id        UUID REFERENCES buildings(id) ON DELETE RESTRICT,
+    service_package_id UUID REFERENCES service_packages(id) ON DELETE RESTRICT,
+    service_duration_months INT,                                  -- Snapshot thời hạn của BuildingService quotation
     requested_by       UUID REFERENCES users(id) ON DELETE RESTRICT NOT NULL, -- OrganizationUser yêu cầu
     issued_by          UUID REFERENCES users(id) ON DELETE RESTRICT,          -- PlatformAdmin phát hành
     quotation_number   VARCHAR(50) UNIQUE NOT NULL,
@@ -641,12 +840,19 @@ CREATE TABLE quotations (
     discount_amount    DECIMAL(14, 2) NOT NULL DEFAULT 0,
     total_amount       DECIMAL(14, 2) NOT NULL,
     currency           VARCHAR(3) NOT NULL DEFAULT 'VND',
+    price_snapshot     JSONB NOT NULL DEFAULT '{}',                -- Đơn giá/thuế/chiết khấu tại thời điểm phát hành
+    terms_snapshot     JSONB NOT NULL DEFAULT '{}',                -- Điều khoản đã được chấp nhận
     valid_until        TIMESTAMPTZ NOT NULL,
     issued_at          TIMESTAMPTZ,
     accepted_at        TIMESTAMPTZ,
     created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT check_quotation_quantity CHECK (quantity > 0),
+    CONSTRAINT check_quotation_purpose_scope CHECK (
+        (billing_purpose = 'BuildingService' AND building_id IS NOT NULL AND service_package_id IS NOT NULL AND service_duration_months > 0)
+        OR (billing_purpose = 'AIUsage' AND building_id IS NULL AND service_package_id IS NULL AND service_duration_months IS NULL)
+    ),
+    CONSTRAINT check_quotation_billing_purpose CHECK (billing_purpose IN ('BuildingService','AIUsage')),
     CONSTRAINT check_quotation_amounts CHECK (
         unit_price >= 0
         AND subtotal_amount = unit_price * quantity
@@ -666,6 +872,7 @@ CREATE TABLE payos_payment_requests (
     quotation_id        UUID REFERENCES quotations(id) ON DELETE RESTRICT NOT NULL,
     organization_id     UUID REFERENCES organizations(id) ON DELETE RESTRICT NOT NULL,
     requested_by        UUID REFERENCES users(id) ON DELETE RESTRICT NOT NULL,
+    idempotency_key     VARCHAR(255) UNIQUE NOT NULL DEFAULT gen_random_uuid()::TEXT,
     order_code          BIGINT UNIQUE NOT NULL,                     -- PayOS orderCode expected
     expected_amount     DECIMAL(14, 2) NOT NULL,                    -- Amount expected from quotation
     expected_currency   VARCHAR(3) NOT NULL DEFAULT 'VND',          -- Currency expected from quotation
@@ -768,6 +975,258 @@ CREATE TABLE invoice_metadata (
     CONSTRAINT check_invoice_currency CHECK (currency ~ '^[A-Z]{3}$')
 );
 
+-- Quyền dịch vụ theo từng Building. Kỳ này độc lập với kỳ đối soát AI của tổ chức.
+CREATE TABLE service_entitlements (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id     UUID REFERENCES organizations(id) ON DELETE RESTRICT NOT NULL,
+    building_id         UUID REFERENCES buildings(id) ON DELETE RESTRICT NOT NULL,
+    service_package_id  UUID REFERENCES service_packages(id) ON DELETE RESTRICT NOT NULL,
+    quotation_id        UUID REFERENCES quotations(id) ON DELETE RESTRICT,
+    payment_transaction_id UUID REFERENCES payment_transactions(id) ON DELETE RESTRICT UNIQUE,
+    provisioning_key    VARCHAR(255) NOT NULL UNIQUE,               -- Ổn định theo quotation/payment, không random mỗi retry
+    status              VARCHAR(30) NOT NULL DEFAULT 'Active', -- Trial | Active | Expired | Suspended | Cancelled
+    starts_at           TIMESTAMPTZ NOT NULL,
+    ends_at             TIMESTAMPTZ NOT NULL,
+    price_snapshot      JSONB NOT NULL DEFAULT '{}',
+    terms_snapshot      JSONB NOT NULL DEFAULT '{}',
+    playtest_units_granted INT NOT NULL DEFAULT 0,
+    playtest_units_used INT NOT NULL DEFAULT 0,
+    created_by          UUID REFERENCES users(id) ON DELETE RESTRICT NOT NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT check_service_entitlement_dates CHECK (ends_at > starts_at),
+    CONSTRAINT check_service_entitlement_status CHECK (status IN ('Trial','Active','Expired','Suspended','Cancelled')),
+    CONSTRAINT check_active_entitlement_payment_source CHECK (
+        status <> 'Active' OR (quotation_id IS NOT NULL AND payment_transaction_id IS NOT NULL)
+    ),
+    CONSTRAINT check_playtest_entitlement_units CHECK (
+        playtest_units_granted >= 0 AND playtest_units_used >= 0 AND playtest_units_used <= playtest_units_granted
+    ),
+    UNIQUE (building_id, starts_at)
+);
+
+ALTER TABLE playtest_sessions
+    ADD CONSTRAINT fk_playtest_sessions_service_entitlement
+    FOREIGN KEY (service_entitlement_id) REFERENCES service_entitlements(id) ON DELETE RESTRICT;
+
+-- Payment đã Applied nhưng cấp entitlement có thể lỗi ở bước sau. Bản ghi này
+-- là điểm retry/reconcile bất biến theo payment + quotation, không phải một giao dịch mới.
+CREATE TABLE payment_provisioning_records (
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    payment_transaction_id UUID REFERENCES payment_transactions(id) ON DELETE RESTRICT UNIQUE NOT NULL,
+    quotation_id          UUID REFERENCES quotations(id) ON DELETE RESTRICT NOT NULL,
+    organization_id       UUID REFERENCES organizations(id) ON DELETE RESTRICT NOT NULL,
+    provisioning_key      VARCHAR(255) UNIQUE NOT NULL,
+    status                VARCHAR(30) NOT NULL DEFAULT 'Pending',
+    attempts              INT NOT NULL DEFAULT 0,
+    last_error            TEXT,
+    provisioned_at        TIMESTAMPTZ,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT check_payment_provisioning_status CHECK (status IN ('Pending','Succeeded','NeedsReconcile')),
+    CONSTRAINT check_payment_provisioning_attempts CHECK (attempts >= 0)
+);
+
+-- Kỳ đối soát AI của tổ chức; không suy ra từ kỳ service của Building.
+CREATE TABLE ai_billing_periods (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id     UUID REFERENCES organizations(id) ON DELETE RESTRICT NOT NULL,
+    period_start        TIMESTAMPTZ NOT NULL,
+    period_end          TIMESTAMPTZ NOT NULL,
+    status              VARCHAR(30) NOT NULL DEFAULT 'Open', -- Open | Closed | Invoiced | Paid
+    settlement_quotation_id UUID REFERENCES quotations(id) ON DELETE RESTRICT UNIQUE,
+    settlement_payment_transaction_id UUID REFERENCES payment_transactions(id) ON DELETE RESTRICT UNIQUE,
+    unit_price_snapshot JSONB NOT NULL DEFAULT '{}',
+    overage_units       INT NOT NULL DEFAULT 0,
+    overage_amount      DECIMAL(14, 2) NOT NULL DEFAULT 0,
+    currency            VARCHAR(3) NOT NULL DEFAULT 'VND',
+    closed_at           TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT check_ai_period_dates CHECK (period_end > period_start),
+    CONSTRAINT check_ai_period_status CHECK (status IN ('Open','Closed','Invoiced','Paid')),
+    CONSTRAINT check_ai_period_amounts CHECK (overage_units >= 0 AND overage_amount >= 0 AND currency ~ '^[A-Z]{3}$'),
+    UNIQUE (organization_id, period_start, period_end)
+);
+
+CREATE TABLE ai_quota_grants (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id     UUID REFERENCES organizations(id) ON DELETE RESTRICT,
+    building_id         UUID REFERENCES buildings(id) ON DELETE RESTRICT,
+    trainee_user_id     UUID REFERENCES users(id) ON DELETE RESTRICT,
+    audience            VARCHAR(30) NOT NULL, -- organization | trainee
+    quota_kind          VARCHAR(30) NOT NULL, -- free | daily | trial
+    policy_version_id   UUID,
+    units_granted       INT NOT NULL,
+    units_used          INT NOT NULL DEFAULT 0,
+    starts_at           TIMESTAMPTZ NOT NULL,
+    ends_at             TIMESTAMPTZ NOT NULL,
+    configured_by       UUID REFERENCES users(id) ON DELETE RESTRICT NOT NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT check_ai_quota_audience CHECK (audience IN ('organization','trainee')),
+    CONSTRAINT check_ai_quota_audience_scope CHECK (
+        (audience = 'organization' AND organization_id IS NOT NULL AND trainee_user_id IS NULL)
+        OR (audience = 'trainee' AND trainee_user_id IS NOT NULL AND organization_id IS NULL AND building_id IS NULL)
+    ),
+    CONSTRAINT check_ai_quota_kind CHECK (quota_kind IN ('free','daily','trial')),
+    CONSTRAINT check_ai_quota_numbers CHECK (units_granted >= 0 AND units_used >= 0 AND units_used <= units_granted),
+    CONSTRAINT check_ai_quota_dates CHECK (ends_at > starts_at)
+);
+
+-- Chính sách quota/đơn giá có version; grant và usage phải giữ lại version đã áp dụng.
+CREATE TABLE ai_policy_versions (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id     UUID REFERENCES organizations(id) ON DELETE CASCADE,
+    audience            VARCHAR(30) NOT NULL, -- organization | trainee | common
+    policy_kind         VARCHAR(30) NOT NULL, -- quota | pricing
+    version_label       VARCHAR(100) NOT NULL,
+    policy_snapshot     JSONB NOT NULL,
+    effective_from      TIMESTAMPTZ NOT NULL,
+    effective_until     TIMESTAMPTZ,
+    created_by          UUID REFERENCES users(id) ON DELETE RESTRICT NOT NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT check_ai_policy_audience CHECK (audience IN ('organization','trainee','common')),
+    CONSTRAINT check_ai_policy_kind CHECK (policy_kind IN ('quota','pricing')),
+    CONSTRAINT check_ai_policy_dates CHECK (effective_until IS NULL OR effective_until > effective_from),
+    UNIQUE (organization_id, audience, policy_kind, version_label)
+);
+
+CREATE TABLE ai_overage_consents (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id     UUID REFERENCES organizations(id) ON DELETE RESTRICT NOT NULL,
+    accepted_by         UUID REFERENCES users(id) ON DELETE RESTRICT NOT NULL,
+    accepted_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    terms_snapshot      JSONB NOT NULL,
+    scope               JSONB NOT NULL DEFAULT '{}',
+    UNIQUE (organization_id, accepted_by, accepted_at)
+);
+
+-- Bản ghi bền vững của một yêu cầu AI; ledger/reservation chỉ là các lớp tài chính
+-- tham chiếu request này, không thay thế trạng thái xử lý và kết quả kỹ thuật.
+CREATE TABLE ai_requests (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    idempotency_key     VARCHAR(255) NOT NULL UNIQUE,
+    organization_id     UUID REFERENCES organizations(id) ON DELETE RESTRICT,
+    building_id         UUID REFERENCES buildings(id) ON DELETE RESTRICT,
+    user_id             UUID REFERENCES users(id) ON DELETE RESTRICT NOT NULL,
+    audience            VARCHAR(30) NOT NULL,
+    request_type        VARCHAR(80) NOT NULL,
+    source_scope        JSONB NOT NULL DEFAULT '{}',
+    policy_version_id   UUID REFERENCES ai_policy_versions(id) ON DELETE RESTRICT NOT NULL,
+    input_hash          VARCHAR(64) NOT NULL,
+    input_reference     TEXT,
+    status              VARCHAR(30) NOT NULL DEFAULT 'Accepted', -- Accepted | Processing | Succeeded | Failed | NeedsReconcile | Rejected
+    result_type         VARCHAR(40), -- KnowledgeAnswer | ScenarioDraft
+    result_reference    TEXT,
+    response_snapshot   JSONB,
+    result_hash         VARCHAR(64),
+    citations           JSONB NOT NULL DEFAULT '[]',
+    model_provider      VARCHAR(80),
+    model_version       VARCHAR(120),
+    technical_usage     JSONB NOT NULL DEFAULT '{}',
+    failure_code        VARCHAR(80),
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at        TIMESTAMPTZ,
+    last_reconciled_at  TIMESTAMPTZ,
+    CONSTRAINT check_ai_request_audience CHECK (audience IN ('organization','trainee')),
+    CONSTRAINT check_ai_request_status CHECK (status IN ('Accepted','Processing','Succeeded','Failed','NeedsReconcile','Rejected')),
+    CONSTRAINT check_ai_request_result_type CHECK (result_type IS NULL OR result_type IN ('KnowledgeAnswer','ScenarioDraft','InsufficientEvidence','RejectedBySafetyGate')),
+    CONSTRAINT check_ai_request_input_hash CHECK (input_hash ~ '^[0-9a-fA-F]{64}$'),
+    CONSTRAINT check_ai_request_result_hash CHECK (result_hash IS NULL OR result_hash ~ '^[0-9a-fA-F]{64}$'),
+    CONSTRAINT check_ai_request_scope CHECK (
+        (audience = 'organization' AND organization_id IS NOT NULL)
+        OR (audience = 'trainee' AND organization_id IS NULL AND building_id IS NULL)
+    )
+);
+
+CREATE TABLE ai_usage_ledger (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    request_id          UUID REFERENCES ai_requests(id) ON DELETE RESTRICT UNIQUE NOT NULL, -- chống tính lượt/charge trùng khi retry
+    idempotency_key     VARCHAR(255) UNIQUE NOT NULL,
+    organization_id     UUID REFERENCES organizations(id) ON DELETE RESTRICT,
+    building_id         UUID REFERENCES buildings(id) ON DELETE RESTRICT,
+    user_id             UUID REFERENCES users(id) ON DELETE RESTRICT NOT NULL,
+    session_id          UUID REFERENCES sessions(id) ON DELETE SET NULL,
+    audience            VARCHAR(30) NOT NULL, -- organization | trainee
+    request_type        VARCHAR(80) NOT NULL, -- qa | scenario_draft | learn | debrief
+    policy_version_id   UUID,
+    units               INT NOT NULL DEFAULT 1,
+    overage_consent_id  UUID REFERENCES ai_overage_consents(id) ON DELETE RESTRICT,
+    billable            BOOLEAN NOT NULL DEFAULT false,
+    unit_price_snapshot JSONB NOT NULL DEFAULT '{}',
+    billing_period_id   UUID REFERENCES ai_billing_periods(id) ON DELETE RESTRICT,
+    status              VARCHAR(30) NOT NULL DEFAULT 'Reserved', -- Reserved | Recorded | Failed | Reversed | NeedsReconcile
+    source_scope        JSONB NOT NULL DEFAULT '{}',
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT check_ai_usage_audience CHECK (audience IN ('organization','trainee')),
+    CONSTRAINT check_ai_usage_audience_scope CHECK (
+        (audience = 'organization' AND organization_id IS NOT NULL)
+        OR (audience = 'trainee' AND organization_id IS NULL AND building_id IS NULL)
+    ),
+    CONSTRAINT check_ai_usage_overage_consent CHECK (billable = false OR overage_consent_id IS NOT NULL),
+    CONSTRAINT check_ai_usage_trainee_not_billable CHECK (audience = 'organization' OR billable = false),
+    CONSTRAINT check_ai_usage_units CHECK (units > 0),
+    CONSTRAINT check_ai_usage_status CHECK (status IN ('Reserved','Recorded','Failed','Reversed','NeedsReconcile'))
+);
+
+CREATE TABLE ai_billing_period_items (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    billing_period_id   UUID REFERENCES ai_billing_periods(id) ON DELETE RESTRICT NOT NULL,
+    usage_ledger_id     UUID REFERENCES ai_usage_ledger(id) ON DELETE RESTRICT NOT NULL,
+    units               INT NOT NULL,
+    unit_price_snapshot JSONB NOT NULL,
+    amount              DECIMAL(14,2) NOT NULL,
+    status              VARCHAR(20) NOT NULL DEFAULT 'Included', -- Included | Removed | Adjusted
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT check_ai_period_item_units CHECK (units > 0),
+    CONSTRAINT check_ai_period_item_amount CHECK (amount >= 0),
+    UNIQUE (billing_period_id, usage_ledger_id)
+);
+
+CREATE TABLE ai_billing_adjustments (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    billing_period_id   UUID REFERENCES ai_billing_periods(id) ON DELETE RESTRICT NOT NULL,
+    usage_ledger_id     UUID REFERENCES ai_usage_ledger(id) ON DELETE RESTRICT,
+    original_item_id    UUID REFERENCES ai_billing_period_items(id) ON DELETE RESTRICT,
+    adjustment_type     VARCHAR(30) NOT NULL, -- Credit | Debit | LateUsage | Correction
+    units               INT NOT NULL DEFAULT 0,
+    amount              DECIMAL(14,2) NOT NULL,
+    reason              TEXT NOT NULL,
+    created_by          UUID REFERENCES users(id) ON DELETE RESTRICT NOT NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT check_ai_adjustment_type CHECK (adjustment_type IN ('Credit','Debit','LateUsage','Correction')),
+    CONSTRAINT check_ai_adjustment_amount CHECK (amount <> 0 OR units <> 0)
+);
+
+CREATE TABLE knowledge_sources (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id     UUID REFERENCES organizations(id) ON DELETE CASCADE,
+    visibility           VARCHAR(30) NOT NULL DEFAULT 'Common', -- Common | Organization
+    title                TEXT NOT NULL,
+    version_label        VARCHAR(100) NOT NULL,
+    source_hash          VARCHAR(64) NOT NULL,
+    jurisdiction         TEXT,
+    effective_from       TIMESTAMPTZ,
+    effective_until      TIMESTAMPTZ,
+    approval_status      VARCHAR(30) NOT NULL DEFAULT 'Draft', -- Draft | Approved | Retired
+    approved_by          UUID REFERENCES users(id) ON DELETE RESTRICT,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT check_knowledge_visibility CHECK (visibility IN ('Common','Organization')),
+    CONSTRAINT check_knowledge_status CHECK (approval_status IN ('Draft','Approved','Retired')),
+    CONSTRAINT check_knowledge_tenant CHECK (visibility = 'Common' OR organization_id IS NOT NULL),
+    UNIQUE (organization_id, visibility, source_hash, version_label)
+);
+
+CREATE TABLE knowledge_chunks (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_id           UUID REFERENCES knowledge_sources(id) ON DELETE CASCADE NOT NULL,
+    chunk_index         INT NOT NULL,
+    content             TEXT NOT NULL,
+    locator             JSONB NOT NULL DEFAULT '{}',
+    embedding           vector, -- chiều và index phải chốt cùng embedding model production
+    metadata            JSONB NOT NULL DEFAULT '{}',
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (source_id, chunk_index)
+);
+
 CREATE TABLE feedback (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     submitted_by    UUID REFERENCES users(id) ON DELETE RESTRICT NOT NULL,
@@ -806,15 +1265,21 @@ CREATE TABLE support_tickets (
 );
 
 COMMENT ON TABLE revision_reviews IS
-'Persists the ConfirmForTraining or Rejected readiness action for one revision/scenario pair; ConfirmForTraining moves ReadyForScenario to ConfirmedForTraining and is not certification.';
+'Persists the ConfirmForTraining or Rejected readiness action for one revision/scenario version pair; ConfirmForTraining moves the revision to ConfirmedForTraining without locking other compatible scenario authoring, and is not certification.';
 COMMENT ON TABLE release_qr_codes IS
-'Each QR pins exactly one release_id and one training_id. An effective active QR also requires an unexpired code, Active Training, Published release and matching scenario/organization.';
+'A QR is stable at Building scope and resolves the current list of Published Trainings. It never stores a Training or release binding. Preparation pins the selected training/release/scenario; only explicit online start requires an Active Building entitlement.';
 COMMENT ON TABLE payos_payment_requests IS
-'Phase 2 PayOS request. Paid is set only after a verified, idempotently processed webhook whose orderCode, amount and currency match the expected request.';
+'PayOS request. Paid is set only after a verified, idempotently processed webhook whose orderCode, amount and currency match the expected request; no automatic recurring debit is assumed.';
 COMMENT ON COLUMN payos_payment_requests.return_url IS
 'UI navigation only; returnUrl is never payment confirmation.';
 COMMENT ON TABLE payment_transactions IS
 'One row per PayOS webhook event. A trusted backend adapter verifies the canonicalized webhook data before DB invocation; the DB records that attestation, deduplicates webhook_event_id, and compares orderCode, amount and currency before Applied.';
+COMMENT ON TABLE service_entitlements IS
+'Building-scoped service rights with independent activation/expiry. Payment success grants or extends this entitlement only through a trusted idempotent backend path.';
+COMMENT ON TABLE payment_provisioning_records IS
+'Reconcile queue for an Applied PayOS transaction whose service entitlement provisioning has not completed; retries reuse provisioning_key.';
+COMMENT ON TABLE ai_usage_ledger IS
+'Append-oriented AI usage facts by organization, building, user, audience and request type. Backend owns quota/overage calculation and request idempotency.';
 
 -- ==============================================================================
 -- SECTION 4: INDEXES
@@ -825,6 +1290,8 @@ CREATE INDEX idx_users_organization ON users(organization_id);
 CREATE INDEX idx_users_active_role ON users(role) WHERE is_active AND deleted_at IS NULL;
 
 CREATE INDEX idx_user_devices_user ON user_devices(user_id);
+CREATE INDEX idx_user_devices_push_enabled ON user_devices(user_id)
+WHERE fcm_token IS NOT NULL AND notifications_enabled;
 
 CREATE INDEX idx_buildings_organization ON buildings(organization_id);
 CREATE INDEX idx_buildings_created_by ON buildings(created_by);
@@ -844,6 +1311,9 @@ CREATE INDEX idx_source_documents_quarantine ON source_documents(quarantine_stat
 
 CREATE INDEX idx_annotation_sets_created_by ON annotation_sets(created_by);
 CREATE INDEX idx_revision_processing_logs_revision ON revision_processing_logs(revision_id);
+CREATE INDEX idx_revision_artifacts_revision ON revision_artifacts(revision_id);
+CREATE INDEX idx_bim_facts_revision ON bim_facts(revision_id);
+CREATE INDEX idx_bim_facts_ifc_global_id ON bim_facts(revision_id, ifc_global_id);
 CREATE INDEX idx_revision_reviews_revision ON revision_reviews(revision_id);
 CREATE INDEX idx_revision_reviews_scenario ON revision_reviews(scenario_version_id);
 CREATE INDEX idx_revision_reviews_reviewed_by ON revision_reviews(reviewed_by);
@@ -857,15 +1327,28 @@ CREATE INDEX idx_releases_revoked_by ON releases(revoked_by);
 CREATE INDEX idx_releases_status ON releases(status);
 CREATE INDEX idx_releases_published_building ON releases(building_id, published_at DESC) WHERE status = 'Published';
 
-CREATE INDEX idx_release_qr_codes_release ON release_qr_codes(release_id);
-CREATE INDEX idx_release_qr_codes_training ON release_qr_codes(training_id);
+CREATE INDEX idx_release_qr_codes_building ON release_qr_codes(building_id);
 CREATE INDEX idx_release_qr_codes_organization ON release_qr_codes(organization_id);
 CREATE INDEX idx_release_qr_codes_floor ON release_qr_codes(floor_id);
 CREATE INDEX idx_release_qr_codes_created_by ON release_qr_codes(created_by);
 CREATE INDEX idx_release_qr_codes_active ON release_qr_codes(qr_hash) WHERE is_active;
+CREATE UNIQUE INDEX uq_release_qr_codes_active_building_canonical
+    ON release_qr_codes(building_id)
+    WHERE is_active;
 
+CREATE INDEX idx_processing_jobs_revision ON processing_jobs(revision_id, created_at DESC);
+CREATE INDEX idx_processing_jobs_status ON processing_jobs(status, created_at DESC);
+CREATE INDEX idx_revision_processing_logs_job ON revision_processing_logs(job_id, logged_at DESC);
+CREATE INDEX idx_revision_artifacts_job ON revision_artifacts(job_id);
+CREATE INDEX idx_validation_runs_revision ON validation_runs(revision_id, created_at DESC);
+CREATE INDEX idx_validation_runs_scenario ON validation_runs(scenario_version_id, status);
+CREATE INDEX idx_validation_runs_release ON validation_runs(release_id, status);
+CREATE INDEX idx_validation_issues_run ON validation_issues(validation_run_id, severity, status);
+CREATE INDEX idx_scenarios_building ON scenarios(building_id, created_at DESC);
+CREATE INDEX idx_scenario_versions_revision ON scenario_versions(revision_id, created_at DESC);
 CREATE INDEX idx_scenario_versions_organization ON scenario_versions(organization_id);
 CREATE INDEX idx_scenario_versions_created_by ON scenario_versions(created_by);
+CREATE INDEX idx_scenario_drafts_scenario ON scenario_drafts(scenario_id, updated_at DESC);
 
 CREATE INDEX idx_trainings_release ON trainings(release_id);
 CREATE INDEX idx_trainings_scenario ON trainings(scenario_version_id);
@@ -880,6 +1363,9 @@ CREATE INDEX idx_sessions_trainee ON sessions(trainee_user_id);
 CREATE INDEX idx_sessions_device ON sessions(device_id);
 CREATE INDEX idx_sessions_qr_code ON sessions(qr_code_id);
 CREATE INDEX idx_sessions_running ON sessions(status, started_at) WHERE status IN ('Running', 'Launching');
+CREATE INDEX idx_playtest_sessions_organization ON playtest_sessions(organization_id, created_at DESC);
+CREATE INDEX idx_playtest_sessions_building ON playtest_sessions(building_id, created_at DESC);
+CREATE INDEX idx_playtest_sessions_entitlement ON playtest_sessions(service_entitlement_id, created_at DESC);
 
 CREATE INDEX idx_session_results_unsynced ON session_results(created_at) WHERE NOT is_synced;
 CREATE INDEX idx_session_events_type ON session_events(event_type);
@@ -901,8 +1387,22 @@ CREATE INDEX idx_payos_payment_requests_requested_by ON payos_payment_requests(r
 CREATE INDEX idx_payos_payment_requests_status ON payos_payment_requests(status, created_at);
 CREATE INDEX idx_payment_transactions_request ON payment_transactions(payment_request_id);
 CREATE INDEX idx_payment_transactions_status ON payment_transactions(status, received_at);
+CREATE INDEX idx_payment_provisioning_status ON payment_provisioning_records(status, updated_at DESC);
 CREATE INDEX idx_invoice_metadata_quotation ON invoice_metadata(quotation_id);
 CREATE INDEX idx_invoice_metadata_organization ON invoice_metadata(organization_id);
+CREATE INDEX idx_service_entitlements_building ON service_entitlements(building_id, starts_at DESC);
+CREATE INDEX idx_service_entitlements_active ON service_entitlements(building_id, ends_at)
+WHERE status IN ('Trial','Active');
+CREATE INDEX idx_ai_billing_periods_organization ON ai_billing_periods(organization_id, period_start DESC);
+CREATE INDEX idx_ai_quota_grants_scope ON ai_quota_grants(organization_id, building_id, audience, starts_at, ends_at);
+CREATE INDEX idx_ai_quota_grants_trainee ON ai_quota_grants(trainee_user_id, quota_kind, starts_at, ends_at);
+CREATE INDEX idx_ai_usage_ledger_organization ON ai_usage_ledger(organization_id, created_at DESC);
+CREATE INDEX idx_ai_usage_ledger_building ON ai_usage_ledger(building_id, created_at DESC);
+CREATE INDEX idx_ai_usage_ledger_user ON ai_usage_ledger(user_id, created_at DESC);
+CREATE INDEX idx_ai_usage_ledger_policy ON ai_usage_ledger(policy_version_id);
+CREATE INDEX idx_knowledge_sources_scope ON knowledge_sources(organization_id, visibility, approval_status);
+CREATE INDEX idx_knowledge_chunks_source ON knowledge_chunks(source_id);
+-- Chưa tạo ivfflat/HNSW index vì embedding model và số chiều production còn mở.
 CREATE INDEX idx_feedback_submitted_by ON feedback(submitted_by);
 CREATE INDEX idx_feedback_organization ON feedback(organization_id);
 CREATE INDEX idx_feedback_session ON feedback(session_id);
@@ -920,7 +1420,8 @@ CREATE INDEX idx_support_tickets_queue ON support_tickets(status, priority, crea
 
 -- ConfirmForTraining là action readiness nội bộ. BEFORE trigger khóa revision
 -- ngắn hạn, xác thực actor/scenario/organization và AFTER trigger mới chuyển
--- ReadyForScenario -> ConfirmedForTraining; không có nghĩa chứng nhận PCCC.
+-- ReadyForScenario -> ConfirmedForTraining hoặc giữ ConfirmedForTraining cho version mới;
+-- không có nghĩa chứng nhận PCCC.
 CREATE OR REPLACE FUNCTION validate_revision_review_action()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -971,12 +1472,12 @@ BEGIN
         RAISE EXCEPTION 'annotation_set_id must belong to revision_id';
     END IF;
 
-    IF NEW.action = 'ConfirmForTraining' AND v_revision.status != 'ReadyForScenario' THEN
-        RAISE EXCEPTION 'ConfirmForTraining requires a ReadyForScenario revision';
+    IF NEW.action = 'ConfirmForTraining' AND v_revision.status NOT IN ('ReadyForScenario', 'ConfirmedForTraining') THEN
+        RAISE EXCEPTION 'ConfirmForTraining requires a ReadyForScenario or ConfirmedForTraining revision';
     END IF;
 
-    IF NEW.action = 'Rejected' AND v_revision.status != 'ReadyForScenario' THEN
-        RAISE EXCEPTION 'Rejected review requires a ReadyForScenario revision';
+    IF NEW.action = 'Rejected' AND v_revision.status NOT IN ('ReadyForScenario', 'ConfirmedForTraining') THEN
+        RAISE EXCEPTION 'Rejected review requires a ReadyForScenario or ConfirmedForTraining revision';
     END IF;
 
     RETURN NEW;
@@ -989,12 +1490,15 @@ LANGUAGE plpgsql
 SET search_path = pg_catalog
 AS $$
 BEGIN
-    UPDATE public.revisions
-    SET status = CASE NEW.action
-        WHEN 'ConfirmForTraining' THEN 'ConfirmedForTraining'::public.revision_status_enum
-        ELSE 'Rejected'::public.revision_status_enum
-    END
-    WHERE id = NEW.revision_id;
+    -- Readiness belongs to the revision/scenario-version pair. A rejected
+    -- scenario must not turn shared geometry into a globally rejected
+    -- revision, because another scenario version can still be ready.
+    IF NEW.action = 'ConfirmForTraining' THEN
+        UPDATE public.revisions
+           SET status = 'ConfirmedForTraining'::public.revision_status_enum
+         WHERE id = NEW.revision_id
+           AND status IN ('ReadyForScenario','ConfirmedForTraining');
+    END IF;
 
     RETURN NEW;
 END;
@@ -1021,8 +1525,8 @@ BEGIN
         (OLD.status = 'Draft' AND NEW.status = 'Uploaded')
         OR (OLD.status = 'Uploaded' AND NEW.status IN ('Processing', 'Failed'))
         OR (OLD.status = 'Processing' AND NEW.status IN ('NeedsFix', 'ReadyForScenario', 'Failed'))
-        OR (OLD.status = 'NeedsFix' AND NEW.status IN ('Processing', 'Rejected', 'Superseded'))
-        OR (OLD.status = 'ReadyForScenario' AND NEW.status IN ('ConfirmedForTraining', 'Rejected', 'Superseded'))
+        OR (OLD.status = 'NeedsFix' AND NEW.status IN ('Processing', 'Superseded'))
+        OR (OLD.status = 'ReadyForScenario' AND NEW.status IN ('ConfirmedForTraining', 'Superseded'))
         OR (OLD.status = 'ConfirmedForTraining' AND NEW.status = 'Superseded')
         OR (OLD.status = 'Rejected' AND NEW.status = 'Superseded')
         OR (OLD.status = 'Failed' AND NEW.status IN ('Processing', 'Superseded'))
@@ -1037,15 +1541,6 @@ BEGIN
           AND review.action = 'ConfirmForTraining'
     ) THEN
         RAISE EXCEPTION 'ConfirmedForTraining requires a persisted ConfirmForTraining action';
-    END IF;
-
-    IF NEW.status = 'Rejected' AND NOT EXISTS (
-        SELECT 1
-        FROM public.revision_reviews AS review
-        WHERE review.revision_id = NEW.id
-          AND review.action = 'Rejected'
-    ) THEN
-        RAISE EXCEPTION 'Rejected requires a persisted review action';
     END IF;
 
     RETURN NEW;
@@ -1089,7 +1584,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION confirm_revision_for_training(UUID, UUID, UUID, UUID, TEXT) IS
-'Readiness-only action: records ConfirmForTraining and transitions ReadyForScenario to ConfirmedForTraining; it is not certification or fire-safety approval.';
+'Readiness-only action: records ConfirmForTraining for one scenario version and transitions the revision to ConfirmedForTraining; other compatible scenario versions may still be authored; it is not certification or fire-safety approval.';
 
 CREATE OR REPLACE FUNCTION validate_scenario_version_write()
 RETURNS TRIGGER
@@ -1101,11 +1596,16 @@ BEGIN
         SELECT 1
         FROM public.revisions AS revision
         JOIN public.buildings AS building ON building.id = revision.building_id
+        JOIN public.scenarios AS scenario
+          ON scenario.id = NEW.scenario_id
+         AND scenario.building_id = NEW.building_id
+         AND scenario.organization_id = NEW.organization_id
         WHERE revision.id = NEW.revision_id
-          AND revision.status = 'ReadyForScenario'
+          AND revision.status IN ('ReadyForScenario', 'ConfirmedForTraining')
+          AND revision.building_id = NEW.building_id
           AND building.organization_id = NEW.organization_id
     ) THEN
-        RAISE EXCEPTION 'scenario authoring requires a matching ReadyForScenario revision and organization';
+        RAISE EXCEPTION 'scenario authoring requires a matching ReadyForScenario or ConfirmedForTraining revision, scenario, building and organization';
     END IF;
 
     IF NOT EXISTS (
@@ -1120,8 +1620,8 @@ BEGIN
         RAISE EXCEPTION 'created_by must be an active OrganizationUser for the scenario organization';
     END IF;
 
-    IF TG_OP = 'UPDATE' AND OLD.created_by IS DISTINCT FROM NEW.created_by THEN
-        RAISE EXCEPTION 'scenario created_by is immutable';
+    IF TG_OP = 'UPDATE' THEN
+        RAISE EXCEPTION 'scenario versions are immutable; create a new version from the draft';
     END IF;
 
     RETURN NEW;
@@ -1129,34 +1629,47 @@ END;
 $$;
 
 -- Enforce the executable order: ConfirmForTraining -> Built release + matching
--- Training/package -> Published release -> active QR bound to that Training.
+-- Training/package -> active Building service -> Published release.
 CREATE OR REPLACE FUNCTION validate_release_write()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 SET search_path = pg_catalog
 AS $$
 BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM public.revisions AS revision
-        JOIN public.buildings AS building ON building.id = revision.building_id
-        JOIN public.scenario_versions AS scenario
-          ON scenario.id = NEW.scenario_version_id
-         AND scenario.revision_id = revision.id
-        WHERE revision.id = NEW.revision_id
-          AND revision.status = 'ConfirmedForTraining'
-          AND building.id = NEW.building_id
-          AND building.organization_id = NEW.organization_id
-          AND scenario.organization_id = NEW.organization_id
-          AND EXISTS (
-              SELECT 1
-              FROM public.revision_reviews AS review
-              WHERE review.revision_id = revision.id
-                AND review.scenario_version_id = scenario.id
-                AND review.action = 'ConfirmForTraining'
-          )
-    ) THEN
-        RAISE EXCEPTION 'release requires the matching ConfirmedForTraining revision, scenario, building and organization';
+    IF TG_OP = 'INSERT'
+       OR (TG_OP = 'UPDATE' AND OLD.status IS DISTINCT FROM NEW.status AND NEW.status = 'Published') THEN
+        IF NOT EXISTS (
+            SELECT 1
+            FROM public.revisions AS revision
+            JOIN public.buildings AS building ON building.id = revision.building_id
+            JOIN public.scenario_versions AS scenario
+              ON scenario.id = NEW.scenario_version_id
+             AND scenario.revision_id = revision.id
+            WHERE revision.id = NEW.revision_id
+              AND revision.status = 'ConfirmedForTraining'
+              AND building.id = NEW.building_id
+              AND building.organization_id = NEW.organization_id
+              AND scenario.organization_id = NEW.organization_id
+              AND EXISTS (
+                  SELECT 1
+                  FROM public.revision_reviews AS review
+                   WHERE review.revision_id = revision.id
+                     AND review.scenario_version_id = scenario.id
+                     AND review.action = 'ConfirmForTraining'
+                     AND NOT EXISTS (
+                         SELECT 1
+                           FROM public.revision_reviews AS newer_review
+                          WHERE newer_review.revision_id = review.revision_id
+                            AND newer_review.scenario_version_id = review.scenario_version_id
+                            AND (
+                                newer_review.reviewed_at > review.reviewed_at
+                                OR (newer_review.reviewed_at = review.reviewed_at AND newer_review.id > review.id)
+                            )
+                     )
+               )
+        ) THEN
+            RAISE EXCEPTION 'release requires the matching ConfirmedForTraining revision, scenario, building and organization';
+        END IF;
     END IF;
 
     IF TG_OP = 'INSERT' THEN
@@ -1192,16 +1705,6 @@ BEGIN
         RAISE EXCEPTION 'release revocation provenance is immutable';
     END IF;
 
-    IF EXISTS (
-        SELECT 1
-        FROM public.release_qr_codes AS qr
-        WHERE qr.release_id = OLD.id
-          AND qr.is_active
-          AND (qr.expires_at IS NULL OR qr.expires_at > pg_catalog.now())
-    ) AND NEW.status != 'Published' THEN
-        RAISE EXCEPTION 'deactivate active QR codes before changing Published release status';
-    END IF;
-
     IF OLD.status IS DISTINCT FROM NEW.status AND NOT (
         (OLD.status = 'Built' AND NEW.status IN ('Published', 'Revoked'))
         OR (OLD.status = 'Published' AND NEW.status IN ('Superseded', 'Revoked'))
@@ -1227,7 +1730,22 @@ BEGIN
         IF NOT EXISTS (
             SELECT 1
             FROM public.release_packages AS package
+            JOIN public.runtime_compatibility_catalog AS catalog
+              ON catalog.protocol_version = package.protocol_version
+             AND catalog.manifest_schema_version = package.manifest_schema_version
+             AND catalog.is_active
             WHERE package.release_id = NEW.id
+              AND NULLIF(pg_catalog.btrim(package.checksum_sha256), '') IS NOT NULL
+              AND NULLIF(pg_catalog.btrim(package.manifest_url), '') IS NOT NULL
+              AND NULLIF(pg_catalog.btrim(package.package_url), '') IS NOT NULL
+              AND public.fet3d_runtime_package_is_compatible(
+                    catalog.runtime_version,
+                    package.min_runtime_version,
+                    package.protocol_version,
+                    package.manifest_schema_version,
+                    package.required_capabilities,
+                    catalog.id
+              )
         ) OR NOT EXISTS (
             SELECT 1
             FROM public.trainings AS training
@@ -1238,8 +1756,338 @@ BEGIN
         ) THEN
             RAISE EXCEPTION 'publish requires a package and matching Active Training';
         END IF;
+        IF NOT EXISTS (
+            SELECT 1
+            FROM public.release_packages AS package
+            JOIN public.validation_runs AS run
+              ON run.id = package.candidate_validation_run_id
+             AND run.revision_id = NEW.revision_id
+             AND run.scenario_version_id = NEW.scenario_version_id
+             AND run.release_id = NEW.id
+              AND run.scope = 'ReleasePackage'
+             AND run.status = 'Passed'
+             JOIN public.revision_artifacts AS artifact
+               ON artifact.id = run.artifact_id
+              AND artifact.sha256_hash = package.checksum_sha256
+              AND artifact.metadata ->> 'manifest_sha256' = package.manifest_sha256
+              AND artifact.metadata ->> 'build_target' = package.build_target
+              AND artifact.metadata ->> 'min_runtime_version' = package.min_runtime_version
+              AND artifact.metadata ->> 'protocol_version' = package.protocol_version
+              AND artifact.metadata ->> 'manifest_schema_version' = package.manifest_schema_version
+              AND artifact.metadata ? 'required_capabilities'
+              AND pg_catalog.jsonb_typeof(artifact.metadata -> 'required_capabilities') = 'array'
+              AND artifact.metadata -> 'required_capabilities' = package.required_capabilities
+            WHERE package.release_id = NEW.id
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM public.validation_issues AS issue
+                  WHERE issue.validation_run_id = run.id
+                    AND issue.severity IN ('Error','Critical')
+                    AND issue.status NOT IN ('Resolved','Waived')
+              )
+        ) THEN
+            RAISE EXCEPTION 'publish requires a passed ReleasePackage validation run with no open Error/Critical issue';
+        END IF;
+        IF NOT EXISTS (
+            SELECT 1
+            FROM public.service_entitlements AS entitlement
+            WHERE entitlement.building_id = NEW.building_id
+              AND entitlement.organization_id = NEW.organization_id
+              AND entitlement.status = 'Active'
+              AND entitlement.starts_at <= pg_catalog.now()
+              AND entitlement.ends_at > pg_catalog.now()
+        ) THEN
+            RAISE EXCEPTION 'publish requires an online active Building service entitlement';
+        END IF;
     END IF;
 
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION validate_service_entitlement_write()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = pg_catalog
+AS $$
+BEGIN
+    IF (TG_OP = 'INSERT' OR (TG_OP = 'UPDATE' AND OLD.status IS DISTINCT FROM NEW.status AND NEW.status = 'Published'))
+       AND NOT EXISTS (
+        SELECT 1
+        FROM public.buildings AS building
+        WHERE building.id = NEW.building_id
+          AND building.organization_id = NEW.organization_id
+    ) THEN
+        RAISE EXCEPTION 'service entitlement building and organization must match';
+    END IF;
+
+    IF NEW.quotation_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1
+        FROM public.quotations AS quotation
+        WHERE quotation.id = NEW.quotation_id
+          AND quotation.billing_purpose = 'BuildingService'
+          AND quotation.organization_id = NEW.organization_id
+          AND quotation.building_id = NEW.building_id
+          AND quotation.service_package_id = NEW.service_package_id
+          AND quotation.service_duration_months IS NOT NULL
+          AND quotation.price_snapshot = NEW.price_snapshot
+          AND quotation.terms_snapshot = NEW.terms_snapshot
+    ) THEN
+        RAISE EXCEPTION 'service entitlement quotation must be a matching BuildingService quotation';
+    END IF;
+
+    IF NEW.payment_transaction_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1
+        FROM public.payment_transactions AS payment
+        JOIN public.payos_payment_requests AS request
+          ON request.id = payment.payment_request_id
+        WHERE payment.id = NEW.payment_transaction_id
+          AND payment.status = 'Applied'
+          AND request.quotation_id = NEW.quotation_id
+          AND request.organization_id = NEW.organization_id
+    ) THEN
+        RAISE EXCEPTION 'service entitlement payment must be the Applied transaction for its quotation';
+    END IF;
+
+    IF NEW.status = 'Active' AND NEW.provisioning_key IS DISTINCT FROM (
+        'service:' || NEW.quotation_id::TEXT || ':' || NEW.payment_transaction_id::TEXT
+    ) THEN
+        RAISE EXCEPTION 'Active service entitlement provisioning_key must be deterministic from quotation and payment';
+    END IF;
+
+    IF TG_OP = 'UPDATE' AND (
+        OLD.organization_id IS DISTINCT FROM NEW.organization_id
+        OR OLD.building_id IS DISTINCT FROM NEW.building_id
+        OR OLD.service_package_id IS DISTINCT FROM NEW.service_package_id
+        OR OLD.quotation_id IS DISTINCT FROM NEW.quotation_id
+        OR OLD.payment_transaction_id IS DISTINCT FROM NEW.payment_transaction_id
+        OR OLD.provisioning_key IS DISTINCT FROM NEW.provisioning_key
+        OR OLD.starts_at IS DISTINCT FROM NEW.starts_at
+        OR OLD.ends_at IS DISTINCT FROM NEW.ends_at
+        OR OLD.price_snapshot IS DISTINCT FROM NEW.price_snapshot
+        OR OLD.terms_snapshot IS DISTINCT FROM NEW.terms_snapshot
+        OR OLD.created_by IS DISTINCT FROM NEW.created_by
+    ) THEN
+        RAISE EXCEPTION 'service entitlement provenance and identity are immutable';
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION validate_playtest_session_write_pre_runtime()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = pg_catalog
+AS $$
+BEGIN
+    IF (TG_OP = 'INSERT' OR (TG_OP = 'UPDATE' AND OLD.status IS DISTINCT FROM NEW.status AND NEW.status = 'Published'))
+       AND NOT EXISTS (
+        SELECT 1
+        FROM public.revisions AS revision
+        JOIN public.scenario_versions AS scenario
+          ON scenario.id = NEW.scenario_version_id
+         AND scenario.revision_id = revision.id
+         AND scenario.building_id = NEW.building_id
+         AND scenario.organization_id = NEW.organization_id
+        WHERE revision.id = NEW.revision_id
+    ) THEN
+        RAISE EXCEPTION 'playtest scenario version, revision, building and organization must match';
+    END IF;
+
+    IF NEW.scenario_draft_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1
+        FROM public.scenario_drafts AS draft
+        JOIN public.scenario_versions AS scenario
+          ON scenario.id = NEW.scenario_version_id
+         AND scenario.scenario_id = draft.scenario_id
+        WHERE draft.id = NEW.scenario_draft_id
+          AND draft.revision_id = NEW.revision_id
+          AND draft.building_id = NEW.building_id
+          AND draft.organization_id = NEW.organization_id
+    ) THEN
+        RAISE EXCEPTION 'playtest draft must match the selected scenario version, revision, building and organization';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM public.users AS creator
+        WHERE creator.id = NEW.created_by
+          AND creator.role = 'OrganizationUser'
+          AND creator.organization_id = NEW.organization_id
+          AND creator.is_active
+          AND creator.deleted_at IS NULL
+    ) THEN
+        RAISE EXCEPTION 'playtest created_by must be an active OrganizationUser in the same tenant';
+    END IF;
+
+    IF NULLIF(pg_catalog.btrim(NEW.package_hash), '') IS NULL
+       OR NEW.package_artifact_id IS NULL OR NEW.package_validation_run_id IS NULL THEN
+        RAISE EXCEPTION 'playtest package hash, artifact and validation pin are required';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM public.validation_runs AS run
+        JOIN public.revision_artifacts AS artifact
+          ON artifact.id = run.artifact_id
+         AND artifact.sha256_hash = NEW.package_hash
+          WHERE run.id = NEW.package_validation_run_id
+            AND run.revision_id = NEW.revision_id
+            AND run.scenario_version_id = NEW.scenario_version_id
+            AND run.artifact_id = NEW.package_artifact_id
+          AND run.scope = 'PlaytestPackage'
+          AND run.status = 'Passed'
+          AND NOT EXISTS (
+              SELECT 1
+              FROM public.validation_issues AS issue
+              WHERE issue.validation_run_id = run.id
+                AND issue.severity IN ('Error','Critical')
+                AND issue.status NOT IN ('Resolved','Waived')
+          )
+    ) THEN
+        RAISE EXCEPTION 'playtest package requires a matching passed validation run with no open Error/Critical issue';
+    END IF;
+
+    IF TG_OP = 'UPDATE' AND (
+        OLD.organization_id IS DISTINCT FROM NEW.organization_id
+        OR OLD.building_id IS DISTINCT FROM NEW.building_id
+        OR OLD.revision_id IS DISTINCT FROM NEW.revision_id
+        OR OLD.scenario_draft_id IS DISTINCT FROM NEW.scenario_draft_id
+        OR OLD.scenario_version_id IS DISTINCT FROM NEW.scenario_version_id
+         OR OLD.service_entitlement_id IS DISTINCT FROM NEW.service_entitlement_id
+         OR OLD.package_hash IS DISTINCT FROM NEW.package_hash
+         OR OLD.package_artifact_id IS DISTINCT FROM NEW.package_artifact_id
+         OR OLD.package_validation_run_id IS DISTINCT FROM NEW.package_validation_run_id
+        OR (OLD.start_idempotency_key IS NOT NULL AND OLD.start_idempotency_key IS DISTINCT FROM NEW.start_idempotency_key)
+    ) THEN
+        RAISE EXCEPTION 'playtest identity, package and pinned scenario are immutable';
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION validate_ai_billing_period_write_pre_runtime()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = pg_catalog
+AS $$
+BEGIN
+    IF NEW.settlement_quotation_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1
+        FROM public.quotations AS quotation
+        WHERE quotation.id = NEW.settlement_quotation_id
+          AND quotation.billing_purpose = 'AIUsage'
+          AND quotation.organization_id = NEW.organization_id
+          AND quotation.building_id IS NULL
+          AND quotation.service_package_id IS NULL
+    ) THEN
+        RAISE EXCEPTION 'AI billing period settlement quotation must be an AIUsage quotation for the same organization';
+    END IF;
+
+    IF NEW.settlement_payment_transaction_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1
+        FROM public.payment_transactions AS payment
+        JOIN public.payos_payment_requests AS request
+          ON request.id = payment.payment_request_id
+        WHERE payment.id = NEW.settlement_payment_transaction_id
+          AND payment.status = 'Applied'
+          AND request.quotation_id = NEW.settlement_quotation_id
+          AND request.organization_id = NEW.organization_id
+    ) THEN
+        RAISE EXCEPTION 'AI billing period payment must be Applied for its AIUsage quotation';
+    END IF;
+
+    IF NEW.status IN ('Invoiced','Paid') AND NEW.settlement_quotation_id IS NULL THEN
+        RAISE EXCEPTION 'Invoiced or Paid AI billing periods require an AIUsage quotation snapshot';
+    END IF;
+    IF NEW.status = 'Paid' AND NEW.settlement_payment_transaction_id IS NULL THEN
+        RAISE EXCEPTION 'Paid AI billing periods require an Applied settlement payment';
+    END IF;
+
+    IF TG_OP = 'UPDATE' AND OLD.status <> 'Open' AND (
+        OLD.period_start IS DISTINCT FROM NEW.period_start
+        OR OLD.period_end IS DISTINCT FROM NEW.period_end
+        OR OLD.unit_price_snapshot IS DISTINCT FROM NEW.unit_price_snapshot
+        OR OLD.overage_units IS DISTINCT FROM NEW.overage_units
+        OR OLD.overage_amount IS DISTINCT FROM NEW.overage_amount
+    ) THEN
+        RAISE EXCEPTION 'closed AI billing period snapshot and totals are immutable';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION validate_ai_quota_grant_write()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = pg_catalog
+AS $$
+BEGIN
+    IF NEW.audience = 'organization' AND NEW.building_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1
+        FROM public.buildings AS building
+        WHERE building.id = NEW.building_id
+          AND building.organization_id = NEW.organization_id
+    ) THEN
+        RAISE EXCEPTION 'organization quota grant building must belong to the grant organization';
+    END IF;
+    IF NEW.audience = 'trainee' AND NOT EXISTS (
+        SELECT 1
+        FROM public.users AS trainee
+        WHERE trainee.id = NEW.trainee_user_id
+          AND trainee.role = 'Trainee'
+          AND trainee.is_active
+          AND trainee.deleted_at IS NULL
+    ) THEN
+        RAISE EXCEPTION 'trainee quota grant must target an active Trainee';
+    END IF;
+    IF TG_OP = 'UPDATE' AND (
+        OLD.audience IS DISTINCT FROM NEW.audience
+        OR OLD.organization_id IS DISTINCT FROM NEW.organization_id
+        OR OLD.building_id IS DISTINCT FROM NEW.building_id
+        OR OLD.trainee_user_id IS DISTINCT FROM NEW.trainee_user_id
+        OR OLD.quota_kind IS DISTINCT FROM NEW.quota_kind
+        OR OLD.starts_at IS DISTINCT FROM NEW.starts_at
+        OR OLD.ends_at IS DISTINCT FROM NEW.ends_at
+    ) THEN
+        RAISE EXCEPTION 'quota grant audience, scope, kind and period are immutable';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION validate_payment_provisioning_write()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = pg_catalog
+AS $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM public.payment_transactions AS payment
+        JOIN public.payos_payment_requests AS request
+          ON request.id = payment.payment_request_id
+        JOIN public.quotations AS quotation
+          ON quotation.id = request.quotation_id
+        WHERE payment.id = NEW.payment_transaction_id
+          AND payment.status = 'Applied'
+          AND request.quotation_id = NEW.quotation_id
+          AND request.organization_id = NEW.organization_id
+          AND quotation.billing_purpose = 'BuildingService'
+          AND quotation.organization_id = NEW.organization_id
+    ) THEN
+        RAISE EXCEPTION 'payment provisioning record requires an Applied BuildingService payment for the same organization and quotation';
+    END IF;
+    IF TG_OP = 'UPDATE' AND (
+        OLD.payment_transaction_id IS DISTINCT FROM NEW.payment_transaction_id
+        OR OLD.quotation_id IS DISTINCT FROM NEW.quotation_id
+        OR OLD.organization_id IS DISTINCT FROM NEW.organization_id
+        OR OLD.provisioning_key IS DISTINCT FROM NEW.provisioning_key
+    ) THEN
+        RAISE EXCEPTION 'payment provisioning provenance is immutable';
+    END IF;
     RETURN NEW;
 END;
 $$;
@@ -1276,21 +2124,6 @@ BEGIN
         RAISE EXCEPTION 'created_by must be an active OrganizationUser for the training organization';
     END IF;
 
-    IF TG_OP = 'UPDATE' AND EXISTS (
-        SELECT 1
-        FROM public.release_qr_codes AS qr
-        WHERE qr.training_id = OLD.id
-          AND qr.is_active
-          AND (qr.expires_at IS NULL OR qr.expires_at > pg_catalog.now())
-    ) AND (
-        NEW.release_id IS DISTINCT FROM OLD.release_id
-        OR NEW.scenario_version_id IS DISTINCT FROM OLD.scenario_version_id
-        OR NEW.organization_id IS DISTINCT FROM OLD.organization_id
-        OR NEW.status != 'Active'
-    ) THEN
-        RAISE EXCEPTION 'deactivate active QR codes before changing their Training binding or status';
-    END IF;
-
     RETURN NEW;
 END;
 $$;
@@ -1303,19 +2136,13 @@ AS $$
 BEGIN
     IF NOT EXISTS (
         SELECT 1
-        FROM public.trainings AS training
-        JOIN public.releases AS release ON release.id = training.release_id
-        JOIN public.scenario_versions AS scenario ON scenario.id = training.scenario_version_id
-        WHERE training.id = NEW.training_id
-          AND training.release_id = NEW.release_id
-          AND training.organization_id = NEW.organization_id
-          AND release.id = NEW.release_id
-          AND release.organization_id = NEW.organization_id
-          AND release.scenario_version_id = training.scenario_version_id
-          AND scenario.revision_id = release.revision_id
-          AND scenario.organization_id = NEW.organization_id
+        FROM public.buildings AS building
+        WHERE building.id = NEW.building_id
+          AND building.organization_id = NEW.organization_id
+          AND building.is_active
+          AND building.deleted_at IS NULL
     ) THEN
-        RAISE EXCEPTION 'QR, Training, release, scenario and organization must be consistent';
+        RAISE EXCEPTION 'QR building must belong to an active building in the QR organization';
     END IF;
 
     IF NOT EXISTS (
@@ -1333,24 +2160,18 @@ BEGIN
     IF NEW.floor_id IS NOT NULL AND NOT EXISTS (
         SELECT 1
         FROM public.building_floors AS floor
-        JOIN public.releases AS release ON release.building_id = floor.building_id
         WHERE floor.id = NEW.floor_id
+          AND floor.building_id = NEW.building_id
           AND floor.organization_id = NEW.organization_id
-          AND release.id = NEW.release_id
     ) THEN
-        RAISE EXCEPTION 'floor_id must belong to the QR release building and organization';
+        RAISE EXCEPTION 'floor_id must belong to the QR building and organization';
     END IF;
 
     IF NEW.is_active AND NOT EXISTS (
-        SELECT 1
-        FROM public.trainings AS training
-        JOIN public.releases AS release ON release.id = training.release_id
-        WHERE training.id = NEW.training_id
-          AND training.status = 'Active'
-          AND release.id = NEW.release_id
-          AND release.status = 'Published'
+        SELECT 1 FROM public.buildings AS building
+        WHERE building.id = NEW.building_id AND building.is_active
     ) THEN
-        RAISE EXCEPTION 'an active QR requires its matching Active Training and Published release';
+        RAISE EXCEPTION 'an active QR requires an active building';
     END IF;
 
     IF NEW.is_active
@@ -1359,13 +2180,21 @@ BEGIN
         RAISE EXCEPTION 'an active QR cannot already be expired';
     END IF;
 
+    IF TG_OP = 'UPDATE' AND (
+        NEW.building_id IS DISTINCT FROM OLD.building_id
+        OR NEW.organization_id IS DISTINCT FROM OLD.organization_id
+        OR NEW.qr_hash IS DISTINCT FROM OLD.qr_hash
+    ) THEN
+        RAISE EXCEPTION 'Building QR identity and tenant are immutable; rotate by creating a new QR';
+    END IF;
+
     RETURN NEW;
 END;
 $$;
 
--- Chỉ kiểm tra tính nhất quán dữ liệu sở hữu của training/release; không so khớp
--- organization của Trainee. Eligibility chỉ là Trainee active + QR active gắn
--- một Training Active duy nhất + release Published.
+-- Kiểm tra dữ liệu session preparation đã pin sau khi người chơi chọn một
+-- Training từ Building QR. Entitlement online chỉ được kiểm tra bởi explicit
+-- start function; session đang chạy vẫn có thể hoàn tất sau khi hết hạn.
 CREATE OR REPLACE FUNCTION validate_training_session()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -1395,11 +2224,10 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1
         FROM public.release_qr_codes q
-        JOIN public.trainings t ON t.id = q.training_id
-        JOIN public.releases r ON r.id = q.release_id
+        JOIN public.trainings t ON t.id = NEW.training_id
+        JOIN public.releases r ON r.id = NEW.release_id
         WHERE q.id = NEW.qr_code_id
-          AND q.training_id = NEW.training_id
-          AND q.release_id = NEW.release_id
+          AND q.building_id = r.building_id
           AND q.organization_id = NEW.organization_id
           AND q.is_active
           AND (q.expires_at IS NULL OR q.expires_at > pg_catalog.now())
@@ -1408,14 +2236,92 @@ BEGIN
           AND t.organization_id = NEW.organization_id
           AND t.status = 'Active'
           AND NEW.mode::TEXT = ANY(t.allowed_modes)
-          AND r.id = NEW.release_id
           AND r.status = 'Published'
           AND r.scenario_version_id = NEW.scenario_version_id
           AND r.organization_id = NEW.organization_id
     ) THEN
-        RAISE EXCEPTION 'session requires the QR-pinned Active Training, Published release, scenario, organization and allowed mode';
+        RAISE EXCEPTION 'session requires the selected Active Training, Published release, scenario, organization and active Building QR';
     END IF;
 
+    IF NULLIF(pg_catalog.btrim(NEW.package_hash), '') IS NULL
+       OR NEW.package_artifact_id IS NULL OR NEW.package_validation_run_id IS NULL THEN
+        RAISE EXCEPTION 'session preparation requires a verified package, artifact and validation pin';
+    END IF;
+    IF NULLIF(pg_catalog.btrim(NEW.manifest_sha256), '') IS NULL
+       OR NULLIF(pg_catalog.btrim(NEW.build_target), '') IS NULL THEN
+        RAISE EXCEPTION 'session preparation requires a manifest hash and build target';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM public.release_packages AS package
+        WHERE package.release_id = NEW.release_id
+          AND package.candidate_artifact_id = NEW.package_artifact_id
+          AND package.candidate_validation_run_id = NEW.package_validation_run_id
+          AND package.checksum_sha256 = NEW.package_hash
+          AND package.manifest_sha256 = NEW.manifest_sha256
+          AND package.build_target = NEW.build_target
+          AND package.protocol_version = NEW.protocol_version
+          AND package.manifest_schema_version = NEW.manifest_schema_version
+    ) THEN
+        RAISE EXCEPTION 'session package metadata does not match the pinned release package';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM public.validation_runs AS run
+        JOIN public.releases AS release ON release.id = NEW.release_id
+         WHERE run.id = NEW.package_validation_run_id
+           AND run.release_id = NEW.release_id
+           AND run.revision_id = release.revision_id
+           AND run.artifact_id = NEW.package_artifact_id
+           AND run.scope = 'ReleasePackage'
+           AND run.status = 'Passed'
+    ) THEN
+        RAISE EXCEPTION 'session preparation requires the pinned passed package validation run';
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION validate_training_session_lifecycle_pre_runtime()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = pg_catalog
+AS $$
+BEGIN
+    IF TG_OP = 'UPDATE' AND (
+        OLD.training_id IS DISTINCT FROM NEW.training_id
+        OR OLD.release_id IS DISTINCT FROM NEW.release_id
+        OR OLD.scenario_version_id IS DISTINCT FROM NEW.scenario_version_id
+        OR OLD.organization_id IS DISTINCT FROM NEW.organization_id
+        OR OLD.trainee_user_id IS DISTINCT FROM NEW.trainee_user_id
+        OR OLD.device_id IS DISTINCT FROM NEW.device_id
+        OR OLD.qr_code_id IS DISTINCT FROM NEW.qr_code_id
+        OR OLD.mode IS DISTINCT FROM NEW.mode
+        OR OLD.package_hash IS DISTINCT FROM NEW.package_hash
+        OR OLD.package_artifact_id IS DISTINCT FROM NEW.package_artifact_id
+        OR OLD.package_validation_run_id IS DISTINCT FROM NEW.package_validation_run_id
+        OR OLD.manifest_schema_version IS DISTINCT FROM NEW.manifest_schema_version
+        OR OLD.prepare_idempotency_key IS DISTINCT FROM NEW.prepare_idempotency_key
+        OR (OLD.start_idempotency_key IS NOT NULL AND OLD.start_idempotency_key IS DISTINCT FROM NEW.start_idempotency_key)
+        OR (OLD.launch_granted_at IS NOT NULL AND OLD.launch_granted_at IS DISTINCT FROM NEW.launch_granted_at)
+        OR (OLD.started_at IS NOT NULL AND OLD.started_at IS DISTINCT FROM NEW.started_at)
+    ) THEN
+        RAISE EXCEPTION 'session identity, package and preparation key are immutable after preparation';
+    END IF;
+
+    IF NEW.status IN ('Launching','Running') AND (
+        NEW.launch_granted_at IS NULL OR NEW.start_idempotency_key IS NULL
+    ) THEN
+        RAISE EXCEPTION 'Launching or Running requires an online start grant and idempotency key';
+    END IF;
+    IF NEW.status = 'Running' AND NEW.started_at IS NULL THEN
+        RAISE EXCEPTION 'Running requires started_at from the Unity bridge';
+    END IF;
+    IF NEW.status IN ('Completed','CompletedWithSupersededRelease','ScenarioUnsurvivable','Aborted','Abandoned','Crashed')
+       AND NEW.launch_granted_at IS NULL THEN
+        RAISE EXCEPTION 'a session cannot complete or terminate before online start';
+    END IF;
     RETURN NEW;
 END;
 $$;
@@ -1482,9 +2388,32 @@ $$ LANGUAGE plpgsql;
 
 -- Paid chỉ được ghi khi transaction của chính request đã Applied sau verified webhook
 -- và ba giá trị orderCode, amount, currency khớp hoàn toàn với request mong đợi.
-CREATE OR REPLACE FUNCTION validate_payos_paid_request()
+CREATE OR REPLACE FUNCTION validate_payos_paid_request_pre_runtime()
 RETURNS TRIGGER AS $$
 BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM public.quotations AS quotation
+        WHERE quotation.id = NEW.quotation_id
+          AND quotation.organization_id = NEW.organization_id
+          AND quotation.total_amount = NEW.expected_amount
+          AND quotation.currency = NEW.expected_currency
+    ) THEN
+        RAISE EXCEPTION 'PayOS request must match quotation organization, amount and currency';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM public.users AS requester
+        WHERE requester.id = NEW.requested_by
+          AND requester.role = 'OrganizationUser'
+          AND requester.organization_id = NEW.organization_id
+          AND requester.is_active
+          AND requester.deleted_at IS NULL
+    ) THEN
+        RAISE EXCEPTION 'PayOS request requested_by must be an active OrganizationUser in the same tenant';
+    END IF;
+
     IF TG_OP = 'UPDATE' AND (
         OLD.order_code != NEW.order_code
         OR OLD.expected_amount != NEW.expected_amount
@@ -1529,6 +2458,33 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+CREATE OR REPLACE FUNCTION validate_quotation_snapshot_write()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = pg_catalog
+AS $$
+BEGIN
+    IF TG_OP = 'UPDATE' AND OLD.status <> 'Draft' AND (
+        OLD.billing_purpose IS DISTINCT FROM NEW.billing_purpose
+        OR OLD.building_id IS DISTINCT FROM NEW.building_id
+        OR OLD.service_package_id IS DISTINCT FROM NEW.service_package_id
+        OR OLD.service_duration_months IS DISTINCT FROM NEW.service_duration_months
+        OR OLD.quantity IS DISTINCT FROM NEW.quantity
+        OR OLD.unit_price IS DISTINCT FROM NEW.unit_price
+        OR OLD.subtotal_amount IS DISTINCT FROM NEW.subtotal_amount
+        OR OLD.tax_amount IS DISTINCT FROM NEW.tax_amount
+        OR OLD.discount_amount IS DISTINCT FROM NEW.discount_amount
+        OR OLD.total_amount IS DISTINCT FROM NEW.total_amount
+        OR OLD.currency IS DISTINCT FROM NEW.currency
+        OR OLD.price_snapshot IS DISTINCT FROM NEW.price_snapshot
+        OR OLD.terms_snapshot IS DISTINCT FROM NEW.terms_snapshot
+    ) THEN
+        RAISE EXCEPTION 'issued or accepted quotation price, duration, purpose and terms snapshots are immutable';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
 -- Runtime payment creation path. The backend calls PayOS outside any DB transaction,
 -- then invokes this short function with the returned HTTPS checkout URL. Amount,
 -- currency and organization are derived from the locked Accepted quotation; callers
@@ -1536,6 +2492,7 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION create_pending_payos_payment_request(
     p_quotation_id UUID,
     p_requested_by UUID,
+    p_idempotency_key TEXT,
     p_order_code BIGINT,
     p_checkout_url TEXT,
     p_return_url TEXT,
@@ -1552,6 +2509,25 @@ DECLARE
 BEGIN
     IF p_quotation_id IS NULL OR p_requested_by IS NULL THEN
         RAISE EXCEPTION 'quotation_id and requested_by are required';
+    END IF;
+    IF NULLIF(pg_catalog.btrim(p_idempotency_key), '') IS NULL THEN
+        RAISE EXCEPTION 'payment request idempotency key is required';
+    END IF;
+    SELECT request.id INTO v_payment_request_id
+    FROM public.payos_payment_requests AS request
+    WHERE request.idempotency_key = pg_catalog.btrim(p_idempotency_key)
+    FOR UPDATE;
+    IF FOUND THEN
+        IF NOT EXISTS (
+            SELECT 1
+            FROM public.payos_payment_requests AS request
+            WHERE request.id = v_payment_request_id
+              AND request.quotation_id = p_quotation_id
+              AND request.requested_by = p_requested_by
+        ) THEN
+            RAISE EXCEPTION 'payment request idempotency key was reused for different input';
+        END IF;
+        RETURN v_payment_request_id;
     END IF;
     IF p_order_code IS NULL OR p_order_code <= 0 THEN
         RAISE EXCEPTION 'orderCode must be a positive integer';
@@ -1579,6 +2555,7 @@ BEGIN
         quotation_id,
         organization_id,
         requested_by,
+        idempotency_key,
         order_code,
         expected_amount,
         expected_currency,
@@ -1591,6 +2568,7 @@ BEGIN
     SELECT quotation.id,
            quotation.organization_id,
            p_requested_by,
+           pg_catalog.btrim(p_idempotency_key),
            p_order_code,
            quotation.total_amount,
            quotation.currency,
@@ -1620,9 +2598,9 @@ END;
 $$;
 
 COMMENT ON FUNCTION create_pending_payos_payment_request(
-    UUID, UUID, BIGINT, TEXT, TEXT, TEXT, TIMESTAMPTZ
+    UUID, UUID, TEXT, BIGINT, TEXT, TEXT, TEXT, TIMESTAMPTZ
 ) IS
-'Creates only Pending PayOS requests from an Accepted quotation after the backend completes the external PayOS call; returnUrl remains navigation-only.';
+'Creates only Pending PayOS requests from an Accepted quotation after the backend completes the external PayOS call; retries use the supplied idempotency key and returnUrl remains navigation-only.';
 
 -- TRUST BOUNDARY: before invoking this function, the backend adapter must use
 -- the official PayOS SDK webhooks.verify(req.body), or the official equivalent
@@ -1796,10 +2774,12 @@ BEFORE INSERT OR UPDATE OF status ON revisions
 FOR EACH ROW EXECUTE FUNCTION enforce_revision_status_transition();
 
 CREATE TRIGGER validate_scenario_version_before_write
-BEFORE INSERT OR UPDATE OF revision_id, organization_id, version_number, name,
-    fire_source_config, npc_config, blocked_elements, guidance_level,
-    safety_thresholds, replan_interval_seconds, score_wrong_exit_penalty,
-    score_hazard_per_second_penalty, score_time_bonus_threshold_seconds, created_by
+BEFORE INSERT OR UPDATE OF scenario_id, revision_id, building_id, organization_id,
+    version_number, name, schema_version, algorithm_version, random_seed,
+    spawn_config, goal_config, fire_source_config, smoke_config, wind_config,
+    interaction_anchors, npc_config, blocked_elements, guidance_level,
+    safety_thresholds, time_limit_seconds,
+    routing_config, scoring_config, mode_policy, scenario_hash, created_by
 ON scenario_versions FOR EACH ROW EXECUTE FUNCTION validate_scenario_version_write();
 
 CREATE TRIGGER validate_release_before_write
@@ -1808,29 +2788,72 @@ BEFORE INSERT OR UPDATE OF revision_id, scenario_version_id, building_id,
     revoked_reason, published_at
 ON releases FOR EACH ROW EXECUTE FUNCTION validate_release_write();
 
+CREATE TRIGGER validate_service_entitlement_before_write
+BEFORE INSERT OR UPDATE OF organization_id, building_id, service_package_id,
+    quotation_id, payment_transaction_id, provisioning_key, status, starts_at, ends_at,
+    price_snapshot, terms_snapshot, created_by
+ON service_entitlements FOR EACH ROW EXECUTE FUNCTION validate_service_entitlement_write();
+
+CREATE TRIGGER validate_quotation_snapshot_before_write
+BEFORE UPDATE OF billing_purpose, building_id, service_package_id, service_duration_months,
+    quantity, unit_price, subtotal_amount, tax_amount, discount_amount, total_amount,
+    currency, price_snapshot, terms_snapshot, status
+ON quotations FOR EACH ROW EXECUTE FUNCTION validate_quotation_snapshot_write();
+
+CREATE TRIGGER validate_playtest_session_before_write
+BEFORE INSERT OR UPDATE OF organization_id, building_id, revision_id,
+    scenario_draft_id, scenario_version_id, service_entitlement_id, package_hash,
+    protocol_version, manifest_schema_version, runtime_version, created_by,
+    start_idempotency_key, status
+ON playtest_sessions FOR EACH ROW EXECUTE FUNCTION validate_playtest_session_write_pre_runtime();
+
 CREATE TRIGGER validate_training_before_write
 BEFORE INSERT OR UPDATE OF release_id, scenario_version_id, organization_id,
     status, created_by
 ON trainings FOR EACH ROW EXECUTE FUNCTION validate_training_write();
 
 CREATE TRIGGER validate_release_qr_before_write
-BEFORE INSERT OR UPDATE OF release_id, training_id, organization_id, floor_id,
-    created_by, qr_hash, expires_at, is_active
+BEFORE INSERT OR UPDATE OF building_id, organization_id, floor_id, created_by,
+    qr_hash, expires_at, is_active
 ON release_qr_codes FOR EACH ROW EXECUTE FUNCTION validate_release_qr_code();
 
 CREATE TRIGGER validate_session_before_write
 BEFORE INSERT OR UPDATE OF training_id, release_id, scenario_version_id, organization_id,
-    trainee_user_id, device_id, qr_code_id, mode
+    trainee_user_id, device_id, qr_code_id, mode, package_hash, protocol_version, manifest_schema_version
 ON sessions FOR EACH ROW EXECUTE FUNCTION validate_training_session();
+
+CREATE TRIGGER validate_session_lifecycle_before_write
+BEFORE UPDATE OF training_id, release_id, scenario_version_id, organization_id,
+    trainee_user_id, device_id, qr_code_id, mode, package_hash, protocol_version, manifest_schema_version,
+    prepare_idempotency_key, start_idempotency_key, status, launch_granted_at, started_at,
+    ended_at, runtime_version
+ON sessions FOR EACH ROW EXECUTE FUNCTION validate_training_session_lifecycle_pre_runtime();
+
+CREATE TRIGGER validate_ai_billing_period_before_write
+BEFORE INSERT OR UPDATE OF organization_id, period_start, period_end, status,
+    settlement_quotation_id, settlement_payment_transaction_id, unit_price_snapshot,
+    overage_units, overage_amount, currency, closed_at
+ON ai_billing_periods FOR EACH ROW EXECUTE FUNCTION validate_ai_billing_period_write_pre_runtime();
+
+CREATE TRIGGER validate_ai_quota_grant_before_write
+BEFORE INSERT OR UPDATE OF organization_id, building_id, trainee_user_id, audience,
+    quota_kind, starts_at, ends_at
+ON ai_quota_grants FOR EACH ROW EXECUTE FUNCTION validate_ai_quota_grant_write();
+
+CREATE TRIGGER validate_payment_provisioning_before_write
+BEFORE INSERT OR UPDATE OF payment_transaction_id, quotation_id, organization_id,
+    provisioning_key, status
+ON payment_provisioning_records FOR EACH ROW EXECUTE FUNCTION validate_payment_provisioning_write();
 
 CREATE TRIGGER enforce_payment_transaction_state_before_write
 BEFORE INSERT OR UPDATE OR DELETE
 ON payment_transactions FOR EACH ROW EXECUTE FUNCTION enforce_payment_transaction_state();
 
 CREATE TRIGGER validate_payos_paid_before_write
-BEFORE INSERT OR UPDATE OF order_code, expected_amount, expected_currency,
+BEFORE INSERT OR UPDATE OF quotation_id, organization_id, requested_by, idempotency_key,
+    order_code, expected_amount, expected_currency,
     status, paid_transaction_id, paid_at
-ON payos_payment_requests FOR EACH ROW EXECUTE FUNCTION validate_payos_paid_request();
+ON payos_payment_requests FOR EACH ROW EXECUTE FUNCTION validate_payos_paid_request_pre_runtime();
 
 CREATE TRIGGER set_ts_organizations BEFORE UPDATE ON organizations FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER set_ts_users BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -1846,6 +2869,7 @@ CREATE TRIGGER set_ts_session_results BEFORE UPDATE ON session_results FOR EACH 
 CREATE TRIGGER set_ts_service_packages BEFORE UPDATE ON service_packages FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER set_ts_quotations BEFORE UPDATE ON quotations FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER set_ts_payos_payment_requests BEFORE UPDATE ON payos_payment_requests FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER set_ts_payment_provisioning_records BEFORE UPDATE ON payment_provisioning_records FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER set_ts_invoice_metadata BEFORE UPDATE ON invoice_metadata FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER set_ts_feedback BEFORE UPDATE ON feedback FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER set_ts_support_tickets BEFORE UPDATE ON support_tickets FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -1892,7 +2916,7 @@ $roles$;
 ALTER TABLE payos_payment_requests OWNER TO fet3d_payos_ledger_owner;
 ALTER TABLE payment_transactions OWNER TO fet3d_payos_ledger_owner;
 ALTER FUNCTION create_pending_payos_payment_request(
-    UUID, UUID, BIGINT, TEXT, TEXT, TEXT, TIMESTAMPTZ
+    UUID, UUID, TEXT, BIGINT, TEXT, TEXT, TEXT, TIMESTAMPTZ
 ) OWNER TO fet3d_payos_ledger_owner;
 ALTER FUNCTION apply_verified_payos_webhook(UUID, TEXT, TEXT, BIGINT, NUMERIC, TEXT, JSONB)
     OWNER TO fet3d_payos_ledger_owner;
@@ -1904,7 +2928,7 @@ REVOKE ALL PRIVILEGES ON TABLE payment_transactions FROM fet3d_payos_request_exe
 REVOKE ALL PRIVILEGES ON TABLE payos_payment_requests FROM fet3d_payos_webhook_executor;
 REVOKE ALL PRIVILEGES ON TABLE payment_transactions FROM fet3d_payos_webhook_executor;
 REVOKE ALL PRIVILEGES ON FUNCTION create_pending_payos_payment_request(
-    UUID, UUID, BIGINT, TEXT, TEXT, TEXT, TIMESTAMPTZ
+    UUID, UUID, TEXT, BIGINT, TEXT, TEXT, TEXT, TIMESTAMPTZ
 ) FROM PUBLIC;
 REVOKE ALL PRIVILEGES ON FUNCTION apply_verified_payos_webhook(
     UUID, TEXT, TEXT, BIGINT, NUMERIC, TEXT, JSONB
@@ -1917,8 +2941,2805 @@ ON TABLE quotations TO fet3d_payos_ledger_owner;
 GRANT SELECT (id, organization_id, role, is_active, deleted_at)
 ON TABLE users TO fet3d_payos_ledger_owner;
 GRANT EXECUTE ON FUNCTION create_pending_payos_payment_request(
-    UUID, UUID, BIGINT, TEXT, TEXT, TEXT, TIMESTAMPTZ
+    UUID, UUID, TEXT, BIGINT, TEXT, TEXT, TEXT, TIMESTAMPTZ
 ) TO fet3d_payos_request_executor;
 GRANT EXECUTE ON FUNCTION apply_verified_payos_webhook(
     UUID, TEXT, TEXT, BIGINT, NUMERIC, TEXT, JSONB
 ) TO fet3d_payos_webhook_executor;
+
+-- ============================================================================
+-- VERSION 6.6 TARGET DESIGN AMENDMENTS
+-- Runtime compatibility, actor-bound start, atomic AI quota reservation,
+-- durable dispatch and payment/settlement recovery. This is design DDL only;
+-- it is not a migration for an existing database.
+-- ============================================================================
+
+-- Server-owned runtime catalog. Client-reported capabilities are never trusted
+-- as authorization for a package.
+CREATE TABLE runtime_compatibility_catalog (
+    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    runtime_version         VARCHAR(50) NOT NULL,
+    protocol_version        VARCHAR(50) NOT NULL,
+    manifest_schema_version VARCHAR(50) NOT NULL,
+    capabilities            JSONB NOT NULL DEFAULT '[]',
+    is_active               BOOLEAN NOT NULL DEFAULT true,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT check_runtime_catalog_version
+        CHECK (runtime_version ~ '^[0-9]+[.][0-9]+[.][0-9]+$'),
+    CONSTRAINT check_runtime_catalog_protocol
+        CHECK (NULLIF(pg_catalog.btrim(protocol_version), '') IS NOT NULL),
+    CONSTRAINT check_runtime_catalog_manifest_schema
+        CHECK (NULLIF(pg_catalog.btrim(manifest_schema_version), '') IS NOT NULL),
+    CONSTRAINT check_runtime_catalog_capabilities
+        CHECK (jsonb_typeof(capabilities) = 'array'),
+    UNIQUE (runtime_version, protocol_version, manifest_schema_version)
+);
+
+ALTER TABLE release_packages
+    ADD COLUMN required_capabilities JSONB NOT NULL DEFAULT '[]',
+    ADD COLUMN build_target VARCHAR(50) NOT NULL,
+    ADD CONSTRAINT check_release_package_capabilities
+        CHECK (jsonb_typeof(required_capabilities) = 'array'),
+    ADD CONSTRAINT check_release_package_build_target
+        CHECK (NULLIF(pg_catalog.btrim(build_target), '') IS NOT NULL);
+
+ALTER TABLE release_packages
+    ALTER COLUMN required_capabilities DROP DEFAULT,
+    ADD CONSTRAINT check_release_package_runtime_metadata
+        CHECK (
+            NULLIF(pg_catalog.btrim(protocol_version), '') IS NOT NULL
+            AND NULLIF(pg_catalog.btrim(manifest_schema_version), '') IS NOT NULL
+            AND min_runtime_version ~ '^[0-9]+[.][0-9]+[.][0-9]+$'
+        );
+
+ALTER TABLE sessions
+    ADD COLUMN runtime_catalog_id UUID REFERENCES runtime_compatibility_catalog(id) ON DELETE RESTRICT;
+
+ALTER TABLE sessions
+    ADD COLUMN manifest_sha256 VARCHAR(64),
+    ADD COLUMN build_target VARCHAR(50),
+    ADD CONSTRAINT check_session_manifest_hash
+        CHECK (manifest_sha256 IS NULL OR manifest_sha256 ~ '^[0-9a-fA-F]{64}$'),
+    ADD CONSTRAINT check_session_build_target
+        CHECK (build_target IS NULL OR NULLIF(pg_catalog.btrim(build_target), '') IS NOT NULL);
+
+ALTER TABLE playtest_sessions
+    ADD COLUMN runtime_catalog_id UUID REFERENCES runtime_compatibility_catalog(id) ON DELETE RESTRICT,
+    ADD COLUMN manifest_sha256 VARCHAR(64),
+    ADD COLUMN build_target VARCHAR(50),
+    ADD CONSTRAINT check_playtest_manifest_hash
+        CHECK (manifest_sha256 IS NULL OR manifest_sha256 ~ '^[0-9a-fA-F]{64}$'),
+    ADD CONSTRAINT check_playtest_build_target
+        CHECK (build_target IS NULL OR NULLIF(pg_catalog.btrim(build_target), '') IS NOT NULL);
+
+ALTER TABLE sessions
+    ALTER COLUMN protocol_version DROP DEFAULT,
+    ALTER COLUMN manifest_schema_version DROP DEFAULT;
+ALTER TABLE playtest_sessions
+    ALTER COLUMN protocol_version DROP DEFAULT,
+    ALTER COLUMN manifest_schema_version DROP DEFAULT;
+
+CREATE OR REPLACE FUNCTION fet3d_semver_gte(p_actual TEXT, p_minimum TEXT)
+RETURNS BOOLEAN
+LANGUAGE plpgsql IMMUTABLE SET search_path = pg_catalog
+AS $$
+DECLARE
+    a TEXT[];
+    m TEXT[];
+BEGIN
+    a := pg_catalog.regexp_match(pg_catalog.btrim(p_actual), '^([0-9]+)[.]([0-9]+)[.]([0-9]+)$');
+    m := pg_catalog.regexp_match(pg_catalog.btrim(p_minimum), '^([0-9]+)[.]([0-9]+)[.]([0-9]+)$');
+    IF a IS NULL OR m IS NULL THEN RETURN false; END IF;
+    RETURN ROW(a[1]::BIGINT, a[2]::BIGINT, a[3]::BIGINT)
+        >= ROW(m[1]::BIGINT, m[2]::BIGINT, m[3]::BIGINT);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION enforce_session_preparation_state()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = pg_catalog
+AS $$
+BEGIN
+    IF TG_OP = 'INSERT' AND (
+        NEW.status <> 'Created' OR NEW.start_idempotency_key IS NOT NULL
+        OR NEW.launch_granted_at IS NOT NULL OR NEW.started_at IS NOT NULL
+    ) THEN
+        RAISE EXCEPTION 'a prepared session must start in Created state without a launch grant';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION enforce_playtest_preparation_state()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = pg_catalog
+AS $$
+BEGIN
+    IF TG_OP = 'INSERT' AND (
+        NEW.status <> 'Created' OR NEW.start_idempotency_key IS NOT NULL OR NEW.started_at IS NOT NULL
+    ) THEN
+        RAISE EXCEPTION 'a prepared playtest must start in Created state without a start key';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION validate_training_session_lifecycle()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = pg_catalog
+AS $$
+BEGIN
+    IF TG_OP = 'UPDATE' AND OLD.status = 'Created'
+       AND (
+           NEW.status <> 'Created'
+           OR OLD.start_idempotency_key IS DISTINCT FROM NEW.start_idempotency_key
+           OR OLD.launch_granted_at IS DISTINCT FROM NEW.launch_granted_at
+           OR OLD.runtime_version IS DISTINCT FROM NEW.runtime_version
+           OR OLD.manifest_sha256 IS DISTINCT FROM NEW.manifest_sha256
+           OR OLD.build_target IS DISTINCT FROM NEW.build_target
+           OR OLD.protocol_version IS DISTINCT FROM NEW.protocol_version
+           OR OLD.runtime_catalog_id IS DISTINCT FROM NEW.runtime_catalog_id
+       )
+       AND (CURRENT_USER <> 'fet3d_session_owner'
+            OR COALESCE(pg_catalog.current_setting('fet3d.session_start_id', true), '') <> NEW.id::TEXT) THEN
+        RAISE EXCEPTION 'only actor-bound online start may launch a session';
+    END IF;
+    IF TG_OP = 'UPDATE' AND (
+        OLD.training_id IS DISTINCT FROM NEW.training_id
+        OR OLD.release_id IS DISTINCT FROM NEW.release_id
+        OR OLD.scenario_version_id IS DISTINCT FROM NEW.scenario_version_id
+        OR OLD.organization_id IS DISTINCT FROM NEW.organization_id
+        OR OLD.trainee_user_id IS DISTINCT FROM NEW.trainee_user_id
+        OR OLD.device_id IS DISTINCT FROM NEW.device_id
+        OR OLD.qr_code_id IS DISTINCT FROM NEW.qr_code_id
+        OR OLD.mode IS DISTINCT FROM NEW.mode
+        OR OLD.package_hash IS DISTINCT FROM NEW.package_hash
+        OR OLD.package_artifact_id IS DISTINCT FROM NEW.package_artifact_id
+        OR OLD.package_validation_run_id IS DISTINCT FROM NEW.package_validation_run_id
+        OR OLD.manifest_sha256 IS DISTINCT FROM NEW.manifest_sha256
+        OR OLD.build_target IS DISTINCT FROM NEW.build_target
+        OR OLD.protocol_version IS DISTINCT FROM NEW.protocol_version
+        OR OLD.manifest_schema_version IS DISTINCT FROM NEW.manifest_schema_version
+        OR OLD.prepare_idempotency_key IS DISTINCT FROM NEW.prepare_idempotency_key
+        OR (OLD.start_idempotency_key IS NOT NULL AND OLD.start_idempotency_key IS DISTINCT FROM NEW.start_idempotency_key)
+        OR (OLD.launch_granted_at IS NOT NULL AND OLD.launch_granted_at IS DISTINCT FROM NEW.launch_granted_at)
+        OR (OLD.started_at IS NOT NULL AND OLD.started_at IS DISTINCT FROM NEW.started_at)
+         OR ((CURRENT_USER <> 'fet3d_session_owner'
+              OR COALESCE(pg_catalog.current_setting('fet3d.session_start_id', true), '') <> NEW.id::TEXT)
+             AND (OLD.runtime_version IS DISTINCT FROM NEW.runtime_version
+                  OR OLD.runtime_catalog_id IS DISTINCT FROM NEW.runtime_catalog_id
+                  OR OLD.manifest_sha256 IS DISTINCT FROM NEW.manifest_sha256
+                  OR OLD.build_target IS DISTINCT FROM NEW.build_target))
+    ) THEN
+        RAISE EXCEPTION 'session identity, package and preparation key are immutable after preparation';
+    END IF;
+    IF NEW.status IN ('Launching','Running') AND (NEW.launch_granted_at IS NULL OR NEW.start_idempotency_key IS NULL) THEN
+        RAISE EXCEPTION 'Launching or Running requires an online start grant and idempotency key';
+    END IF;
+    IF NEW.status = 'Running' AND NEW.started_at IS NULL THEN
+        RAISE EXCEPTION 'Running requires started_at from the Unity bridge';
+    END IF;
+    IF NEW.status IN ('Completed','CompletedWithSupersededRelease','ScenarioUnsurvivable','Aborted','Abandoned','Crashed')
+       AND NEW.launch_granted_at IS NULL THEN
+        RAISE EXCEPTION 'a session cannot complete before online start';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION validate_playtest_session_write()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = pg_catalog
+AS $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+          FROM public.revisions AS revision
+          JOIN public.scenario_versions AS scenario
+            ON scenario.id = NEW.scenario_version_id
+           AND scenario.revision_id = revision.id
+           AND scenario.building_id = NEW.building_id
+           AND scenario.organization_id = NEW.organization_id
+         WHERE revision.id = NEW.revision_id
+    ) THEN RAISE EXCEPTION 'playtest scenario version, revision, building and organization must match'; END IF;
+    IF NEW.scenario_draft_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1
+          FROM public.scenario_drafts AS draft
+          JOIN public.scenario_versions AS scenario
+            ON scenario.id = NEW.scenario_version_id
+           AND scenario.scenario_id = draft.scenario_id
+         WHERE draft.id = NEW.scenario_draft_id
+           AND draft.revision_id = NEW.revision_id
+           AND draft.building_id = NEW.building_id
+           AND draft.organization_id = NEW.organization_id
+    ) THEN RAISE EXCEPTION 'playtest draft must match the selected scenario version, revision, building and organization'; END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM public.users AS creator
+         WHERE creator.id = NEW.created_by AND creator.role = 'OrganizationUser'
+           AND creator.organization_id = NEW.organization_id
+           AND creator.is_active AND creator.deleted_at IS NULL
+    ) THEN RAISE EXCEPTION 'playtest created_by must be an active OrganizationUser in the same tenant'; END IF;
+    IF NULLIF(pg_catalog.btrim(NEW.package_hash), '') IS NULL THEN
+        RAISE EXCEPTION 'playtest package_hash is required';
+    END IF;
+    IF NULLIF(pg_catalog.btrim(NEW.manifest_sha256), '') IS NULL
+       OR NULLIF(pg_catalog.btrim(NEW.build_target), '') IS NULL THEN
+        RAISE EXCEPTION 'playtest package requires a manifest hash and build target';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1
+          FROM public.validation_runs AS run
+          JOIN public.revision_artifacts AS artifact
+            ON artifact.id = run.artifact_id
+           AND artifact.sha256_hash = NEW.package_hash
+           AND artifact.metadata ->> 'manifest_sha256' = NEW.manifest_sha256
+           AND artifact.metadata ->> 'build_target' = NEW.build_target
+         WHERE run.revision_id = NEW.revision_id
+           AND run.scenario_version_id = NEW.scenario_version_id
+           AND run.scope = 'PlaytestPackage' AND run.status = 'Passed'
+           AND NOT EXISTS (
+               SELECT 1 FROM public.validation_issues AS issue
+                WHERE issue.validation_run_id = run.id
+                  AND issue.severity IN ('Error','Critical')
+                  AND issue.status NOT IN ('Resolved','Waived')
+           )
+    ) THEN RAISE EXCEPTION 'playtest package requires a matching passed validation run with no open Error/Critical issue'; END IF;
+    IF TG_OP = 'INSERT' AND (
+           NEW.status <> 'Created' OR NEW.start_idempotency_key IS NOT NULL OR NEW.started_at IS NOT NULL
+    ) THEN
+        RAISE EXCEPTION 'a prepared playtest must start in Created state without a start key';
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD.status = 'Created'
+       AND (
+           NEW.status <> 'Created'
+           OR OLD.start_idempotency_key IS DISTINCT FROM NEW.start_idempotency_key
+           OR OLD.started_at IS DISTINCT FROM NEW.started_at
+           OR OLD.runtime_version IS DISTINCT FROM NEW.runtime_version
+           OR OLD.manifest_sha256 IS DISTINCT FROM NEW.manifest_sha256
+           OR OLD.build_target IS DISTINCT FROM NEW.build_target
+           OR OLD.runtime_catalog_id IS DISTINCT FROM NEW.runtime_catalog_id
+           OR OLD.protocol_version IS DISTINCT FROM NEW.protocol_version
+       )
+       AND (CURRENT_USER <> 'fet3d_session_owner'
+            OR COALESCE(pg_catalog.current_setting('fet3d.playtest_start_id', true), '') <> NEW.id::TEXT) THEN
+        RAISE EXCEPTION 'only actor-bound online start may launch a playtest';
+    END IF;
+    IF TG_OP = 'UPDATE' AND (
+        OLD.organization_id IS DISTINCT FROM NEW.organization_id
+        OR OLD.building_id IS DISTINCT FROM NEW.building_id
+        OR OLD.revision_id IS DISTINCT FROM NEW.revision_id
+        OR OLD.scenario_draft_id IS DISTINCT FROM NEW.scenario_draft_id
+        OR OLD.scenario_version_id IS DISTINCT FROM NEW.scenario_version_id
+        OR OLD.service_entitlement_id IS DISTINCT FROM NEW.service_entitlement_id
+        OR OLD.package_hash IS DISTINCT FROM NEW.package_hash
+        OR OLD.package_artifact_id IS DISTINCT FROM NEW.package_artifact_id
+        OR OLD.package_validation_run_id IS DISTINCT FROM NEW.package_validation_run_id
+        OR OLD.manifest_sha256 IS DISTINCT FROM NEW.manifest_sha256
+        OR OLD.build_target IS DISTINCT FROM NEW.build_target
+        OR OLD.protocol_version IS DISTINCT FROM NEW.protocol_version
+        OR OLD.manifest_schema_version IS DISTINCT FROM NEW.manifest_schema_version
+         OR ((CURRENT_USER <> 'fet3d_session_owner'
+              OR COALESCE(pg_catalog.current_setting('fet3d.playtest_start_id', true), '') <> NEW.id::TEXT)
+             AND (OLD.runtime_version IS DISTINCT FROM NEW.runtime_version
+                  OR OLD.runtime_catalog_id IS DISTINCT FROM NEW.runtime_catalog_id
+                  OR OLD.manifest_sha256 IS DISTINCT FROM NEW.manifest_sha256
+                  OR OLD.build_target IS DISTINCT FROM NEW.build_target))
+        OR (OLD.start_idempotency_key IS NOT NULL AND OLD.start_idempotency_key IS DISTINCT FROM NEW.start_idempotency_key)
+    ) THEN RAISE EXCEPTION 'playtest identity, package and pinned scenario are immutable'; END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER enforce_session_preparation_state_before_insert
+BEFORE INSERT ON sessions FOR EACH ROW EXECUTE FUNCTION enforce_session_preparation_state();
+
+CREATE TRIGGER enforce_playtest_preparation_state_before_insert
+BEFORE INSERT ON playtest_sessions FOR EACH ROW EXECUTE FUNCTION enforce_playtest_preparation_state();
+
+-- Actor-bound online training start. The old overload is replaced by a
+-- failing compatibility stub so an unscoped session id can never launch.
+CREATE OR REPLACE FUNCTION start_training_session(
+    p_actor_id UUID,
+    p_session_id UUID,
+    p_start_idempotency_key TEXT,
+    p_runtime_version TEXT
+)
+RETURNS UUID
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
+AS $$
+DECLARE
+    v_session public.sessions%ROWTYPE;
+    v_building_id UUID;
+    v_catalog_id UUID;
+    v_protocol_version TEXT;
+    v_manifest_sha256 TEXT;
+    v_build_target TEXT;
+BEGIN
+    IF NULLIF(pg_catalog.btrim(p_start_idempotency_key), '') IS NULL
+       OR NOT public.fet3d_semver_gte(p_runtime_version, p_runtime_version) THEN
+        RAISE EXCEPTION 'valid semver runtime version and start idempotency key are required';
+    END IF;
+
+    SELECT * INTO v_session FROM public.sessions WHERE id = p_session_id FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'session does not exist'; END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM public.users AS actor
+         WHERE actor.id = p_actor_id AND actor.id = v_session.trainee_user_id
+           AND actor.role = 'Trainee' AND actor.is_active AND actor.deleted_at IS NULL
+    ) THEN RAISE EXCEPTION 'actor must be the active Trainee who owns the session'; END IF;
+
+    IF v_session.start_idempotency_key IS NOT NULL THEN
+        IF v_session.start_idempotency_key = pg_catalog.btrim(p_start_idempotency_key)
+           AND v_session.runtime_version = pg_catalog.btrim(p_runtime_version) THEN
+            RETURN v_session.id;
+        END IF;
+        RAISE EXCEPTION 'session already started with a different idempotency key';
+    END IF;
+    IF v_session.status <> 'Created' THEN RAISE EXCEPTION 'session is not in Created state'; END IF;
+
+    SELECT release.building_id INTO v_building_id
+      FROM public.releases AS release
+     WHERE release.id = v_session.release_id
+       AND release.status = 'Published'
+       AND release.scenario_version_id = v_session.scenario_version_id;
+    IF NOT FOUND THEN RAISE EXCEPTION 'online start requires the pinned Published release and scenario'; END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM public.trainings AS training
+         WHERE training.id = v_session.training_id
+           AND training.release_id = v_session.release_id
+           AND training.scenario_version_id = v_session.scenario_version_id
+           AND training.organization_id = v_session.organization_id
+           AND training.status = 'Active'
+           AND v_session.mode::TEXT = ANY(training.allowed_modes)
+    ) THEN RAISE EXCEPTION 'online start requires the pinned Active Training and allowed mode'; END IF;
+
+    SELECT catalog.id, catalog.protocol_version, package.manifest_sha256, package.build_target
+      INTO v_catalog_id, v_protocol_version, v_manifest_sha256, v_build_target
+      FROM public.release_packages AS package
+      JOIN public.runtime_compatibility_catalog AS catalog
+        ON catalog.manifest_schema_version = package.manifest_schema_version
+       AND catalog.protocol_version = package.protocol_version
+       AND catalog.runtime_version = p_runtime_version
+       AND catalog.is_active
+      WHERE package.release_id = v_session.release_id
+        AND package.candidate_artifact_id = v_session.package_artifact_id
+        AND package.candidate_validation_run_id = v_session.package_validation_run_id
+        AND package.checksum_sha256 = v_session.package_hash
+       AND package.manifest_sha256 = v_session.manifest_sha256
+       AND package.build_target = v_session.build_target
+        AND package.manifest_schema_version = v_session.manifest_schema_version
+        AND EXISTS (
+            SELECT 1 FROM public.validation_runs AS run
+             WHERE run.id = v_session.package_validation_run_id
+               AND run.release_id = v_session.release_id
+               AND run.artifact_id = package.candidate_artifact_id
+               AND run.status = 'Passed'
+        )
+        AND public.fet3d_runtime_package_is_compatible(
+             p_runtime_version, package.min_runtime_version, package.protocol_version,
+             package.manifest_schema_version, package.required_capabilities, catalog.id
+       );
+    IF NOT FOUND THEN RAISE EXCEPTION 'online start requires a compatible verified runtime package'; END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM public.release_qr_codes AS qr
+         WHERE qr.id = v_session.qr_code_id AND qr.building_id = v_building_id
+           AND qr.organization_id = v_session.organization_id AND qr.is_active
+           AND (qr.expires_at IS NULL OR qr.expires_at > pg_catalog.now())
+    ) THEN RAISE EXCEPTION 'online start requires a non-revoked, non-expired Building QR'; END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM public.service_entitlements AS entitlement
+         WHERE entitlement.building_id = v_building_id
+           AND entitlement.organization_id = v_session.organization_id
+           AND entitlement.status = 'Active'
+           AND entitlement.starts_at <= pg_catalog.now() AND entitlement.ends_at > pg_catalog.now()
+    ) THEN RAISE EXCEPTION 'online start requires an active Building service entitlement'; END IF;
+
+    PERFORM pg_catalog.set_config('fet3d.session_start_id', v_session.id::TEXT, true);
+    UPDATE public.sessions
+       SET start_idempotency_key = pg_catalog.btrim(p_start_idempotency_key),
+           runtime_version = pg_catalog.btrim(p_runtime_version),
+           protocol_version = v_protocol_version,
+           manifest_sha256 = v_manifest_sha256,
+           build_target = v_build_target,
+           runtime_catalog_id = v_catalog_id,
+           launch_granted_at = pg_catalog.clock_timestamp(),
+           started_at = pg_catalog.clock_timestamp(),
+           status = 'Running'
+     WHERE id = v_session.id;
+    RETURN v_session.id;
+END;
+$$;
+
+-- Actor-bound playtest start. Trial quota is reserved atomically by the row
+-- lock; an Active paid entitlement does not consume Trial playtest units.
+CREATE OR REPLACE FUNCTION start_playtest_session(
+    p_actor_id UUID,
+    p_playtest_session_id UUID,
+    p_start_idempotency_key TEXT,
+    p_runtime_version TEXT
+)
+RETURNS UUID
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
+AS $$
+DECLARE
+    v_playtest public.playtest_sessions%ROWTYPE;
+    v_entitlement public.service_entitlements%ROWTYPE;
+    v_catalog_id UUID;
+    v_manifest_sha256 TEXT;
+    v_build_target TEXT;
+BEGIN
+    IF NULLIF(pg_catalog.btrim(p_start_idempotency_key), '') IS NULL
+       OR NOT public.fet3d_semver_gte(p_runtime_version, p_runtime_version) THEN
+        RAISE EXCEPTION 'valid semver runtime version and start idempotency key are required';
+    END IF;
+    SELECT * INTO v_playtest FROM public.playtest_sessions WHERE id = p_playtest_session_id FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'playtest session does not exist'; END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM public.users AS actor
+         WHERE actor.id = p_actor_id AND actor.id = v_playtest.created_by
+           AND actor.role = 'OrganizationUser'
+           AND actor.organization_id = v_playtest.organization_id
+           AND actor.is_active AND actor.deleted_at IS NULL
+    ) THEN RAISE EXCEPTION 'actor must be the active OrganizationUser who created the playtest'; END IF;
+    IF v_playtest.start_idempotency_key IS NOT NULL THEN
+        IF v_playtest.start_idempotency_key = pg_catalog.btrim(p_start_idempotency_key)
+           AND v_playtest.runtime_version = pg_catalog.btrim(p_runtime_version) THEN
+            RETURN v_playtest.id;
+        END IF;
+        RAISE EXCEPTION 'playtest already started with a different idempotency key';
+    END IF;
+    IF v_playtest.status <> 'Created' THEN RAISE EXCEPTION 'playtest session is not in Created state'; END IF;
+
+    SELECT * INTO v_entitlement FROM public.service_entitlements AS entitlement
+     WHERE entitlement.id = v_playtest.service_entitlement_id
+       AND entitlement.organization_id = v_playtest.organization_id
+       AND entitlement.building_id = v_playtest.building_id
+       AND entitlement.status IN ('Trial','Active')
+       AND entitlement.starts_at <= pg_catalog.now() AND entitlement.ends_at > pg_catalog.now()
+     FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'playtest requires a current Trial or Active Building entitlement'; END IF;
+    IF v_entitlement.status = 'Trial' THEN
+        UPDATE public.service_entitlements
+           SET playtest_units_used = playtest_units_used + 1
+         WHERE id = v_entitlement.id AND playtest_units_used < playtest_units_granted;
+        IF NOT FOUND THEN RAISE EXCEPTION 'Trial playtest quota is exhausted'; END IF;
+    END IF;
+
+    SELECT catalog.id, artifact.metadata ->> 'manifest_sha256', artifact.metadata ->> 'build_target'
+      INTO v_catalog_id, v_manifest_sha256, v_build_target
+      FROM public.validation_runs AS run
+      JOIN public.revision_artifacts AS artifact
+        ON artifact.id = run.artifact_id
+       AND artifact.sha256_hash = v_playtest.package_hash
+       AND artifact.metadata ->> 'manifest_sha256' = v_playtest.manifest_sha256
+       AND artifact.metadata ->> 'build_target' = v_playtest.build_target
+      JOIN public.runtime_compatibility_catalog AS catalog
+        ON catalog.runtime_version = p_runtime_version
+       AND catalog.is_active
+       AND catalog.protocol_version = artifact.metadata ->> 'protocol_version'
+       AND catalog.manifest_schema_version = artifact.metadata ->> 'manifest_schema_version'
+      WHERE run.revision_id = v_playtest.revision_id
+        AND run.id = v_playtest.package_validation_run_id
+        AND run.artifact_id = v_playtest.package_artifact_id
+        AND run.scenario_version_id = v_playtest.scenario_version_id
+       AND run.scope = 'PlaytestPackage'
+       AND run.status = 'Passed'
+       AND artifact.metadata ? 'min_runtime_version'
+       AND artifact.metadata ? 'protocol_version'
+       AND artifact.metadata ? 'manifest_schema_version'
+       AND artifact.metadata ? 'required_capabilities'
+       AND artifact.metadata ? 'manifest_sha256'
+       AND artifact.metadata ? 'build_target'
+       AND pg_catalog.jsonb_typeof(artifact.metadata -> 'required_capabilities') = 'array'
+       AND artifact.metadata ->> 'protocol_version' = v_playtest.protocol_version
+       AND artifact.metadata ->> 'manifest_schema_version' = v_playtest.manifest_schema_version
+       AND public.fet3d_runtime_package_is_compatible(
+             p_runtime_version,
+             artifact.metadata ->> 'min_runtime_version',
+             artifact.metadata ->> 'protocol_version',
+             artifact.metadata ->> 'manifest_schema_version',
+             artifact.metadata -> 'required_capabilities',
+             catalog.id
+       );
+    IF NOT FOUND THEN RAISE EXCEPTION 'playtest runtime/schema is not supported'; END IF;
+
+    PERFORM pg_catalog.set_config('fet3d.playtest_start_id', v_playtest.id::TEXT, true);
+    UPDATE public.playtest_sessions
+       SET start_idempotency_key = pg_catalog.btrim(p_start_idempotency_key),
+           runtime_version = pg_catalog.btrim(p_runtime_version),
+           manifest_sha256 = v_manifest_sha256,
+           build_target = v_build_target,
+           runtime_catalog_id = v_catalog_id,
+           status = 'Running',
+           started_at = pg_catalog.clock_timestamp()
+     WHERE id = v_playtest.id;
+    RETURN v_playtest.id;
+END;
+$$;
+
+-- Organization quota is pooled across Buildings. Building remains optional
+-- cost/source attribution and is never a wallet boundary.
+ALTER TABLE ai_quota_grants
+    ADD COLUMN units_reserved INT NOT NULL DEFAULT 0,
+    ADD CONSTRAINT check_ai_quota_reserved
+        CHECK (units_reserved >= 0 AND units_used + units_reserved <= units_granted);
+
+CREATE TABLE ai_usage_reservations (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    request_id      UUID REFERENCES ai_usage_ledger(request_id) ON DELETE RESTRICT UNIQUE NOT NULL,
+    units           INT NOT NULL,
+    status          VARCHAR(20) NOT NULL DEFAULT 'Reserved', -- Reserved | Consumed | Released
+    reserved_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    settled_at      TIMESTAMPTZ,
+    CONSTRAINT check_ai_reservation_units CHECK (units > 0),
+    CONSTRAINT check_ai_reservation_status CHECK (status IN ('Reserved','Consumed','Released'))
+);
+
+CREATE OR REPLACE FUNCTION reserve_ai_usage(
+    p_request_id UUID, p_idempotency_key TEXT, p_user_id UUID, p_audience TEXT,
+    p_organization_id UUID, p_building_id UUID, p_request_type TEXT, p_units INT,
+    p_billable BOOLEAN, p_overage_consent_id UUID, p_billing_period_id UUID,
+    p_unit_price_snapshot JSONB, p_source_scope JSONB DEFAULT '{}'
+)
+RETURNS UUID LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public
+AS $$
+DECLARE
+    v_usage_id UUID;
+    v_reservation_id UUID;
+    v_request public.ai_requests%ROWTYPE;
+    v_existing public.ai_usage_ledger%ROWTYPE;
+    v_remaining INT := p_units;
+    v_policy_version_id UUID;
+    v_period public.ai_billing_periods%ROWTYPE;
+    v_grant RECORD;
+    v_take INT;
+BEGIN
+    IF p_request_id IS NULL
+       OR NULLIF(pg_catalog.btrim(p_idempotency_key), '') IS NULL
+       OR p_user_id IS NULL
+       OR NULLIF(pg_catalog.btrim(p_audience), '') IS NULL
+       OR p_units IS NULL OR p_units <= 0 THEN
+        RAISE EXCEPTION 'AI request key and positive units are required';
+    END IF;
+
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+        pg_catalog.hashtextextended(pg_catalog.btrim(p_idempotency_key), 0)
+    );
+
+    -- Accounting lock order is period (when present) -> request -> ledger /
+    -- reservation -> grants in ascending id order. Do not hold this transaction
+    -- while waiting for the AI provider.
+    IF p_billing_period_id IS NOT NULL THEN
+        SELECT * INTO v_period
+          FROM public.ai_billing_periods
+         WHERE id = p_billing_period_id
+         FOR UPDATE;
+        IF NOT FOUND OR v_period.organization_id IS DISTINCT FROM p_organization_id THEN
+            RAISE EXCEPTION 'AI billing period does not belong to the request organization';
+        END IF;
+    END IF;
+
+    SELECT * INTO v_request
+      FROM public.ai_requests
+     WHERE id = p_request_id
+     FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'AI request does not exist'; END IF;
+
+    SELECT * INTO v_existing
+      FROM public.ai_usage_ledger
+     WHERE request_id = p_request_id OR idempotency_key = pg_catalog.btrim(p_idempotency_key)
+     FOR UPDATE;
+    IF FOUND THEN
+        IF v_existing.request_id IS DISTINCT FROM p_request_id
+           OR v_existing.idempotency_key IS DISTINCT FROM pg_catalog.btrim(p_idempotency_key)
+           OR v_existing.user_id IS DISTINCT FROM p_user_id
+           OR v_existing.audience IS DISTINCT FROM p_audience
+           OR v_existing.organization_id IS DISTINCT FROM p_organization_id
+           OR v_existing.building_id IS DISTINCT FROM p_building_id
+           OR v_existing.request_type IS DISTINCT FROM p_request_type
+           OR v_existing.units IS DISTINCT FROM p_units
+           OR v_existing.billable IS DISTINCT FROM p_billable
+           OR v_existing.overage_consent_id IS DISTINCT FROM p_overage_consent_id
+           OR v_existing.billing_period_id IS DISTINCT FROM p_billing_period_id
+           OR v_existing.unit_price_snapshot IS DISTINCT FROM COALESCE(p_unit_price_snapshot, '{}'::JSONB)
+           OR v_existing.source_scope IS DISTINCT FROM COALESCE(p_source_scope, '{}'::JSONB)
+        THEN
+            RAISE EXCEPTION 'AI idempotency key/request_id was reused with different input';
+        END IF;
+        RETURN v_existing.id;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM public.ai_requests AS request
+         WHERE request.id = p_request_id
+           AND request.idempotency_key = pg_catalog.btrim(p_idempotency_key)
+           AND request.user_id = p_user_id
+           AND request.audience = p_audience
+           AND request.request_type = p_request_type
+           AND request.organization_id IS NOT DISTINCT FROM p_organization_id
+           AND request.building_id IS NOT DISTINCT FROM p_building_id
+    ) THEN
+        RAISE EXCEPTION 'AI usage must reference the matching durable AI request';
+    END IF;
+
+    SELECT request.policy_version_id
+      INTO v_policy_version_id
+      FROM public.ai_requests AS request
+     WHERE request.id = p_request_id;
+
+    INSERT INTO public.ai_usage_ledger(
+        request_id, idempotency_key, organization_id, building_id, user_id,
+        audience, request_type, policy_version_id, units, overage_consent_id,
+        billable, unit_price_snapshot, billing_period_id, status, source_scope
+    ) VALUES (
+        p_request_id, pg_catalog.btrim(p_idempotency_key), p_organization_id, p_building_id, p_user_id,
+        p_audience, p_request_type, v_policy_version_id, p_units, p_overage_consent_id,
+        p_billable, COALESCE(p_unit_price_snapshot, '{}'::JSONB), p_billing_period_id, 'Reserved',
+        COALESCE(p_source_scope, '{}'::JSONB)
+    ) RETURNING id INTO v_usage_id;
+
+    INSERT INTO public.ai_usage_reservations(request_id, units)
+    VALUES (p_request_id, p_units)
+    RETURNING id INTO v_reservation_id;
+
+    IF p_billable = false THEN
+        FOR v_grant IN
+            SELECT grant_row.*
+              FROM public.ai_quota_grants AS grant_row
+             WHERE grant_row.audience = p_audience
+               AND (
+                   (p_audience = 'organization' AND grant_row.organization_id = p_organization_id)
+                   OR (p_audience = 'trainee' AND grant_row.trainee_user_id = p_user_id)
+               )
+               AND grant_row.starts_at <= pg_catalog.now()
+               AND grant_row.ends_at > pg_catalog.now()
+               AND grant_row.units_used + grant_row.units_reserved < grant_row.units_granted
+             ORDER BY grant_row.id
+             FOR UPDATE
+        LOOP
+            v_take := LEAST(
+                v_remaining,
+                v_grant.units_granted - v_grant.units_used - v_grant.units_reserved
+            );
+            IF v_take > 0 THEN
+                UPDATE public.ai_quota_grants
+                   SET units_reserved = units_reserved + v_take
+                 WHERE id = v_grant.id;
+                INSERT INTO public.ai_usage_reservation_allocations(
+                    reservation_id, quota_grant_id, units
+                ) VALUES (v_reservation_id, v_grant.id, v_take);
+                v_remaining := v_remaining - v_take;
+            END IF;
+            EXIT WHEN v_remaining = 0;
+        END LOOP;
+        IF v_remaining > 0 THEN
+            RAISE EXCEPTION 'no available AI quota';
+        END IF;
+    END IF;
+
+    UPDATE public.ai_requests
+       SET status = 'Processing'
+     WHERE id = p_request_id
+       AND status = 'Accepted';
+
+    RETURN v_usage_id;
+END;
+$$;
+
+
+CREATE OR REPLACE FUNCTION settle_ai_usage(p_request_id UUID, p_status TEXT)
+RETURNS UUID LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public
+AS $$
+DECLARE
+    v_request public.ai_requests%ROWTYPE;
+    v_reservation public.ai_usage_reservations%ROWTYPE;
+    v_usage public.ai_usage_ledger%ROWTYPE;
+    v_period_id UUID;
+    v_period public.ai_billing_periods%ROWTYPE;
+    v_allocation RECORD;
+BEGIN
+    IF p_status NOT IN ('Recorded','Failed','Reversed','NeedsReconcile') THEN
+        RAISE EXCEPTION 'invalid AI usage settlement status';
+    END IF;
+
+    -- Match reserve_ai_usage: period (when present) -> request -> ledger /
+    -- reservation -> grants in ascending id order.
+    SELECT billing_period_id INTO v_period_id
+      FROM public.ai_usage_ledger
+     WHERE request_id = p_request_id;
+    IF v_period_id IS NOT NULL THEN
+        SELECT * INTO v_period
+          FROM public.ai_billing_periods
+         WHERE id = v_period_id
+         FOR UPDATE;
+        IF NOT FOUND THEN RAISE EXCEPTION 'AI billing period does not exist'; END IF;
+    END IF;
+
+    SELECT * INTO v_request
+      FROM public.ai_requests
+     WHERE id = p_request_id
+     FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'AI request does not exist'; END IF;
+
+    SELECT * INTO v_usage
+      FROM public.ai_usage_ledger
+     WHERE request_id = p_request_id
+     FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'AI usage request does not exist'; END IF;
+
+    SELECT * INTO v_reservation
+      FROM public.ai_usage_reservations
+     WHERE request_id = p_request_id
+     FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'AI usage reservation does not exist'; END IF;
+
+    IF v_usage.status IN ('Recorded','Failed','Reversed') THEN
+        IF v_usage.status = p_status THEN RETURN p_request_id; END IF;
+        RAISE EXCEPTION 'AI usage is already settled with a different status';
+    END IF;
+
+    IF p_status = 'NeedsReconcile' THEN
+        UPDATE public.ai_usage_ledger
+           SET status = 'NeedsReconcile'
+         WHERE request_id = p_request_id;
+        UPDATE public.ai_requests
+           SET status = 'NeedsReconcile'
+         WHERE id = p_request_id
+           AND status IN ('Accepted','Processing');
+        RETURN p_request_id;
+    END IF;
+
+    IF v_reservation.status <> 'Reserved' THEN
+        RAISE EXCEPTION 'AI reservation is not available for settlement';
+    END IF;
+
+    FOR v_allocation IN
+        SELECT * FROM public.ai_usage_reservation_allocations
+         WHERE reservation_id = v_reservation.id
+         ORDER BY quota_grant_id
+         FOR UPDATE
+    LOOP
+        UPDATE public.ai_quota_grants
+           SET units_reserved = units_reserved - v_allocation.units,
+               units_used = units_used + CASE WHEN p_status = 'Recorded' THEN v_allocation.units ELSE 0 END
+         WHERE id = v_allocation.quota_grant_id
+           AND units_reserved >= v_allocation.units;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'AI quota reservation integrity check failed';
+        END IF;
+    END LOOP;
+
+    UPDATE public.ai_usage_reservations
+       SET status = CASE WHEN p_status = 'Recorded' THEN 'Consumed' ELSE 'Released' END,
+           settled_at = pg_catalog.clock_timestamp()
+     WHERE id = v_reservation.id;
+
+    UPDATE public.ai_usage_ledger
+       SET status = p_status
+     WHERE request_id = p_request_id;
+
+    UPDATE public.ai_requests
+       SET status = CASE WHEN p_status = 'Recorded' THEN 'Succeeded' ELSE 'Failed' END,
+           completed_at = pg_catalog.clock_timestamp()
+     WHERE id = p_request_id
+       AND status IN ('Accepted','Processing','NeedsReconcile');
+
+    RETURN p_request_id;
+END;
+$$;
+
+
+-- Durable DB-to-queue handoff and worker attempt provenance.
+CREATE TABLE integration_outbox_events (
+    idempotency_key VARCHAR(255) PRIMARY KEY,
+    aggregate_type VARCHAR(80) NOT NULL,
+    aggregate_id UUID NOT NULL,
+    event_type VARCHAR(100) NOT NULL,
+    payload JSONB NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'Pending', -- Pending | Leased | Published | Failed
+    attempts INT NOT NULL DEFAULT 0,
+    available_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    lease_owner VARCHAR(255),
+    lease_until TIMESTAMPTZ,
+    last_error TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    published_at TIMESTAMPTZ,
+    CONSTRAINT check_outbox_status CHECK (status IN ('Pending','Leased','Published','Failed')),
+    CONSTRAINT check_outbox_attempts CHECK (attempts >= 0)
+);
+
+CREATE TABLE processing_job_attempts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    processing_job_id UUID REFERENCES processing_jobs(id) ON DELETE CASCADE NOT NULL,
+    attempt_number INT NOT NULL,
+    input_hash VARCHAR(64) NOT NULL,
+    toolchain_version VARCHAR(100) NOT NULL,
+    lease_owner VARCHAR(255) NOT NULL,
+    lease_token UUID NOT NULL UNIQUE,
+    lease_until TIMESTAMPTZ,
+    status VARCHAR(20) NOT NULL DEFAULT 'Running', -- Running | Succeeded | Failed | Expired
+    output_hash VARCHAR(64),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    finished_at TIMESTAMPTZ,
+    error_message TEXT,
+    UNIQUE (processing_job_id, attempt_number),
+    CONSTRAINT check_job_attempt_status CHECK (status IN ('Running','Succeeded','Failed','Expired')),
+    CONSTRAINT check_job_attempt_input_hash CHECK (input_hash ~ '^[0-9a-fA-F]{64}$'),
+    CONSTRAINT check_job_attempt_output_hash CHECK (output_hash IS NULL OR output_hash ~ '^[0-9a-fA-F]{64}$')
+);
+
+CREATE INDEX idx_outbox_dispatch ON integration_outbox_events(status, available_at, lease_until);
+CREATE INDEX idx_job_attempt_lease ON processing_job_attempts(status, lease_until);
+
+-- Verified webhook processing must not depend on the requester remaining
+-- active after checkout. Request identity and quotation snapshots are frozen.
+CREATE OR REPLACE FUNCTION validate_payos_paid_request()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM public.quotations AS quotation
+         WHERE quotation.id = NEW.quotation_id
+           AND quotation.organization_id = NEW.organization_id
+           AND quotation.total_amount = NEW.expected_amount
+           AND quotation.currency = NEW.expected_currency
+    ) THEN RAISE EXCEPTION 'PayOS request must match quotation organization, amount and currency'; END IF;
+
+    IF TG_OP = 'INSERT' AND NOT EXISTS (
+        SELECT 1 FROM public.users AS requester
+         WHERE requester.id = NEW.requested_by AND requester.role = 'OrganizationUser'
+           AND requester.organization_id = NEW.organization_id
+           AND requester.is_active AND requester.deleted_at IS NULL
+    ) THEN RAISE EXCEPTION 'checkout requester must be an active OrganizationUser in the same tenant'; END IF;
+
+    IF TG_OP = 'UPDATE' AND (
+        OLD.quotation_id IS DISTINCT FROM NEW.quotation_id
+        OR OLD.organization_id IS DISTINCT FROM NEW.organization_id
+        OR OLD.requested_by IS DISTINCT FROM NEW.requested_by
+        OR OLD.idempotency_key IS DISTINCT FROM NEW.idempotency_key
+        OR OLD.order_code IS DISTINCT FROM NEW.order_code
+        OR OLD.expected_amount IS DISTINCT FROM NEW.expected_amount
+        OR OLD.expected_currency IS DISTINCT FROM NEW.expected_currency
+    ) THEN RAISE EXCEPTION 'PayOS request identity and quotation snapshot are immutable'; END IF;
+    IF TG_OP = 'UPDATE' AND OLD.status = 'Paid' AND NEW IS DISTINCT FROM OLD THEN
+        RAISE EXCEPTION 'Paid payment truth and provenance are immutable';
+    END IF;
+    IF TG_OP = 'UPDATE' AND NEW.status = 'Paid' AND OLD.status <> 'Pending' THEN
+        RAISE EXCEPTION 'Only a Pending payment request can become Paid';
+    END IF;
+    IF TG_OP = 'UPDATE' AND NEW.status = 'Paid' AND CURRENT_USER <> 'fet3d_payos_ledger_owner' THEN
+        RAISE EXCEPTION 'Paid payment request must use the trusted PayOS webhook function';
+    END IF;
+    IF NEW.status = 'Paid' AND NOT EXISTS (
+        SELECT 1 FROM public.payment_transactions AS payment
+         WHERE payment.id = NEW.paid_transaction_id AND payment.payment_request_id = NEW.id
+           AND payment.status = 'Applied' AND payment.signature_verified
+           AND payment.received_order_code = NEW.order_code
+           AND payment.received_amount = NEW.expected_amount
+           AND payment.received_currency = NEW.expected_currency
+    ) THEN RAISE EXCEPTION 'Paid requires an Applied verified webhook matching the request snapshot'; END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'fet3d_backend_executor') THEN
+        CREATE ROLE fet3d_backend_executor NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS;
+    END IF;
+END;
+$$;
+
+REVOKE ALL PRIVILEGES ON FUNCTION start_training_session(UUID, UUID, TEXT, TEXT) FROM PUBLIC;
+REVOKE ALL PRIVILEGES ON FUNCTION start_playtest_session(UUID, UUID, TEXT, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION start_training_session(UUID, UUID, TEXT, TEXT) TO fet3d_backend_executor;
+GRANT EXECUTE ON FUNCTION start_playtest_session(UUID, UUID, TEXT, TEXT) TO fet3d_backend_executor;
+
+-- ============================================================================
+-- VERSION 6.6 TARGET DESIGN AMENDMENTS (continuation)
+-- Canonical field ownership, durable AI requests, fenced processing attempts,
+-- immutable billing snapshots and server-owned runtime/session gates.
+-- This section is target DDL only; it is not an executable migration.
+-- ============================================================================
+
+-- Runtime/app identity is deliberately separated for diagnostics and support.
+ALTER TABLE sessions RENAME COLUMN unity_version TO unity_engine_version;
+ALTER TABLE sessions
+    ADD COLUMN last_heartbeat_received_at TIMESTAMPTZ,
+    ADD COLUMN last_heartbeat_sequence BIGINT;
+ALTER TABLE playtest_sessions
+    ADD COLUMN unity_engine_version VARCHAR(50),
+    ADD COLUMN last_heartbeat_received_at TIMESTAMPTZ;
+
+-- One logical processing job has many attempts. Attempt/lease/toolchain/error
+-- provenance belongs to processing_job_attempts, not processing_jobs.
+ALTER TABLE processing_jobs
+    DROP CONSTRAINT IF EXISTS processing_jobs_job_key_attempt_number_key,
+    ADD CONSTRAINT uq_processing_jobs_logical_key UNIQUE (job_key),
+    DROP COLUMN IF EXISTS attempt_number,
+    DROP COLUMN IF EXISTS toolchain_version,
+    DROP COLUMN IF EXISTS lease_owner,
+    DROP COLUMN IF EXISTS heartbeat_at,
+    DROP COLUMN IF EXISTS started_at,
+    DROP COLUMN IF EXISTS finished_at,
+    DROP COLUMN IF EXISTS error_message;
+
+ALTER TABLE revision_processing_logs
+    ADD COLUMN attempt_id UUID,
+    DROP COLUMN IF EXISTS attempt_number;
+
+ALTER TABLE processing_job_attempts
+    ADD COLUMN output_artifact_id UUID,
+    ADD COLUMN result_validation_run_id UUID;
+
+ALTER TABLE processing_jobs
+    ADD COLUMN current_attempt_id UUID;
+
+ALTER TABLE revision_artifacts
+    ADD COLUMN attempt_id UUID NOT NULL;
+
+ALTER TABLE validation_runs
+    ADD COLUMN processing_attempt_id UUID NOT NULL;
+
+ALTER TABLE revision_processing_logs
+    ALTER COLUMN attempt_id SET NOT NULL,
+    ADD CONSTRAINT fk_revision_processing_logs_attempt
+        FOREIGN KEY (attempt_id) REFERENCES processing_job_attempts(id) ON DELETE CASCADE;
+
+ALTER TABLE revision_artifacts
+    ADD CONSTRAINT fk_revision_artifacts_attempt
+        FOREIGN KEY (attempt_id) REFERENCES processing_job_attempts(id) ON DELETE RESTRICT;
+
+ALTER TABLE validation_runs
+    ADD CONSTRAINT fk_validation_runs_attempt
+        FOREIGN KEY (processing_attempt_id) REFERENCES processing_job_attempts(id) ON DELETE RESTRICT;
+
+ALTER TABLE processing_job_attempts
+    ADD CONSTRAINT fk_job_attempt_output_artifact
+        FOREIGN KEY (output_artifact_id) REFERENCES revision_artifacts(id) ON DELETE RESTRICT;
+
+ALTER TABLE processing_job_attempts
+    ADD CONSTRAINT fk_job_attempt_result_validation
+        FOREIGN KEY (result_validation_run_id) REFERENCES validation_runs(id) ON DELETE RESTRICT;
+
+ALTER TABLE processing_jobs
+    DROP CONSTRAINT IF EXISTS fk_processing_jobs_current_attempt;
+ALTER TABLE processing_job_attempts
+    ADD CONSTRAINT uq_processing_attempt_id_job UNIQUE (id, processing_job_id);
+ALTER TABLE processing_jobs
+    ADD CONSTRAINT fk_processing_jobs_current_attempt_job
+        FOREIGN KEY (current_attempt_id, id) REFERENCES processing_job_attempts(id, processing_job_id) ON DELETE RESTRICT;
+
+ALTER TABLE validation_runs
+    DROP CONSTRAINT IF EXISTS uq_validation_run_attempt,
+    ADD CONSTRAINT uq_validation_run_attempt_version
+        UNIQUE (processing_attempt_id, validator_version, scope);
+
+-- Release package is pinned to the exact artifact and manifest attestation.
+ALTER TABLE release_packages
+    ADD COLUMN candidate_artifact_id UUID NOT NULL,
+    ADD COLUMN candidate_validation_run_id UUID NOT NULL,
+    ADD COLUMN manifest_sha256 VARCHAR(64) NOT NULL,
+    ADD CONSTRAINT fk_release_package_candidate_artifact
+        FOREIGN KEY (candidate_artifact_id) REFERENCES revision_artifacts(id) ON DELETE RESTRICT,
+    ADD CONSTRAINT fk_release_package_candidate_validation
+        FOREIGN KEY (candidate_validation_run_id) REFERENCES validation_runs(id) ON DELETE RESTRICT,
+    ADD CONSTRAINT check_release_package_manifest_hash
+        CHECK (manifest_sha256 ~ '^[0-9a-fA-F]{64}$');
+
+-- Every prepared/playtest session pins the exact artifact and validation run;
+-- package bytes alone are not sufficient provenance when two attempts share an
+-- S3 object hash.
+ALTER TABLE sessions
+    ADD COLUMN package_artifact_id UUID NOT NULL,
+    ADD COLUMN package_validation_run_id UUID NOT NULL,
+    ADD CONSTRAINT fk_session_package_artifact
+        FOREIGN KEY (package_artifact_id) REFERENCES revision_artifacts(id) ON DELETE RESTRICT,
+    ADD CONSTRAINT fk_session_package_validation
+        FOREIGN KEY (package_validation_run_id) REFERENCES validation_runs(id) ON DELETE RESTRICT;
+ALTER TABLE playtest_sessions
+    ADD COLUMN package_artifact_id UUID NOT NULL,
+    ADD COLUMN package_validation_run_id UUID NOT NULL,
+    ADD CONSTRAINT fk_playtest_package_artifact
+        FOREIGN KEY (package_artifact_id) REFERENCES revision_artifacts(id) ON DELETE RESTRICT,
+    ADD CONSTRAINT fk_playtest_package_validation
+        FOREIGN KEY (package_validation_run_id) REFERENCES validation_runs(id) ON DELETE RESTRICT;
+
+-- Runtime compatibility metadata is mandatory; no fail-open 0.0.0/capability
+-- default is allowed for a package or a playtest artifact.
+ALTER TABLE release_packages
+    DROP CONSTRAINT IF EXISTS check_release_package_runtime_metadata,
+    ALTER COLUMN protocol_version DROP DEFAULT,
+    ALTER COLUMN manifest_schema_version DROP DEFAULT,
+    ALTER COLUMN required_capabilities DROP DEFAULT,
+    ADD CONSTRAINT check_release_package_runtime_metadata_v2
+        CHECK (
+            NULLIF(pg_catalog.btrim(protocol_version), '') IS NOT NULL
+            AND NULLIF(pg_catalog.btrim(manifest_schema_version), '') IS NOT NULL
+            AND min_runtime_version ~ '^[0-9]+[.][0-9]+[.][0-9]+$'
+            AND jsonb_typeof(required_capabilities) = 'array'
+        );
+
+-- Policy versions are referenced by both grants and usage snapshots.
+ALTER TABLE ai_quota_grants
+    ALTER COLUMN policy_version_id SET NOT NULL,
+    ADD CONSTRAINT fk_ai_quota_grant_policy
+        FOREIGN KEY (policy_version_id) REFERENCES ai_policy_versions(id) ON DELETE RESTRICT;
+ALTER TABLE ai_usage_ledger
+    ALTER COLUMN policy_version_id SET NOT NULL,
+    ADD CONSTRAINT fk_ai_usage_policy
+        FOREIGN KEY (policy_version_id) REFERENCES ai_policy_versions(id) ON DELETE RESTRICT;
+
+-- A reservation may consume several pooled grants; the allocation table is the
+-- authority and the old one-grant field is removed from the target model.
+ALTER TABLE ai_usage_reservations
+    DROP CONSTRAINT IF EXISTS ai_usage_reservations_quota_grant_id_fkey,
+    DROP COLUMN IF EXISTS quota_grant_id;
+
+ALTER TABLE ai_usage_ledger
+    DROP CONSTRAINT IF EXISTS ai_usage_ledger_quota_grant_id_fkey,
+    DROP COLUMN IF EXISTS quota_grant_id;
+
+CREATE TABLE ai_usage_reservation_allocations (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    reservation_id      UUID REFERENCES ai_usage_reservations(id) ON DELETE CASCADE NOT NULL,
+    quota_grant_id      UUID REFERENCES ai_quota_grants(id) ON DELETE RESTRICT NOT NULL,
+    units               INT NOT NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT check_ai_allocation_units CHECK (units > 0),
+    UNIQUE (reservation_id, quota_grant_id)
+);
+
+ALTER TABLE ai_overage_consents
+    ADD CONSTRAINT check_ai_consent_terms_snapshot
+        CHECK (jsonb_typeof(terms_snapshot) = 'object');
+
+ALTER TABLE revision_reviews
+    ALTER COLUMN reviewed_at SET DEFAULT NOW(),
+    ALTER COLUMN reviewed_at SET NOT NULL;
+
+-- Common sources are unique within the common corpus; organization sources
+-- are unique only inside their owning organization. The partial indexes avoid
+-- SQL NULL semantics allowing duplicate common documents.
+CREATE UNIQUE INDEX uq_knowledge_common_source_identity
+    ON knowledge_sources (source_hash, version_label)
+    WHERE visibility = 'Common' AND organization_id IS NULL;
+CREATE UNIQUE INDEX uq_knowledge_organization_source_identity
+    ON knowledge_sources (organization_id, source_hash, version_label)
+    WHERE visibility = 'Organization';
+
+ALTER TABLE ai_billing_periods
+    ADD COLUMN disputed_at TIMESTAMPTZ,
+    ADD COLUMN disputed_reason TEXT,
+    ADD COLUMN disputed_by UUID REFERENCES users(id) ON DELETE RESTRICT,
+    DROP CONSTRAINT IF EXISTS check_ai_period_status,
+    ADD CONSTRAINT check_ai_period_status_v2
+        CHECK (status IN ('Open','Closed','Invoiced','Paid')),
+    ADD CONSTRAINT check_ai_period_dispute_metadata
+        CHECK ((disputed_at IS NULL AND disputed_reason IS NULL AND disputed_by IS NULL)
+            OR (disputed_at IS NOT NULL AND NULLIF(pg_catalog.btrim(disputed_reason), '') IS NOT NULL AND disputed_by IS NOT NULL));
+
+ALTER TABLE ai_requests
+    ADD CONSTRAINT check_ai_request_citations_array
+        CHECK (jsonb_typeof(citations) = 'array'),
+    ADD CONSTRAINT check_ai_request_technical_usage_object
+        CHECK (jsonb_typeof(technical_usage) = 'object');
+
+ALTER TABLE scenario_drafts
+    ADD CONSTRAINT fk_scenario_drafts_ai_request
+        FOREIGN KEY (last_ai_request_id) REFERENCES ai_requests(id) ON DELETE SET NULL;
+
+-- Knowledge identity is scoped to tenant; common and private copies may share
+-- a source hash without colliding globally.
+ALTER TABLE knowledge_sources
+    DROP CONSTRAINT IF EXISTS knowledge_sources_organization_id_visibility_source_hash_version_label_key;
+CREATE UNIQUE INDEX uq_knowledge_common_source
+    ON knowledge_sources(source_hash, version_label)
+    WHERE visibility = 'Common';
+CREATE UNIQUE INDEX uq_knowledge_organization_source
+    ON knowledge_sources(organization_id, source_hash, version_label)
+    WHERE visibility = 'Organization';
+
+-- NULL organization_id represents a common policy. Partial indexes prevent
+-- duplicate common versions while keeping organization policies tenant-scoped.
+ALTER TABLE ai_policy_versions
+    DROP CONSTRAINT IF EXISTS ai_policy_versions_organization_id_audience_policy_kind_version_label_key;
+CREATE UNIQUE INDEX uq_ai_common_policy_version
+    ON ai_policy_versions(audience, policy_kind, version_label)
+    WHERE organization_id IS NULL;
+CREATE UNIQUE INDEX uq_ai_organization_policy_version
+    ON ai_policy_versions(organization_id, audience, policy_kind, version_label)
+    WHERE organization_id IS NOT NULL;
+
+CREATE OR REPLACE FUNCTION enforce_quotation_lifecycle_v2()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = pg_catalog
+AS $$
+BEGIN
+    IF TG_OP = 'UPDATE' THEN
+        IF OLD.status <> NEW.status AND NOT (
+            (OLD.status = 'Draft' AND NEW.status IN ('Issued','Cancelled'))
+            OR (OLD.status = 'Issued' AND NEW.status IN ('Accepted','Expired','Cancelled'))
+            OR (OLD.status = 'Accepted' AND NEW.status IN ('Expired','Cancelled'))
+            OR (OLD.status = NEW.status)
+        ) THEN
+            RAISE EXCEPTION 'quotation status transition is not allowed';
+        END IF;
+        IF OLD.status <> 'Draft' AND (
+            OLD.organization_id IS DISTINCT FROM NEW.organization_id
+            OR OLD.billing_purpose IS DISTINCT FROM NEW.billing_purpose
+            OR OLD.building_id IS DISTINCT FROM NEW.building_id
+            OR OLD.service_package_id IS DISTINCT FROM NEW.service_package_id
+            OR OLD.service_duration_months IS DISTINCT FROM NEW.service_duration_months
+            OR OLD.requested_by IS DISTINCT FROM NEW.requested_by
+            OR OLD.quantity IS DISTINCT FROM NEW.quantity
+            OR OLD.unit_price IS DISTINCT FROM NEW.unit_price
+            OR OLD.subtotal_amount IS DISTINCT FROM NEW.subtotal_amount
+            OR OLD.tax_amount IS DISTINCT FROM NEW.tax_amount
+            OR OLD.discount_amount IS DISTINCT FROM NEW.discount_amount
+            OR OLD.total_amount IS DISTINCT FROM NEW.total_amount
+            OR OLD.currency IS DISTINCT FROM NEW.currency
+            OR OLD.price_snapshot IS DISTINCT FROM NEW.price_snapshot
+            OR OLD.terms_snapshot IS DISTINCT FROM NEW.terms_snapshot
+        ) THEN
+            RAISE EXCEPTION 'issued quotation identity and price/terms snapshot are immutable; issue a new quotation';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER zz_enforce_quotation_lifecycle
+BEFORE UPDATE ON quotations
+FOR EACH ROW EXECUTE FUNCTION enforce_quotation_lifecycle_v2();
+
+CREATE OR REPLACE FUNCTION enforce_ai_billing_period_lifecycle_v2()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = pg_catalog
+AS $$
+BEGIN
+    IF TG_OP = 'UPDATE' THEN
+        IF OLD.status <> NEW.status AND NOT (
+            (OLD.status = 'Open' AND NEW.status = 'Closed')
+            OR (OLD.status = 'Closed' AND NEW.status = 'Invoiced')
+            OR (OLD.status = 'Invoiced' AND NEW.status = 'Paid')
+            OR (OLD.status = NEW.status)
+        ) THEN
+            RAISE EXCEPTION 'AI billing period cannot reopen or skip its settlement lifecycle';
+        END IF;
+        IF OLD.status <> 'Open' AND (
+            OLD.organization_id IS DISTINCT FROM NEW.organization_id
+            OR OLD.period_start IS DISTINCT FROM NEW.period_start
+            OR OLD.period_end IS DISTINCT FROM NEW.period_end
+            OR OLD.unit_price_snapshot IS DISTINCT FROM NEW.unit_price_snapshot
+            OR OLD.overage_units IS DISTINCT FROM NEW.overage_units
+            OR OLD.overage_amount IS DISTINCT FROM NEW.overage_amount
+            OR OLD.currency IS DISTINCT FROM NEW.currency
+            OR OLD.closed_at IS DISTINCT FROM NEW.closed_at
+        ) THEN
+            RAISE EXCEPTION 'closed AI billing period snapshot and totals are immutable; use an adjustment';
+        END IF;
+        IF OLD.status = 'Open' AND NEW.status = 'Closed'
+           AND (NEW.settlement_quotation_id IS NOT NULL OR NEW.settlement_payment_transaction_id IS NOT NULL) THEN
+            RAISE EXCEPTION 'an AI period must be closed before attaching settlement documents';
+        END IF;
+        IF OLD.status = 'Closed' AND NEW.status = 'Invoiced' THEN
+            IF OLD.settlement_quotation_id IS NOT NULL
+               OR NEW.settlement_quotation_id IS NULL
+               OR NEW.settlement_payment_transaction_id IS NOT NULL THEN
+                RAISE EXCEPTION 'Closed to Invoiced requires one new AIUsage quotation and no payment';
+            END IF;
+        ELSIF OLD.status = 'Invoiced' AND NEW.status = 'Paid' THEN
+            IF OLD.settlement_quotation_id IS NULL
+               OR NEW.settlement_quotation_id IS DISTINCT FROM OLD.settlement_quotation_id
+               OR OLD.settlement_payment_transaction_id IS NOT NULL
+               OR NEW.settlement_payment_transaction_id IS NULL THEN
+                RAISE EXCEPTION 'Invoiced to Paid requires the existing quotation and one new Applied payment';
+            END IF;
+        ELSIF OLD.status <> 'Open'
+              AND (OLD.settlement_quotation_id IS DISTINCT FROM NEW.settlement_quotation_id
+                   OR OLD.settlement_payment_transaction_id IS DISTINCT FROM NEW.settlement_payment_transaction_id) THEN
+            RAISE EXCEPTION 'settlement documents can only be attached during their lifecycle transition';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER zz_enforce_ai_billing_period_lifecycle
+BEFORE UPDATE ON ai_billing_periods
+FOR EACH ROW EXECUTE FUNCTION enforce_ai_billing_period_lifecycle_v2();
+
+CREATE OR REPLACE FUNCTION validate_release_package_provenance_v2()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = pg_catalog
+AS $$
+DECLARE
+    v_release_id UUID;
+BEGIN
+    IF TG_OP = 'DELETE' THEN v_release_id := OLD.release_id; ELSE v_release_id := NEW.release_id; END IF;
+    IF TG_OP = 'DELETE' AND (
+        EXISTS (SELECT 1 FROM public.releases AS release WHERE release.id = v_release_id AND release.status IN ('Published','Superseded','Revoked'))
+        OR EXISTS (SELECT 1 FROM public.sessions AS session WHERE session.release_id = v_release_id)
+    ) THEN
+        RAISE EXCEPTION 'release package is pinned by publication or session and cannot be deleted';
+    END IF;
+    IF TG_OP = 'UPDATE' AND (
+        OLD.release_id IS DISTINCT FROM NEW.release_id
+        OR OLD.candidate_artifact_id IS DISTINCT FROM NEW.candidate_artifact_id
+        OR OLD.candidate_validation_run_id IS DISTINCT FROM NEW.candidate_validation_run_id
+        OR OLD.manifest_sha256 IS DISTINCT FROM NEW.manifest_sha256
+        OR OLD.checksum_sha256 IS DISTINCT FROM NEW.checksum_sha256
+        OR OLD.manifest_url IS DISTINCT FROM NEW.manifest_url
+        OR OLD.package_url IS DISTINCT FROM NEW.package_url
+        OR OLD.package_size_bytes IS DISTINCT FROM NEW.package_size_bytes
+        OR OLD.protocol_version IS DISTINCT FROM NEW.protocol_version
+        OR OLD.manifest_schema_version IS DISTINCT FROM NEW.manifest_schema_version
+        OR OLD.min_runtime_version IS DISTINCT FROM NEW.min_runtime_version
+        OR OLD.required_capabilities IS DISTINCT FROM NEW.required_capabilities
+        OR OLD.build_target IS DISTINCT FROM NEW.build_target
+    ) AND (
+        EXISTS (SELECT 1 FROM public.releases AS release WHERE release.id IN (OLD.release_id, NEW.release_id) AND release.status IN ('Published','Superseded','Revoked'))
+        OR EXISTS (SELECT 1 FROM public.sessions AS session WHERE session.release_id IN (OLD.release_id, NEW.release_id))
+    ) THEN
+        RAISE EXCEPTION 'published or pinned package metadata is immutable; create a new release';
+    END IF;
+    IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM public.releases AS release
+         WHERE release.id = NEW.release_id
+           AND release.revision_id = (
+               SELECT artifact.revision_id FROM public.revision_artifacts AS artifact
+                WHERE artifact.id = NEW.candidate_artifact_id
+           )
+    ) THEN
+        RAISE EXCEPTION 'release package artifact must belong to the release revision';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM public.revision_artifacts AS artifact
+         WHERE artifact.id = NEW.candidate_artifact_id
+           AND artifact.sha256_hash = NEW.checksum_sha256
+           AND artifact.metadata ->> 'manifest_sha256' = NEW.manifest_sha256
+           AND artifact.metadata ->> 'build_target' = NEW.build_target
+    ) THEN
+        RAISE EXCEPTION 'release package checksum must attest the pinned candidate artifact';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1
+          FROM public.validation_runs AS run
+          JOIN public.releases AS release ON release.id = NEW.release_id
+         WHERE run.id = NEW.candidate_validation_run_id
+           AND run.release_id = NEW.release_id
+           AND run.revision_id = release.revision_id
+           AND run.scenario_version_id = release.scenario_version_id
+           AND run.artifact_id = NEW.candidate_artifact_id
+           AND run.scope = 'ReleasePackage'
+           AND run.status IN ('Queued','Running','Passed')
+    ) THEN
+        RAISE EXCEPTION 'release package must pin a valid validation run for its exact artifact and release';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER zz_validate_release_package_provenance
+BEFORE INSERT OR UPDATE OR DELETE ON release_packages
+FOR EACH ROW EXECUTE FUNCTION validate_release_package_provenance_v2();
+
+CREATE OR REPLACE FUNCTION enforce_session_transition_v2()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = pg_catalog
+AS $$
+DECLARE
+    v_authorized BOOLEAN := CURRENT_USER = 'fet3d_session_owner'
+        AND COALESCE(pg_catalog.current_setting('fet3d.session_start_id', true), '') = NEW.id::TEXT;
+BEGIN
+    IF OLD.training_id IS DISTINCT FROM NEW.training_id
+       OR OLD.release_id IS DISTINCT FROM NEW.release_id
+       OR OLD.scenario_version_id IS DISTINCT FROM NEW.scenario_version_id
+       OR OLD.organization_id IS DISTINCT FROM NEW.organization_id
+       OR OLD.trainee_user_id IS DISTINCT FROM NEW.trainee_user_id
+       OR OLD.device_id IS DISTINCT FROM NEW.device_id
+       OR OLD.qr_code_id IS DISTINCT FROM NEW.qr_code_id
+       OR OLD.mode IS DISTINCT FROM NEW.mode
+       OR OLD.package_hash IS DISTINCT FROM NEW.package_hash
+       OR OLD.package_artifact_id IS DISTINCT FROM NEW.package_artifact_id
+       OR OLD.package_validation_run_id IS DISTINCT FROM NEW.package_validation_run_id
+       OR OLD.protocol_version IS DISTINCT FROM NEW.protocol_version
+       OR OLD.manifest_schema_version IS DISTINCT FROM NEW.manifest_schema_version
+       OR OLD.prepare_idempotency_key IS DISTINCT FROM NEW.prepare_idempotency_key
+    THEN RAISE EXCEPTION 'session training, package and identity pins are immutable'; END IF;
+
+    IF OLD.status = 'Created' AND (
+        NEW.status <> OLD.status
+        OR OLD.start_idempotency_key IS DISTINCT FROM NEW.start_idempotency_key
+        OR OLD.launch_granted_at IS DISTINCT FROM NEW.launch_granted_at
+        OR OLD.started_at IS DISTINCT FROM NEW.started_at
+        OR OLD.runtime_version IS DISTINCT FROM NEW.runtime_version
+        OR OLD.runtime_catalog_id IS DISTINCT FROM NEW.runtime_catalog_id
+    ) AND NOT v_authorized THEN
+        RAISE EXCEPTION 'only actor-bound online start may launch a session';
+    END IF;
+
+    IF OLD.started_at IS NOT NULL AND OLD.started_at IS DISTINCT FROM NEW.started_at THEN
+        RAISE EXCEPTION 'started_at is immutable after gameplay begins';
+    END IF;
+    IF OLD.status IN ('Completed','CompletedWithSupersededRelease','ScenarioUnsurvivable','Aborted','Abandoned','Crashed')
+       AND NEW.status IS DISTINCT FROM OLD.status THEN
+        RAISE EXCEPTION 'terminal session cannot be reopened';
+    END IF;
+    IF OLD.status = 'Running' AND NEW.status NOT IN ('Running','Completed','CompletedWithSupersededRelease','ScenarioUnsurvivable','Aborted','Abandoned','Crashed') THEN
+        RAISE EXCEPTION 'Running session has an invalid next state';
+    END IF;
+    IF OLD.status = 'Launching' AND NEW.status NOT IN ('Launching','Running','Aborted','Crashed') THEN
+        RAISE EXCEPTION 'Launching session has an invalid next state';
+    END IF;
+    IF NEW.status IN ('Launching','Running') AND (NEW.launch_granted_at IS NULL OR NEW.start_idempotency_key IS NULL) THEN
+        RAISE EXCEPTION 'gameplay state requires a launch grant and start key';
+    END IF;
+    IF NEW.status = 'Running' AND NEW.started_at IS NULL THEN
+        RAISE EXCEPTION 'Running session requires started_at';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION enforce_playtest_transition_v2()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = pg_catalog
+AS $$
+DECLARE
+    v_authorized BOOLEAN := CURRENT_USER = 'fet3d_session_owner'
+        AND COALESCE(pg_catalog.current_setting('fet3d.playtest_start_id', true), '') = NEW.id::TEXT;
+BEGIN
+    IF OLD.organization_id IS DISTINCT FROM NEW.organization_id
+       OR OLD.building_id IS DISTINCT FROM NEW.building_id
+       OR OLD.revision_id IS DISTINCT FROM NEW.revision_id
+       OR OLD.scenario_draft_id IS DISTINCT FROM NEW.scenario_draft_id
+       OR OLD.scenario_version_id IS DISTINCT FROM NEW.scenario_version_id
+       OR OLD.service_entitlement_id IS DISTINCT FROM NEW.service_entitlement_id
+       OR OLD.created_by IS DISTINCT FROM NEW.created_by
+       OR OLD.package_hash IS DISTINCT FROM NEW.package_hash
+       OR OLD.package_artifact_id IS DISTINCT FROM NEW.package_artifact_id
+       OR OLD.package_validation_run_id IS DISTINCT FROM NEW.package_validation_run_id
+       OR OLD.protocol_version IS DISTINCT FROM NEW.protocol_version
+       OR OLD.manifest_schema_version IS DISTINCT FROM NEW.manifest_schema_version
+    THEN RAISE EXCEPTION 'playtest tenant, scenario, package and creator pins are immutable'; END IF;
+    IF OLD.status = 'Created' AND (
+        NEW.status <> OLD.status
+        OR OLD.start_idempotency_key IS DISTINCT FROM NEW.start_idempotency_key
+        OR OLD.started_at IS DISTINCT FROM NEW.started_at
+        OR OLD.runtime_version IS DISTINCT FROM NEW.runtime_version
+        OR OLD.runtime_catalog_id IS DISTINCT FROM NEW.runtime_catalog_id
+    ) AND NOT v_authorized THEN
+        RAISE EXCEPTION 'only actor-bound online start may launch a playtest';
+    END IF;
+    IF OLD.status IN ('Completed','Aborted','Failed') AND NEW.status IS DISTINCT FROM OLD.status THEN
+        RAISE EXCEPTION 'terminal playtest cannot be reopened';
+    END IF;
+    IF NEW.status = 'Running' AND (NEW.start_idempotency_key IS NULL OR NEW.started_at IS NULL) THEN
+        RAISE EXCEPTION 'Running playtest requires an online start';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER zz_enforce_session_transition
+BEFORE UPDATE ON sessions
+FOR EACH ROW EXECUTE FUNCTION enforce_session_transition_v2();
+
+CREATE TRIGGER zz_enforce_playtest_transition
+BEFORE UPDATE ON playtest_sessions
+FOR EACH ROW EXECUTE FUNCTION enforce_playtest_transition_v2();
+
+CREATE OR REPLACE FUNCTION enforce_ai_request_write_v2()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = pg_catalog
+AS $$
+BEGIN
+    IF TG_OP = 'INSERT' AND (
+        NEW.status <> 'Accepted'
+        OR NEW.result_type IS NOT NULL
+        OR NEW.result_reference IS NOT NULL
+        OR NEW.response_snapshot IS NOT NULL
+        OR NEW.citations IS DISTINCT FROM '[]'::JSONB
+        OR NEW.model_provider IS NOT NULL
+        OR NEW.model_version IS NOT NULL
+        OR NEW.technical_usage IS DISTINCT FROM '{}'::JSONB
+        OR NEW.failure_code IS NOT NULL
+        OR NEW.completed_at IS NOT NULL
+    ) THEN
+        RAISE EXCEPTION 'new AI requests must enter Accepted state without a result';
+    END IF;
+    IF TG_OP = 'INSERT' AND NOT EXISTS (
+        SELECT 1
+          FROM public.ai_policy_versions AS policy
+         WHERE policy.id = NEW.policy_version_id
+           AND policy.audience IN (NEW.audience, 'common')
+           AND (policy.organization_id IS NULL OR policy.organization_id = NEW.organization_id)
+           AND policy.effective_from <= pg_catalog.clock_timestamp()
+           AND (policy.effective_until IS NULL OR policy.effective_until > pg_catalog.clock_timestamp())
+    ) THEN
+        RAISE EXCEPTION 'AI request policy version is not valid for its audience and tenant';
+    END IF;
+    IF TG_OP = 'INSERT' AND NEW.audience = 'organization' AND NOT EXISTS (
+        SELECT 1 FROM public.users AS requester
+         WHERE requester.id = NEW.user_id
+           AND requester.role = 'OrganizationUser'
+           AND requester.organization_id = NEW.organization_id
+           AND requester.is_active
+           AND requester.deleted_at IS NULL
+    ) THEN
+        RAISE EXCEPTION 'organization AI request must belong to an active OrganizationUser in the same tenant';
+    END IF;
+    IF TG_OP = 'INSERT' AND NEW.audience = 'trainee' AND NOT EXISTS (
+        SELECT 1 FROM public.users AS trainee
+         WHERE trainee.id = NEW.user_id
+           AND trainee.role = 'Trainee'
+           AND trainee.is_active
+           AND trainee.deleted_at IS NULL
+    ) THEN
+        RAISE EXCEPTION 'trainee AI request must belong to an active Trainee';
+    END IF;
+    IF TG_OP = 'INSERT' AND NEW.audience = 'organization'
+       AND NEW.building_id IS NOT NULL
+       AND NOT EXISTS (
+        SELECT 1 FROM public.buildings AS building
+         WHERE building.id = NEW.building_id
+           AND building.organization_id = NEW.organization_id
+           AND building.is_active
+           AND building.deleted_at IS NULL
+    ) THEN
+        RAISE EXCEPTION 'AI request building must belong to the same active organization';
+    END IF;
+    IF TG_OP = 'UPDATE' AND (
+        OLD.idempotency_key IS DISTINCT FROM NEW.idempotency_key
+        OR OLD.organization_id IS DISTINCT FROM NEW.organization_id
+        OR OLD.building_id IS DISTINCT FROM NEW.building_id
+        OR OLD.user_id IS DISTINCT FROM NEW.user_id
+         OR OLD.audience IS DISTINCT FROM NEW.audience
+         OR OLD.request_type IS DISTINCT FROM NEW.request_type
+         OR OLD.source_scope IS DISTINCT FROM NEW.source_scope
+         OR OLD.policy_version_id IS DISTINCT FROM NEW.policy_version_id
+         OR OLD.input_hash IS DISTINCT FROM NEW.input_hash
+         OR OLD.input_reference IS DISTINCT FROM NEW.input_reference
+    ) THEN
+        RAISE EXCEPTION 'AI request identity, scope and input hash are immutable';
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD.status <> NEW.status AND NOT (
+        (OLD.status = 'Accepted' AND NEW.status IN ('Processing','Rejected'))
+        OR (OLD.status = 'Processing' AND NEW.status IN ('Succeeded','Failed','NeedsReconcile'))
+        OR (OLD.status = 'NeedsReconcile' AND NEW.status IN ('Succeeded','Failed'))
+        OR (OLD.status = NEW.status)
+    ) THEN
+        RAISE EXCEPTION 'AI request status transition is not allowed';
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD.status IN ('Succeeded','Failed','Rejected') AND (
+        OLD.result_type IS DISTINCT FROM NEW.result_type
+        OR OLD.result_reference IS DISTINCT FROM NEW.result_reference
+         OR OLD.response_snapshot IS DISTINCT FROM NEW.response_snapshot
+         OR OLD.result_hash IS DISTINCT FROM NEW.result_hash
+        OR OLD.citations IS DISTINCT FROM NEW.citations
+        OR OLD.model_provider IS DISTINCT FROM NEW.model_provider
+        OR OLD.model_version IS DISTINCT FROM NEW.model_version
+        OR OLD.technical_usage IS DISTINCT FROM NEW.technical_usage
+        OR OLD.failure_code IS DISTINCT FROM NEW.failure_code
+        OR OLD.completed_at IS DISTINCT FROM NEW.completed_at
+    ) THEN
+        RAISE EXCEPTION 'terminal AI request result is immutable; identical replay is a no-op';
+    END IF;
+    IF NEW.status = 'Succeeded' AND (
+        NEW.result_type IS NULL OR NEW.response_snapshot IS NULL
+        OR NEW.result_hash IS NULL
+        OR pg_catalog.jsonb_typeof(NEW.citations) <> 'array'
+        OR pg_catalog.jsonb_typeof(NEW.technical_usage) <> 'object'
+        OR NEW.model_provider IS NULL OR NEW.model_version IS NULL
+        OR NEW.completed_at IS NULL
+    ) THEN
+        RAISE EXCEPTION 'successful AI request requires result, model and completion evidence';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER zz_enforce_ai_request_write
+BEFORE INSERT OR UPDATE ON ai_requests
+FOR EACH ROW EXECUTE FUNCTION enforce_ai_request_write_v2();
+
+CREATE OR REPLACE FUNCTION validate_ai_usage_provenance_v2()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = pg_catalog
+AS $$
+DECLARE
+    v_period public.ai_billing_periods%ROWTYPE;
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM public.ai_requests AS request
+         WHERE request.id = NEW.request_id
+           AND request.user_id = NEW.user_id
+           AND request.audience = NEW.audience
+           AND request.request_type = NEW.request_type
+           AND request.organization_id IS NOT DISTINCT FROM NEW.organization_id
+           AND request.building_id IS NOT DISTINCT FROM NEW.building_id
+    ) THEN
+        RAISE EXCEPTION 'AI usage must match its durable request identity and tenant scope';
+    END IF;
+    IF NEW.policy_version_id IS NULL OR NOT EXISTS (
+        SELECT 1 FROM public.ai_policy_versions AS policy
+         WHERE policy.id = NEW.policy_version_id
+           AND (policy.audience = NEW.audience OR policy.audience = 'common')
+           AND (policy.organization_id IS NULL OR policy.organization_id = NEW.organization_id)
+    ) THEN
+        RAISE EXCEPTION 'AI usage requires the applied quota/pricing policy version';
+    END IF;
+
+    IF NEW.audience = 'organization' THEN
+        IF NEW.organization_id IS NULL OR (NEW.building_id IS NOT NULL AND NOT EXISTS (
+            SELECT 1 FROM public.buildings AS building
+             WHERE building.id = NEW.building_id AND building.organization_id = NEW.organization_id
+        )) THEN
+            RAISE EXCEPTION 'organization AI usage building must belong to the usage organization';
+        END IF;
+        IF NEW.billable AND (
+            NEW.overage_consent_id IS NULL OR NEW.billing_period_id IS NULL
+            OR pg_catalog.jsonb_typeof(NEW.unit_price_snapshot) <> 'object'
+            OR NOT (NEW.unit_price_snapshot ? 'unit_price')
+            OR NOT (NEW.unit_price_snapshot ? 'currency')
+            OR (NEW.unit_price_snapshot ->> 'currency') !~ '^[A-Z]{3}$'
+            OR (NEW.unit_price_snapshot ->> 'unit_price') !~ '^[0-9]+([.][0-9]+)?$'
+        ) THEN
+            RAISE EXCEPTION 'billable organization AI usage requires consent, period and price snapshot';
+        END IF;
+        IF NEW.overage_consent_id IS NOT NULL AND NOT EXISTS (
+            SELECT 1 FROM public.ai_overage_consents AS consent
+             WHERE consent.id = NEW.overage_consent_id
+               AND consent.organization_id = NEW.organization_id
+        ) THEN
+            RAISE EXCEPTION 'AI overage consent must belong to the usage organization';
+        END IF;
+        IF NEW.billing_period_id IS NOT NULL THEN
+            SELECT * INTO v_period
+              FROM public.ai_billing_periods AS period
+             WHERE period.id = NEW.billing_period_id
+             FOR UPDATE;
+            IF NOT FOUND
+               OR v_period.organization_id IS DISTINCT FROM NEW.organization_id
+               OR (TG_OP = 'INSERT' AND v_period.status <> 'Open') THEN
+                RAISE EXCEPTION 'AI usage billing period must belong to the same organization';
+            END IF;
+        END IF;
+    ELSE
+        IF NEW.organization_id IS NOT NULL OR NEW.building_id IS NOT NULL
+           OR NEW.billable OR NEW.overage_consent_id IS NOT NULL
+           OR NEW.billing_period_id IS NOT NULL THEN
+            RAISE EXCEPTION 'Trainee AI usage is user-scoped and non-billable';
+        END IF;
+    END IF;
+
+    IF TG_OP = 'UPDATE' AND (
+        OLD.request_id IS DISTINCT FROM NEW.request_id
+        OR OLD.idempotency_key IS DISTINCT FROM NEW.idempotency_key
+        OR OLD.organization_id IS DISTINCT FROM NEW.organization_id
+        OR OLD.building_id IS DISTINCT FROM NEW.building_id
+        OR OLD.user_id IS DISTINCT FROM NEW.user_id
+        OR OLD.audience IS DISTINCT FROM NEW.audience
+        OR OLD.request_type IS DISTINCT FROM NEW.request_type
+        OR OLD.policy_version_id IS DISTINCT FROM NEW.policy_version_id
+        OR OLD.units IS DISTINCT FROM NEW.units
+        OR OLD.overage_consent_id IS DISTINCT FROM NEW.overage_consent_id
+        OR OLD.billable IS DISTINCT FROM NEW.billable
+        OR OLD.unit_price_snapshot IS DISTINCT FROM NEW.unit_price_snapshot
+        OR OLD.billing_period_id IS DISTINCT FROM NEW.billing_period_id
+        OR OLD.source_scope IS DISTINCT FROM NEW.source_scope
+    ) THEN
+        RAISE EXCEPTION 'AI usage financial provenance is immutable';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS validate_ai_usage_before_write ON ai_usage_ledger;
+CREATE TRIGGER validate_ai_usage_before_write
+BEFORE INSERT OR UPDATE ON ai_usage_ledger
+FOR EACH ROW EXECUTE FUNCTION validate_ai_usage_provenance_v2();
+
+-- Heartbeat is server-observed and monotonic; it is not an entitlement check.
+CREATE OR REPLACE FUNCTION record_session_heartbeat(
+    p_actor_id UUID, p_session_id UUID, p_sequence BIGINT, p_client_recorded_at TIMESTAMPTZ
+)
+RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
+AS $$
+DECLARE
+    v_session public.sessions%ROWTYPE;
+BEGIN
+    IF p_sequence < 0 THEN RAISE EXCEPTION 'heartbeat sequence must be non-negative'; END IF;
+    SELECT * INTO v_session
+      FROM public.sessions AS session
+     WHERE session.id = p_session_id
+       AND session.trainee_user_id = p_actor_id
+       AND session.status IN ('Launching','Running')
+     FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'heartbeat actor or active session is invalid'; END IF;
+    IF v_session.last_heartbeat_sequence IS NOT NULL
+       AND p_sequence <= v_session.last_heartbeat_sequence THEN
+        RETURN true;
+    END IF;
+    UPDATE public.sessions AS session
+       SET last_heartbeat_sequence = p_sequence,
+           last_heartbeat_received_at = pg_catalog.clock_timestamp()
+     WHERE session.id = p_session_id;
+    RETURN true;
+END;
+$$;
+
+
+-- Service roles are intentionally separate from the business-table owner.
+-- AI/worker network access does not grant billing, entitlement or publication DML.
+DO $service_roles$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'fet3d_session_prepare_executor') THEN
+        CREATE ROLE fet3d_session_prepare_executor NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'fet3d_session_sync_executor') THEN
+        CREATE ROLE fet3d_session_sync_executor NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'fet3d_ai_service_executor') THEN
+        CREATE ROLE fet3d_ai_service_executor NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'fet3d_processing_worker_executor') THEN
+        CREATE ROLE fet3d_processing_worker_executor NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS;
+    END IF;
+END;
+$service_roles$;
+
+REVOKE ALL PRIVILEGES ON TABLE sessions, playtest_sessions FROM PUBLIC;
+REVOKE UPDATE, DELETE ON TABLE sessions, playtest_sessions FROM fet3d_backend_executor;
+GRANT SELECT, INSERT ON TABLE sessions, playtest_sessions TO fet3d_session_prepare_executor;
+GRANT EXECUTE ON FUNCTION start_training_session(UUID, UUID, TEXT, TEXT)
+    TO fet3d_backend_executor;
+GRANT EXECUTE ON FUNCTION start_playtest_session(UUID, UUID, TEXT, TEXT)
+    TO fet3d_backend_executor;
+GRANT EXECUTE ON FUNCTION record_session_heartbeat(UUID, UUID, BIGINT, TIMESTAMPTZ)
+    TO fet3d_session_sync_executor;
+
+REVOKE ALL PRIVILEGES ON TABLE ai_requests, ai_usage_ledger, ai_usage_reservations,
+    ai_usage_reservation_allocations, ai_billing_periods, ai_billing_period_items,
+    ai_billing_adjustments, ai_quota_grants, ai_overage_consents FROM PUBLIC;
+REVOKE ALL PRIVILEGES ON TABLE payment_transactions, service_entitlements,
+    quotations, releases, release_packages FROM fet3d_ai_service_executor, fet3d_processing_worker_executor;
+
+-- ============================================================================
+-- FINAL TARGET HARDENING — field ownership, close snapshots, worker fencing
+-- and permission boundaries. This is design DDL, not an executable migration.
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION fet3d_capabilities_are_valid(p_capabilities JSONB)
+RETURNS BOOLEAN
+LANGUAGE plpgsql IMMUTABLE SET search_path = pg_catalog
+AS $$
+BEGIN
+    IF p_capabilities IS NULL OR pg_catalog.jsonb_typeof(p_capabilities) <> 'array' THEN
+        RETURN false;
+    END IF;
+    RETURN NOT EXISTS (
+        SELECT 1
+          FROM pg_catalog.jsonb_array_elements(p_capabilities) AS item(value)
+         WHERE pg_catalog.jsonb_typeof(item.value) <> 'string'
+             OR NULLIF(pg_catalog.btrim(item.value #>> '{}'), '') IS NULL
+    );
+END;
+$$;
+
+ALTER TABLE runtime_compatibility_catalog
+    DROP CONSTRAINT IF EXISTS check_runtime_catalog_capabilities,
+    ADD CONSTRAINT check_runtime_catalog_capabilities_v2
+        CHECK (public.fet3d_capabilities_are_valid(capabilities));
+
+ALTER TABLE release_packages
+    DROP CONSTRAINT IF EXISTS check_release_package_capabilities,
+    DROP CONSTRAINT IF EXISTS check_release_package_runtime_metadata_v2,
+    ADD CONSTRAINT check_release_package_runtime_metadata_v3
+        CHECK (
+            NULLIF(pg_catalog.btrim(protocol_version), '') IS NOT NULL
+            AND NULLIF(pg_catalog.btrim(manifest_schema_version), '') IS NOT NULL
+            AND min_runtime_version ~ '^[0-9]+[.][0-9]+[.][0-9]+$'
+            AND public.fet3d_capabilities_are_valid(required_capabilities)
+        );
+
+CREATE OR REPLACE FUNCTION fet3d_runtime_package_is_compatible(
+    p_runtime_version TEXT,
+    p_min_runtime_version TEXT,
+    p_protocol_version TEXT,
+    p_manifest_schema_version TEXT,
+    p_required_capabilities JSONB,
+    p_catalog_id UUID
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql STABLE SET search_path = pg_catalog
+AS $$
+DECLARE
+    v_capabilities JSONB;
+BEGIN
+    IF NULLIF(pg_catalog.btrim(p_runtime_version), '') IS NULL
+       OR NULLIF(pg_catalog.btrim(p_min_runtime_version), '') IS NULL
+       OR NULLIF(pg_catalog.btrim(p_protocol_version), '') IS NULL
+       OR NULLIF(pg_catalog.btrim(p_manifest_schema_version), '') IS NULL
+       OR p_catalog_id IS NULL
+       OR NOT public.fet3d_capabilities_are_valid(p_required_capabilities) THEN
+        RETURN false;
+    END IF;
+    SELECT catalog.capabilities INTO v_capabilities
+      FROM public.runtime_compatibility_catalog AS catalog
+     WHERE catalog.id = p_catalog_id
+       AND catalog.is_active
+       AND catalog.runtime_version = p_runtime_version
+       AND catalog.protocol_version = p_protocol_version
+       AND catalog.manifest_schema_version = p_manifest_schema_version
+       AND public.fet3d_capabilities_are_valid(catalog.capabilities);
+    IF NOT FOUND OR NOT public.fet3d_semver_gte(p_runtime_version, p_min_runtime_version) THEN
+        RETURN false;
+    END IF;
+    RETURN NOT EXISTS (
+        SELECT 1
+          FROM pg_catalog.jsonb_array_elements_text(p_required_capabilities) AS required(capability)
+         WHERE NOT (v_capabilities ? required.capability)
+    );
+END;
+$$;
+
+-- New artifact bytes may share one S3 object, but each processing attempt keeps
+-- its own provenance row. The old revision/type/hash uniqueness was too broad.
+ALTER TABLE revision_artifacts
+    DROP CONSTRAINT IF EXISTS revision_artifacts_revision_id_artifact_type_sha256_hash_key,
+    ADD CONSTRAINT uq_revision_artifact_attempt_hash
+        UNIQUE (attempt_id, artifact_type, sha256_hash);
+
+ALTER TABLE ai_billing_adjustments
+    ADD COLUMN organization_id UUID REFERENCES organizations(id) ON DELETE RESTRICT,
+    ADD COLUMN idempotency_key VARCHAR(255);
+
+ALTER TABLE ai_billing_adjustments
+    ALTER COLUMN organization_id SET NOT NULL,
+    ALTER COLUMN idempotency_key SET NOT NULL,
+    ADD CONSTRAINT uq_ai_billing_adjustment_idempotency UNIQUE (idempotency_key),
+    ADD CONSTRAINT check_ai_billing_adjustment_idempotency
+        CHECK (NULLIF(pg_catalog.btrim(idempotency_key), '') IS NOT NULL);
+
+CREATE OR REPLACE FUNCTION enforce_processing_job_identity()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = pg_catalog
+AS $$
+BEGIN
+    IF TG_OP = 'UPDATE' AND (
+        OLD.job_key IS DISTINCT FROM NEW.job_key
+        OR OLD.revision_id IS DISTINCT FROM NEW.revision_id
+        OR OLD.source_document_id IS DISTINCT FROM NEW.source_document_id
+        OR OLD.scenario_version_id IS DISTINCT FROM NEW.scenario_version_id
+        OR OLD.kind IS DISTINCT FROM NEW.kind
+        OR OLD.input_hash IS DISTINCT FROM NEW.input_hash
+    ) THEN
+        RAISE EXCEPTION 'logical processing job identity and input hash are immutable; create a new job';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS enforce_processing_job_identity_before_write ON processing_jobs;
+CREATE TRIGGER enforce_processing_job_identity_before_write
+BEFORE UPDATE OF job_key, revision_id, source_document_id, scenario_version_id, kind, input_hash
+ON processing_jobs FOR EACH ROW EXECUTE FUNCTION enforce_processing_job_identity();
+
+CREATE OR REPLACE FUNCTION enforce_revision_artifact_immutability()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = pg_catalog
+AS $$
+BEGIN
+    RAISE EXCEPTION 'revision artifacts are immutable; create a new artifact row for new bytes or metadata';
+END;
+$$;
+
+DROP TRIGGER IF EXISTS enforce_revision_artifact_immutability_before_write ON revision_artifacts;
+CREATE TRIGGER enforce_revision_artifact_immutability_before_write
+BEFORE UPDATE OR DELETE ON revision_artifacts
+FOR EACH ROW EXECUTE FUNCTION enforce_revision_artifact_immutability();
+
+CREATE OR REPLACE FUNCTION enforce_release_package_pin_immutability()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = pg_catalog
+AS $$
+DECLARE
+    v_release_id UUID;
+BEGIN
+    IF TG_OP = 'DELETE' THEN v_release_id := OLD.release_id; ELSE v_release_id := NEW.release_id; END IF;
+    IF TG_OP = 'DELETE' AND EXISTS (
+        SELECT 1 FROM public.releases AS release
+         WHERE release.id = v_release_id
+           AND release.status IN ('Published','Superseded','Revoked')
+    ) THEN
+        RAISE EXCEPTION 'published or historical release package cannot be deleted';
+    END IF;
+    IF TG_OP = 'UPDATE' AND (
+        OLD.release_id IS DISTINCT FROM NEW.release_id
+        OR OLD.candidate_artifact_id IS DISTINCT FROM NEW.candidate_artifact_id
+        OR OLD.candidate_validation_run_id IS DISTINCT FROM NEW.candidate_validation_run_id
+        OR OLD.manifest_sha256 IS DISTINCT FROM NEW.manifest_sha256
+        OR OLD.checksum_sha256 IS DISTINCT FROM NEW.checksum_sha256
+        OR OLD.manifest_url IS DISTINCT FROM NEW.manifest_url
+        OR OLD.package_url IS DISTINCT FROM NEW.package_url
+        OR OLD.package_size_bytes IS DISTINCT FROM NEW.package_size_bytes
+        OR OLD.protocol_version IS DISTINCT FROM NEW.protocol_version
+        OR OLD.manifest_schema_version IS DISTINCT FROM NEW.manifest_schema_version
+        OR OLD.min_runtime_version IS DISTINCT FROM NEW.min_runtime_version
+        OR OLD.required_capabilities IS DISTINCT FROM NEW.required_capabilities
+        OR OLD.build_target IS DISTINCT FROM NEW.build_target
+    ) AND (
+        EXISTS (SELECT 1 FROM public.releases AS release WHERE release.id IN (OLD.release_id, NEW.release_id) AND release.status IN ('Published','Superseded','Revoked'))
+        OR EXISTS (SELECT 1 FROM public.sessions AS session WHERE session.release_id IN (OLD.release_id, NEW.release_id))
+    ) THEN
+        RAISE EXCEPTION 'release package pinned by publication or session; create a new release/package';
+    END IF;
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS enforce_release_package_pin_immutability_before_write ON release_packages;
+CREATE TRIGGER enforce_release_package_pin_immutability_before_write
+BEFORE UPDATE OR DELETE ON release_packages
+FOR EACH ROW EXECUTE FUNCTION enforce_release_package_pin_immutability();
+
+-- A closed period is an immutable membership and price snapshot. Late or
+-- disputed usage is represented by an adjustment, never by editing an item.
+CREATE OR REPLACE FUNCTION enforce_ai_billing_period_item_write()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = pg_catalog
+AS $$
+DECLARE
+    v_period public.ai_billing_periods%ROWTYPE;
+    v_usage public.ai_usage_ledger%ROWTYPE;
+    v_period_id UUID;
+BEGIN
+    v_period_id := CASE WHEN TG_OP = 'DELETE' THEN OLD.billing_period_id ELSE NEW.billing_period_id END;
+    SELECT * INTO v_period
+      FROM public.ai_billing_periods
+     WHERE id = v_period_id
+     FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'AI billing period does not exist'; END IF;
+    IF v_period.status <> 'Open' THEN
+        RAISE EXCEPTION 'AI billing period items are immutable after close';
+    END IF;
+    IF TG_OP = 'UPDATE' AND (
+        OLD.billing_period_id IS DISTINCT FROM NEW.billing_period_id
+        OR OLD.usage_ledger_id IS DISTINCT FROM NEW.usage_ledger_id
+    ) THEN
+        RAISE EXCEPTION 'AI period item membership is immutable; use an adjustment or a new item';
+    END IF;
+    IF TG_OP IN ('INSERT', 'UPDATE') THEN
+        SELECT * INTO v_usage FROM public.ai_usage_ledger WHERE id = NEW.usage_ledger_id FOR SHARE;
+        IF NOT FOUND OR v_usage.organization_id IS DISTINCT FROM v_period.organization_id
+           OR v_usage.billing_period_id IS DISTINCT FROM NEW.billing_period_id
+           OR NOT v_usage.billable OR v_usage.status <> 'Recorded'
+           OR v_usage.units IS DISTINCT FROM NEW.units THEN
+            RAISE EXCEPTION 'AI period item usage is not a confirmed billable usage in the same period';
+        END IF;
+    END IF;
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS enforce_ai_billing_period_item_write_before ON ai_billing_period_items;
+CREATE TRIGGER enforce_ai_billing_period_item_write_before
+BEFORE INSERT OR UPDATE OR DELETE ON ai_billing_period_items
+FOR EACH ROW EXECUTE FUNCTION enforce_ai_billing_period_item_write();
+
+CREATE OR REPLACE FUNCTION validate_ai_billing_period_write()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = pg_catalog
+AS $$
+DECLARE
+    v_item_units INT;
+    v_item_amount NUMERIC(14,2);
+BEGIN
+    IF NEW.disputed_at IS NOT NULL AND NEW.status = 'Open' THEN
+        RAISE EXCEPTION 'an Open AI period cannot carry dispute metadata';
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD.disputed_at IS NOT NULL AND (
+        OLD.disputed_at IS DISTINCT FROM NEW.disputed_at
+        OR OLD.disputed_reason IS DISTINCT FROM NEW.disputed_reason
+        OR OLD.disputed_by IS DISTINCT FROM NEW.disputed_by
+    ) THEN
+        RAISE EXCEPTION 'AI dispute metadata is append-only';
+    END IF;
+    IF TG_OP = 'INSERT' AND (
+        NEW.status <> 'Open'
+        OR NEW.settlement_quotation_id IS NOT NULL
+        OR NEW.settlement_payment_transaction_id IS NOT NULL
+        OR NEW.closed_at IS NOT NULL
+        OR NEW.unit_price_snapshot IS DISTINCT FROM '{}'::JSONB
+        OR NEW.overage_units <> 0
+        OR NEW.overage_amount <> 0
+    ) THEN
+        RAISE EXCEPTION 'new AI billing periods must start Open without settlement documents';
+    END IF;
+
+    IF NEW.settlement_quotation_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM public.quotations AS quotation
+         WHERE quotation.id = NEW.settlement_quotation_id
+           AND quotation.billing_purpose = 'AIUsage'
+           AND quotation.status IN ('Issued','Accepted')
+           AND quotation.organization_id = NEW.organization_id
+           AND quotation.building_id IS NULL
+           AND quotation.service_package_id IS NULL
+           AND quotation.currency = NEW.currency
+           AND quotation.total_amount = NEW.overage_amount
+    ) THEN
+        RAISE EXCEPTION 'AI period quotation must be an issued AIUsage quotation matching the frozen snapshot';
+    END IF;
+
+    IF NEW.settlement_payment_transaction_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1
+          FROM public.payment_transactions AS payment
+          JOIN public.payos_payment_requests AS request ON request.id = payment.payment_request_id
+         WHERE payment.id = NEW.settlement_payment_transaction_id
+           AND payment.status = 'Applied'
+           AND request.quotation_id = NEW.settlement_quotation_id
+           AND request.organization_id = NEW.organization_id
+    ) THEN
+        RAISE EXCEPTION 'AI period payment must be Applied for its AIUsage quotation';
+    END IF;
+
+    IF NEW.status = 'Closed' THEN
+        IF NEW.closed_at IS NULL OR NEW.settlement_quotation_id IS NOT NULL OR NEW.settlement_payment_transaction_id IS NOT NULL THEN
+            RAISE EXCEPTION 'Closed AI periods require a close timestamp and no settlement document yet';
+        END IF;
+        SELECT COALESCE(SUM(units),0), COALESCE(SUM(amount),0)
+          INTO v_item_units, v_item_amount
+          FROM public.ai_billing_period_items
+         WHERE billing_period_id = NEW.id AND status = 'Included';
+        IF NEW.overage_units <> v_item_units OR NEW.overage_amount <> v_item_amount THEN
+            RAISE EXCEPTION 'closed AI period totals must equal its included immutable items';
+        END IF;
+    END IF;
+    IF NEW.status IN ('Invoiced','Paid') AND NEW.settlement_quotation_id IS NULL THEN
+        RAISE EXCEPTION 'Invoiced or Paid AI periods require one AIUsage quotation';
+    END IF;
+    IF NEW.status = 'Invoiced' AND NEW.settlement_payment_transaction_id IS NOT NULL THEN
+        RAISE EXCEPTION 'Invoiced AI periods cannot attach payment before Paid';
+    END IF;
+    IF NEW.status = 'Paid' AND NEW.settlement_payment_transaction_id IS NULL THEN
+        RAISE EXCEPTION 'Paid AI periods require an Applied payment';
+    END IF;
+
+    IF TG_OP = 'UPDATE' AND OLD.status <> 'Open' AND (
+        OLD.organization_id IS DISTINCT FROM NEW.organization_id
+        OR OLD.period_start IS DISTINCT FROM NEW.period_start
+        OR OLD.period_end IS DISTINCT FROM NEW.period_end
+        OR OLD.unit_price_snapshot IS DISTINCT FROM NEW.unit_price_snapshot
+        OR OLD.overage_units IS DISTINCT FROM NEW.overage_units
+        OR OLD.overage_amount IS DISTINCT FROM NEW.overage_amount
+        OR OLD.currency IS DISTINCT FROM NEW.currency
+        OR OLD.closed_at IS DISTINCT FROM NEW.closed_at
+    ) THEN
+        RAISE EXCEPTION 'closed AI billing period snapshot and totals are immutable; use an adjustment';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS validate_ai_billing_period_before_write ON ai_billing_periods;
+DROP TRIGGER IF EXISTS zz_enforce_ai_billing_period_lifecycle ON ai_billing_periods;
+CREATE TRIGGER validate_ai_billing_period_before_write
+BEFORE INSERT OR UPDATE ON ai_billing_periods
+FOR EACH ROW EXECUTE FUNCTION validate_ai_billing_period_write();
+CREATE TRIGGER zz_enforce_ai_billing_period_lifecycle
+BEFORE UPDATE ON ai_billing_periods
+FOR EACH ROW EXECUTE FUNCTION enforce_ai_billing_period_lifecycle_v2();
+
+CREATE OR REPLACE FUNCTION close_ai_billing_period(p_period_id UUID)
+RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
+AS $$
+DECLARE
+    v_period public.ai_billing_periods%ROWTYPE;
+    v_usage public.ai_usage_ledger%ROWTYPE;
+    v_price NUMERIC;
+    v_units INT;
+    v_amount NUMERIC(14,2);
+    v_price_snapshot JSONB;
+BEGIN
+    IF p_period_id IS NULL THEN
+        RAISE EXCEPTION 'AI billing period id is required';
+    END IF;
+    SELECT * INTO v_period FROM public.ai_billing_periods WHERE id = p_period_id FOR UPDATE;
+    IF NOT FOUND OR v_period.status <> 'Open' THEN
+        RAISE EXCEPTION 'AI billing period is not open';
+    END IF;
+
+    FOR v_usage IN
+        SELECT * FROM public.ai_usage_ledger
+         WHERE organization_id = v_period.organization_id
+           AND billing_period_id = v_period.id
+           AND billable
+           AND status = 'Recorded'
+         ORDER BY id
+         FOR UPDATE
+    LOOP
+        IF pg_catalog.jsonb_typeof(v_usage.unit_price_snapshot) <> 'object'
+           OR NOT (v_usage.unit_price_snapshot ? 'unit_price')
+           OR NOT (v_usage.unit_price_snapshot ? 'currency')
+           OR v_usage.unit_price_snapshot ->> 'currency' <> v_period.currency
+           OR (v_usage.unit_price_snapshot ->> 'unit_price') !~ '^[0-9]+([.][0-9]+)?$' THEN
+            RAISE EXCEPTION 'recorded AI usage is missing a valid historical price/currency snapshot';
+        END IF;
+        v_price := (v_usage.unit_price_snapshot ->> 'unit_price')::NUMERIC;
+        INSERT INTO public.ai_billing_period_items(
+            billing_period_id, usage_ledger_id, units, unit_price_snapshot, amount
+        ) VALUES (
+            v_period.id, v_usage.id, v_usage.units, v_usage.unit_price_snapshot,
+            ROUND(v_usage.units * v_price, 2)
+        ) ON CONFLICT (billing_period_id, usage_ledger_id) DO NOTHING;
+    END LOOP;
+
+    SELECT COALESCE(SUM(units),0), COALESCE(SUM(amount),0)
+      INTO v_units, v_amount
+      FROM public.ai_billing_period_items
+     WHERE billing_period_id = v_period.id AND status = 'Included';
+    SELECT COALESCE(
+        pg_catalog.jsonb_agg(DISTINCT item.unit_price_snapshot ORDER BY item.unit_price_snapshot),
+        '[]'::JSONB
+    ) INTO v_price_snapshot
+      FROM public.ai_billing_period_items AS item
+     WHERE item.billing_period_id = v_period.id AND item.status = 'Included';
+    UPDATE public.ai_billing_periods
+       SET unit_price_snapshot = v_price_snapshot,
+           overage_units = v_units,
+           overage_amount = v_amount,
+           status = 'Closed',
+           closed_at = pg_catalog.clock_timestamp()
+     WHERE id = v_period.id;
+    RETURN true;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION enforce_ai_policy_version_immutability()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = pg_catalog
+AS $$
+BEGIN
+    RAISE EXCEPTION 'AI policy versions are immutable; create a new version';
+END;
+$$;
+
+DROP TRIGGER IF EXISTS enforce_ai_policy_version_immutability_before_write ON ai_policy_versions;
+CREATE TRIGGER enforce_ai_policy_version_immutability_before_write
+BEFORE UPDATE OR DELETE ON ai_policy_versions
+FOR EACH ROW EXECUTE FUNCTION enforce_ai_policy_version_immutability();
+
+CREATE OR REPLACE FUNCTION validate_ai_billing_adjustment_write()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
+AS $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM public.ai_billing_periods AS period
+         WHERE period.id = NEW.billing_period_id
+           AND period.organization_id = NEW.organization_id
+            AND period.status IN ('Closed','Invoiced','Paid')
+    ) THEN
+        RAISE EXCEPTION 'AI adjustment must target a closed period in the same organization';
+    END IF;
+    IF NEW.usage_ledger_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1
+          FROM public.ai_usage_ledger AS ledger
+         WHERE ledger.id = NEW.usage_ledger_id
+           AND ledger.organization_id = NEW.organization_id
+           AND ledger.billing_period_id = NEW.billing_period_id
+    ) THEN
+        RAISE EXCEPTION 'AI adjustment usage must belong to the same organization and billing period';
+    END IF;
+    IF NEW.original_item_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1
+          FROM public.ai_billing_period_items AS item
+         WHERE item.id = NEW.original_item_id
+           AND item.billing_period_id = NEW.billing_period_id
+    ) THEN
+        RAISE EXCEPTION 'AI adjustment original item must belong to the target billing period';
+    END IF;
+    IF TG_OP = 'UPDATE' AND (
+        OLD.billing_period_id IS DISTINCT FROM NEW.billing_period_id
+        OR OLD.organization_id IS DISTINCT FROM NEW.organization_id
+        OR OLD.usage_ledger_id IS DISTINCT FROM NEW.usage_ledger_id
+        OR OLD.original_item_id IS DISTINCT FROM NEW.original_item_id
+        OR OLD.adjustment_type IS DISTINCT FROM NEW.adjustment_type
+        OR OLD.units IS DISTINCT FROM NEW.units
+        OR OLD.amount IS DISTINCT FROM NEW.amount
+        OR OLD.reason IS DISTINCT FROM NEW.reason
+        OR OLD.idempotency_key IS DISTINCT FROM NEW.idempotency_key
+    ) THEN
+        RAISE EXCEPTION 'AI billing adjustments are immutable';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS validate_ai_billing_adjustment_before_write ON ai_billing_adjustments;
+CREATE TRIGGER validate_ai_billing_adjustment_before_write
+BEFORE INSERT OR UPDATE ON ai_billing_adjustments
+FOR EACH ROW EXECUTE FUNCTION validate_ai_billing_adjustment_write();
+
+-- Late usage and financial corrections use a controlled accounting contract;
+-- callers do not receive direct INSERT permission on the adjustment table.
+CREATE OR REPLACE FUNCTION record_ai_billing_adjustment(
+    p_billing_period_id UUID,
+    p_organization_id UUID,
+    p_usage_ledger_id UUID,
+    p_original_item_id UUID,
+    p_adjustment_type TEXT,
+    p_units INT,
+    p_amount NUMERIC,
+    p_reason TEXT,
+    p_idempotency_key TEXT,
+    p_created_by UUID
+)
+RETURNS UUID
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
+AS $$
+DECLARE
+    v_id UUID;
+    v_existing public.ai_billing_adjustments%ROWTYPE;
+BEGIN
+    IF p_billing_period_id IS NULL OR p_organization_id IS NULL
+       OR p_adjustment_type IS NULL OR p_units IS NULL OR p_amount IS NULL
+       OR NULLIF(pg_catalog.btrim(p_reason), '') IS NULL
+       OR NULLIF(pg_catalog.btrim(p_idempotency_key), '') IS NULL
+       OR p_created_by IS NULL THEN
+        RAISE EXCEPTION 'AI adjustment identity and financial fields are required';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM public.users AS actor
+         WHERE actor.id = p_created_by
+           AND actor.is_active
+           AND actor.deleted_at IS NULL
+           AND (actor.role = 'PlatformAdmin'
+                OR (actor.role = 'OrganizationUser' AND actor.organization_id = p_organization_id))
+    ) THEN
+        RAISE EXCEPTION 'adjustment actor is not authorized for the organization';
+    END IF;
+
+    INSERT INTO public.ai_billing_adjustments(
+        billing_period_id, organization_id, usage_ledger_id, original_item_id,
+        adjustment_type, units, amount, reason, idempotency_key, created_by
+    ) VALUES (
+        p_billing_period_id, p_organization_id, p_usage_ledger_id, p_original_item_id,
+        p_adjustment_type, p_units, p_amount, pg_catalog.btrim(p_reason),
+        pg_catalog.btrim(p_idempotency_key), p_created_by
+    )
+    ON CONFLICT (idempotency_key) DO NOTHING
+    RETURNING id INTO v_id;
+
+    IF v_id IS NOT NULL THEN
+        RETURN v_id;
+    END IF;
+
+    SELECT * INTO v_existing
+      FROM public.ai_billing_adjustments
+     WHERE idempotency_key = pg_catalog.btrim(p_idempotency_key);
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'adjustment idempotency result is unavailable';
+    END IF;
+    IF v_existing.billing_period_id IS DISTINCT FROM p_billing_period_id
+       OR v_existing.organization_id IS DISTINCT FROM p_organization_id
+       OR v_existing.usage_ledger_id IS DISTINCT FROM p_usage_ledger_id
+       OR v_existing.original_item_id IS DISTINCT FROM p_original_item_id
+       OR v_existing.adjustment_type IS DISTINCT FROM p_adjustment_type
+       OR v_existing.units IS DISTINCT FROM p_units
+       OR v_existing.amount IS DISTINCT FROM p_amount
+       OR v_existing.reason IS DISTINCT FROM pg_catalog.btrim(p_reason)
+       OR v_existing.created_by IS DISTINCT FROM p_created_by THEN
+        RAISE EXCEPTION 'adjustment idempotency key conflicts with another payload';
+    END IF;
+    RETURN v_existing.id;
+END;
+$$;
+
+-- Rebind the early trigger names to the final functions after runtime columns
+-- and target-only amendments exist; each function signature now has one owner.
+DROP TRIGGER IF EXISTS validate_playtest_session_before_write ON playtest_sessions;
+CREATE TRIGGER validate_playtest_session_before_write
+BEFORE INSERT OR UPDATE OF organization_id, building_id, revision_id,
+    scenario_draft_id, scenario_version_id, service_entitlement_id, package_hash,
+    package_artifact_id, package_validation_run_id,
+    manifest_sha256, build_target, protocol_version, manifest_schema_version,
+    runtime_version, runtime_catalog_id, created_by,
+    start_idempotency_key, status
+ON playtest_sessions FOR EACH ROW EXECUTE FUNCTION validate_playtest_session_write();
+
+DROP TRIGGER IF EXISTS validate_session_lifecycle_before_write ON sessions;
+CREATE TRIGGER validate_session_lifecycle_before_write
+BEFORE UPDATE OF training_id, release_id, scenario_version_id, organization_id,
+    trainee_user_id, device_id, qr_code_id, mode, package_hash, manifest_sha256,
+    package_artifact_id, package_validation_run_id,
+    build_target, protocol_version, manifest_schema_version, prepare_idempotency_key,
+    start_idempotency_key, status,
+    launch_granted_at, started_at, ended_at, runtime_version, runtime_catalog_id
+ON sessions FOR EACH ROW EXECUTE FUNCTION validate_training_session_lifecycle();
+
+DROP TRIGGER IF EXISTS validate_ai_billing_period_before_write ON ai_billing_periods;
+CREATE TRIGGER validate_ai_billing_period_before_write
+BEFORE INSERT OR UPDATE OF organization_id, period_start, period_end, status,
+    settlement_quotation_id, settlement_payment_transaction_id, unit_price_snapshot,
+    overage_units, overage_amount, currency, closed_at, disputed_at, disputed_reason,
+    disputed_by
+ON ai_billing_periods FOR EACH ROW EXECUTE FUNCTION validate_ai_billing_period_write();
+
+DROP TRIGGER IF EXISTS validate_payos_paid_before_write ON payos_payment_requests;
+CREATE TRIGGER validate_payos_paid_before_write
+BEFORE INSERT OR UPDATE OF quotation_id, organization_id, requested_by, idempotency_key,
+    order_code, expected_amount, expected_currency, status, paid_transaction_id, paid_at
+ON payos_payment_requests FOR EACH ROW EXECUTE FUNCTION validate_payos_paid_request();
+
+-- Worker results are intentionally structured at the contract boundary. The
+-- SQL functions below are the target definitions used by the trusted worker
+-- executor; clients never infer state from free-form exception text.
+DROP FUNCTION IF EXISTS claim_processing_attempt(UUID, TEXT, TEXT, TEXT, INT);
+CREATE FUNCTION claim_processing_attempt(
+    p_job_id UUID, p_lease_owner TEXT, p_input_hash TEXT,
+    p_toolchain_version TEXT, p_lease_seconds INT DEFAULT 300
+)
+RETURNS TABLE(result_code TEXT, attempt_id UUID, lease_token UUID)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
+AS $$
+DECLARE
+    v_job public.processing_jobs%ROWTYPE;
+    v_current public.processing_job_attempts%ROWTYPE;
+    v_attempt_id UUID;
+    v_lease_token UUID;
+    v_attempt_number INT;
+    v_now TIMESTAMPTZ;
+BEGIN
+    IF p_job_id IS NULL OR p_lease_seconds IS NULL OR p_lease_seconds <= 0
+       OR NULLIF(pg_catalog.btrim(p_lease_owner), '') IS NULL
+       OR NULLIF(pg_catalog.btrim(p_toolchain_version), '') IS NULL
+       OR p_input_hash IS NULL OR p_input_hash !~ '^[0-9a-fA-F]{64}$' THEN
+        RETURN QUERY SELECT 'Conflict'::TEXT, NULL::UUID, NULL::UUID;
+        RETURN;
+    END IF;
+
+    SELECT * INTO v_job FROM public.processing_jobs WHERE id = p_job_id FOR UPDATE;
+    IF NOT FOUND THEN
+        RETURN QUERY SELECT 'NotClaimable'::TEXT, NULL::UUID, NULL::UUID;
+        RETURN;
+    END IF;
+    IF v_job.input_hash <> pg_catalog.btrim(p_input_hash) THEN
+        RETURN QUERY SELECT 'Conflict'::TEXT, NULL::UUID, NULL::UUID;
+        RETURN;
+    END IF;
+    IF v_job.status = 'Succeeded' THEN
+        RETURN QUERY SELECT 'AlreadyCompleted'::TEXT, v_job.current_attempt_id, NULL::UUID;
+        RETURN;
+    END IF;
+    IF v_job.status IN ('Cancelled','Failed') THEN
+        RETURN QUERY SELECT 'NotClaimable'::TEXT, v_job.current_attempt_id, NULL::UUID;
+        RETURN;
+    END IF;
+
+    v_now := pg_catalog.clock_timestamp();
+    IF v_job.current_attempt_id IS NOT NULL THEN
+        SELECT * INTO v_current
+          FROM public.processing_job_attempts
+         WHERE id = v_job.current_attempt_id
+         FOR UPDATE;
+        IF NOT FOUND THEN
+            RETURN QUERY SELECT 'Conflict'::TEXT, NULL::UUID, NULL::UUID;
+            RETURN;
+        END IF;
+        IF v_current.status = 'Running' AND v_current.lease_until IS NULL THEN
+            RETURN QUERY SELECT 'Conflict'::TEXT, v_current.id, NULL::UUID;
+            RETURN;
+        END IF;
+        IF v_current.status = 'Running' AND v_current.lease_until > v_now THEN
+            RETURN QUERY SELECT 'Busy'::TEXT, v_current.id, NULL::UUID;
+            RETURN;
+        END IF;
+        IF v_current.status = 'Succeeded' THEN
+            UPDATE public.processing_jobs SET status = 'Succeeded' WHERE id = v_job.id;
+            RETURN QUERY SELECT 'AlreadyCompleted'::TEXT, v_current.id, NULL::UUID;
+            RETURN;
+        END IF;
+        IF v_current.status = 'Running' THEN
+            UPDATE public.processing_job_attempts
+               SET status = 'Expired', finished_at = v_now
+             WHERE id = v_current.id;
+        ELSIF v_current.status <> 'Expired' THEN
+            RETURN QUERY SELECT 'NotClaimable'::TEXT, v_current.id, NULL::UUID;
+            RETURN;
+        END IF;
+    END IF;
+    IF v_job.status = 'Running' AND v_job.current_attempt_id IS NULL THEN
+        RETURN QUERY SELECT 'Conflict'::TEXT, NULL::UUID, NULL::UUID;
+        RETURN;
+    END IF;
+
+    SELECT COALESCE(MAX(attempt_number),0)+1 INTO v_attempt_number
+      FROM public.processing_job_attempts
+     WHERE processing_job_id = v_job.id;
+    INSERT INTO public.processing_job_attempts(
+        processing_job_id, attempt_number, input_hash, toolchain_version,
+        lease_owner, lease_token, lease_until, status
+    ) VALUES (
+        v_job.id, v_attempt_number, pg_catalog.btrim(p_input_hash),
+        pg_catalog.btrim(p_toolchain_version), pg_catalog.btrim(p_lease_owner),
+        gen_random_uuid(), v_now + make_interval(secs => p_lease_seconds), 'Running'
+    ) RETURNING id, lease_token INTO v_attempt_id, v_lease_token;
+    UPDATE public.processing_jobs
+       SET current_attempt_id = v_attempt_id, status = 'Running'
+     WHERE id = v_job.id;
+    RETURN QUERY SELECT 'Claimed'::TEXT, v_attempt_id, v_lease_token;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION renew_processing_attempt(
+    p_attempt_id UUID, p_lease_token UUID, p_lease_seconds INT DEFAULT 300
+)
+RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
+AS $$
+DECLARE
+    v_job_id UUID;
+    v_job public.processing_jobs%ROWTYPE;
+    v_attempt public.processing_job_attempts%ROWTYPE;
+    v_new_until TIMESTAMPTZ;
+    v_now TIMESTAMPTZ;
+BEGIN
+    IF p_attempt_id IS NULL OR p_lease_token IS NULL OR p_lease_seconds IS NULL OR p_lease_seconds <= 0 THEN
+        RAISE EXCEPTION 'processing lease token and duration are invalid';
+    END IF;
+    SELECT processing_job_id INTO v_job_id
+      FROM public.processing_job_attempts WHERE id = p_attempt_id;
+    SELECT * INTO v_job FROM public.processing_jobs WHERE id = v_job_id FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'processing job does not exist'; END IF;
+    SELECT * INTO v_attempt
+      FROM public.processing_job_attempts
+     WHERE id = p_attempt_id
+     FOR UPDATE;
+    IF NOT FOUND OR v_job.current_attempt_id IS DISTINCT FROM v_attempt.id
+       OR v_job.status <> 'Running'
+       OR v_attempt.status <> 'Running'
+       OR v_attempt.lease_token IS DISTINCT FROM p_lease_token
+       OR v_attempt.lease_until IS NULL
+       OR v_attempt.lease_until <= pg_catalog.clock_timestamp() THEN
+        RAISE EXCEPTION 'processing attempt lease is stale or invalid';
+    END IF;
+    v_now := pg_catalog.clock_timestamp();
+    IF v_attempt.lease_until IS NULL OR v_attempt.lease_until <= v_now THEN
+        RAISE EXCEPTION 'processing attempt lease is stale or invalid';
+    END IF;
+    v_new_until := v_now + make_interval(secs => p_lease_seconds);
+    IF v_new_until <= v_attempt.lease_until THEN
+        RAISE EXCEPTION 'processing lease renewal cannot shorten the current lease';
+    END IF;
+    UPDATE public.processing_job_attempts SET lease_until = v_new_until WHERE id = v_attempt.id;
+    RETURN true;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION accept_processing_attempt(
+    p_attempt_id UUID, p_lease_token UUID, p_output_hash TEXT,
+    p_output_artifact_id UUID, p_validation_run_id UUID
+)
+RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
+AS $$
+DECLARE
+    v_job_id UUID;
+    v_job public.processing_jobs%ROWTYPE;
+    v_attempt public.processing_job_attempts%ROWTYPE;
+BEGIN
+    IF p_attempt_id IS NULL OR p_lease_token IS NULL
+       OR p_output_hash IS NULL OR p_output_hash !~ '^[0-9a-fA-F]{64}$'
+       OR p_output_artifact_id IS NULL OR p_validation_run_id IS NULL THEN
+        RAISE EXCEPTION 'processing result identity and hashes are required';
+    END IF;
+    SELECT processing_job_id INTO v_job_id
+      FROM public.processing_job_attempts WHERE id = p_attempt_id;
+    SELECT * INTO v_job FROM public.processing_jobs WHERE id = v_job_id FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'processing job does not exist'; END IF;
+    SELECT * INTO v_attempt
+      FROM public.processing_job_attempts
+     WHERE id = p_attempt_id AND lease_token = p_lease_token
+     FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'processing attempt token is invalid'; END IF;
+    IF v_attempt.status = 'Succeeded' THEN
+        IF v_attempt.output_hash = p_output_hash
+           AND v_attempt.output_artifact_id = p_output_artifact_id
+           AND v_attempt.result_validation_run_id = p_validation_run_id THEN
+            RETURN true;
+        END IF;
+        RAISE EXCEPTION 'completed processing result replay conflicts with the stored result';
+    END IF;
+    IF v_job.current_attempt_id IS DISTINCT FROM v_attempt.id
+       OR v_job.status <> 'Running'
+       OR v_attempt.status <> 'Running'
+       OR v_attempt.lease_until IS NULL
+       OR v_attempt.lease_until <= pg_catalog.clock_timestamp() THEN
+        RAISE EXCEPTION 'StaleAttempt: processing result cannot be accepted';
+    END IF;
+    IF v_attempt.input_hash <> v_job.input_hash THEN
+        RAISE EXCEPTION 'processing attempt input hash does not match the logical job';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM public.revision_artifacts AS artifact
+         WHERE artifact.id = p_output_artifact_id
+           AND artifact.attempt_id = v_attempt.id
+           AND artifact.job_id = v_job.id
+           AND artifact.revision_id = v_job.revision_id
+           AND artifact.sha256_hash = p_output_hash
+    ) OR NOT EXISTS (
+        SELECT 1 FROM public.validation_runs AS run
+         WHERE run.id = p_validation_run_id
+           AND run.processing_job_id = v_job.id
+           AND run.processing_attempt_id = v_attempt.id
+           AND run.revision_id = v_job.revision_id
+           AND run.scenario_version_id IS NOT DISTINCT FROM v_job.scenario_version_id
+           AND run.artifact_id = p_output_artifact_id
+           AND run.status = 'Passed'
+           AND NOT EXISTS (
+               SELECT 1 FROM public.validation_issues AS issue
+                WHERE issue.validation_run_id = run.id
+                  AND issue.severity IN ('Error','Critical')
+                  AND issue.status NOT IN ('Resolved','Waived')
+           )
+    ) THEN
+        RAISE EXCEPTION 'processing result provenance is invalid';
+    END IF;
+    UPDATE public.processing_job_attempts
+       SET output_hash = p_output_hash,
+           output_artifact_id = p_output_artifact_id,
+           result_validation_run_id = p_validation_run_id,
+           status = 'Succeeded',
+           finished_at = pg_catalog.clock_timestamp(),
+           lease_until = NULL
+     WHERE id = v_attempt.id;
+    UPDATE public.processing_jobs SET status = 'Succeeded' WHERE id = v_job.id;
+    RETURN true;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION fail_processing_attempt(
+    p_attempt_id UUID, p_lease_token UUID, p_error_message TEXT
+)
+RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
+AS $$
+DECLARE
+    v_job_id UUID;
+    v_job public.processing_jobs%ROWTYPE;
+    v_attempt public.processing_job_attempts%ROWTYPE;
+BEGIN
+    SELECT processing_job_id INTO v_job_id FROM public.processing_job_attempts WHERE id = p_attempt_id;
+    SELECT * INTO v_job FROM public.processing_jobs WHERE id = v_job_id FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'processing job does not exist'; END IF;
+    SELECT * INTO v_attempt FROM public.processing_job_attempts
+     WHERE id = p_attempt_id AND lease_token = p_lease_token FOR UPDATE;
+    IF NOT FOUND OR v_job.current_attempt_id IS DISTINCT FROM v_attempt.id
+       OR v_job.status <> 'Running' OR v_attempt.status <> 'Running'
+       OR v_attempt.lease_until IS NULL
+       OR v_attempt.lease_until <= pg_catalog.clock_timestamp() THEN
+        RAISE EXCEPTION 'StaleAttempt: processing failure cannot be accepted';
+    END IF;
+    UPDATE public.processing_job_attempts
+       SET status = 'Failed', error_message = NULLIF(pg_catalog.btrim(p_error_message), ''),
+           finished_at = pg_catalog.clock_timestamp(), lease_until = NULL
+     WHERE id = v_attempt.id;
+    UPDATE public.processing_jobs SET status = 'Failed' WHERE id = v_job.id;
+    RETURN true;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION requeue_processing_job(
+    p_job_id UUID, p_idempotency_key TEXT, p_reason TEXT
+)
+RETURNS TEXT LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
+AS $$
+DECLARE
+    v_job public.processing_jobs%ROWTYPE;
+    v_existing public.integration_outbox_events%ROWTYPE;
+    v_key TEXT := pg_catalog.btrim(p_idempotency_key);
+BEGIN
+    IF p_job_id IS NULL OR NULLIF(v_key, '') IS NULL OR NULLIF(pg_catalog.btrim(p_reason), '') IS NULL THEN
+        RAISE EXCEPTION 'requeue job, idempotency key and reason are required';
+    END IF;
+    SELECT * INTO v_job FROM public.processing_jobs WHERE id = p_job_id FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'processing job does not exist'; END IF;
+    SELECT * INTO v_existing FROM public.integration_outbox_events
+     WHERE idempotency_key = v_key FOR UPDATE;
+    IF FOUND THEN
+        IF v_existing.aggregate_id IS DISTINCT FROM p_job_id
+           OR v_existing.event_type <> 'ProcessingJobRequeue'
+           OR v_existing.payload ->> 'reason' IS DISTINCT FROM p_reason THEN
+            RAISE EXCEPTION 'requeue idempotency key conflicts with another job';
+        END IF;
+        RETURN 'AlreadyRequeued';
+    END IF;
+    IF v_job.status = 'Cancelled' OR v_job.status = 'Succeeded' THEN
+        RETURN 'NotClaimable';
+    END IF;
+    IF v_job.status <> 'Failed' THEN
+        RETURN 'Conflict';
+    END IF;
+    UPDATE public.processing_jobs SET status = 'Queued', current_attempt_id = NULL WHERE id = p_job_id;
+    INSERT INTO public.integration_outbox_events(
+        idempotency_key, aggregate_type, aggregate_id, event_type, payload
+    ) VALUES (
+        v_key, 'ProcessingJob', p_job_id, 'ProcessingJobRequeue',
+        pg_catalog.jsonb_build_object('job_id', p_job_id, 'reason', p_reason)
+    );
+    RETURN 'Requeued';
+END;
+$$;
+
+-- Dedicated non-login owners and narrow executors. PUBLIC never receives the
+-- ability to call the privileged gates or write their protected tables.
+DO $final_roles$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'fet3d_session_owner') THEN
+        CREATE ROLE fet3d_session_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'fet3d_ai_accounting_owner') THEN
+        CREATE ROLE fet3d_ai_accounting_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'fet3d_processing_owner') THEN
+        CREATE ROLE fet3d_processing_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'fet3d_ai_request_owner') THEN
+        CREATE ROLE fet3d_ai_request_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'fet3d_accounting_executor') THEN
+        CREATE ROLE fet3d_accounting_executor NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS;
+    END IF;
+END;
+$final_roles$;
+
+ALTER FUNCTION start_training_session(UUID, UUID, TEXT, TEXT) OWNER TO fet3d_session_owner;
+ALTER FUNCTION start_playtest_session(UUID, UUID, TEXT, TEXT) OWNER TO fet3d_session_owner;
+ALTER FUNCTION record_session_heartbeat(UUID, UUID, BIGINT, TIMESTAMPTZ) OWNER TO fet3d_session_owner;
+ALTER FUNCTION close_ai_billing_period(UUID) OWNER TO fet3d_ai_accounting_owner;
+ALTER FUNCTION reserve_ai_usage(UUID, TEXT, UUID, TEXT, UUID, UUID, TEXT, INT, BOOLEAN, UUID, UUID, JSONB, JSONB) OWNER TO fet3d_ai_accounting_owner;
+ALTER FUNCTION settle_ai_usage(UUID, TEXT) OWNER TO fet3d_ai_accounting_owner;
+ALTER FUNCTION validate_ai_billing_adjustment_write() OWNER TO fet3d_ai_accounting_owner;
+ALTER FUNCTION record_ai_billing_adjustment(UUID, UUID, UUID, UUID, TEXT, INT, NUMERIC, TEXT, TEXT, UUID) OWNER TO fet3d_ai_accounting_owner;
+ALTER FUNCTION claim_processing_attempt(UUID, TEXT, TEXT, TEXT, INT) OWNER TO fet3d_processing_owner;
+ALTER FUNCTION renew_processing_attempt(UUID, UUID, INT) OWNER TO fet3d_processing_owner;
+ALTER FUNCTION accept_processing_attempt(UUID, UUID, TEXT, UUID, UUID) OWNER TO fet3d_processing_owner;
+ALTER FUNCTION fail_processing_attempt(UUID, UUID, TEXT) OWNER TO fet3d_processing_owner;
+ALTER FUNCTION requeue_processing_job(UUID, TEXT, TEXT) OWNER TO fet3d_processing_owner;
+
+REVOKE ALL ON FUNCTION record_session_heartbeat(UUID, UUID, BIGINT, TIMESTAMPTZ) FROM PUBLIC;
+REVOKE ALL ON FUNCTION close_ai_billing_period(UUID) FROM PUBLIC;
+REVOKE ALL ON FUNCTION validate_ai_billing_adjustment_write() FROM PUBLIC;
+REVOKE ALL ON FUNCTION record_ai_billing_adjustment(UUID, UUID, UUID, UUID, TEXT, INT, NUMERIC, TEXT, TEXT, UUID) FROM PUBLIC;
+REVOKE ALL ON FUNCTION reserve_ai_usage(UUID, TEXT, UUID, TEXT, UUID, UUID, TEXT, INT, BOOLEAN, UUID, UUID, JSONB, JSONB) FROM PUBLIC;
+REVOKE ALL ON FUNCTION settle_ai_usage(UUID, TEXT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION claim_processing_attempt(UUID, TEXT, TEXT, TEXT, INT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION renew_processing_attempt(UUID, UUID, INT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION accept_processing_attempt(UUID, UUID, TEXT, UUID, UUID) FROM PUBLIC;
+REVOKE ALL ON FUNCTION fail_processing_attempt(UUID, UUID, TEXT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION requeue_processing_job(UUID, TEXT, TEXT) FROM PUBLIC;
+
+GRANT EXECUTE ON FUNCTION record_session_heartbeat(UUID, UUID, BIGINT, TIMESTAMPTZ) TO fet3d_session_sync_executor;
+GRANT EXECUTE ON FUNCTION close_ai_billing_period(UUID),
+    reserve_ai_usage(UUID, TEXT, UUID, TEXT, UUID, UUID, TEXT, INT, BOOLEAN, UUID, UUID, JSONB, JSONB),
+    settle_ai_usage(UUID, TEXT),
+    record_ai_billing_adjustment(UUID, UUID, UUID, UUID, TEXT, INT, NUMERIC, TEXT, TEXT, UUID)
+    TO fet3d_accounting_executor;
+REVOKE ALL PRIVILEGES ON FUNCTION close_ai_billing_period(UUID),
+    reserve_ai_usage(UUID, TEXT, UUID, TEXT, UUID, UUID, TEXT, INT, BOOLEAN, UUID, UUID, JSONB, JSONB),
+    settle_ai_usage(UUID, TEXT),
+    record_ai_billing_adjustment(UUID, UUID, UUID, UUID, TEXT, INT, NUMERIC, TEXT, TEXT, UUID)
+    FROM fet3d_ai_service_executor;
+GRANT EXECUTE ON FUNCTION claim_processing_attempt(UUID, TEXT, TEXT, TEXT, INT),
+    renew_processing_attempt(UUID, UUID, INT),
+    accept_processing_attempt(UUID, UUID, TEXT, UUID, UUID),
+    fail_processing_attempt(UUID, UUID, TEXT) TO fet3d_processing_worker_executor;
+GRANT EXECUTE ON FUNCTION requeue_processing_job(UUID, TEXT, TEXT) TO fet3d_backend_executor;
+
+REVOKE ALL ON TABLE processing_jobs, processing_job_attempts, revision_artifacts,
+    validation_runs, validation_issues FROM fet3d_processing_worker_executor;
+REVOKE ALL ON TABLE ai_billing_periods, ai_billing_period_items, ai_billing_adjustments,
+    ai_usage_ledger, ai_usage_reservations, ai_usage_reservation_allocations,
+    ai_quota_grants FROM fet3d_ai_service_executor;
+
+GRANT USAGE ON SCHEMA public TO fet3d_session_owner, fet3d_ai_accounting_owner,
+    fet3d_processing_owner, fet3d_ai_request_owner;
+GRANT SELECT ON TABLE users, sessions, playtest_sessions, releases, trainings,
+    scenario_versions, release_packages, runtime_compatibility_catalog,
+    release_qr_codes, service_entitlements, revisions, validation_runs,
+    revision_artifacts, validation_issues, ai_quota_grants
+    TO fet3d_session_owner;
+GRANT INSERT, UPDATE ON TABLE sessions, playtest_sessions, service_entitlements
+    TO fet3d_session_owner;
+GRANT SELECT ON TABLE ai_requests, ai_policy_versions, ai_overage_consents,
+    ai_billing_periods, ai_usage_ledger, ai_usage_reservations,
+    ai_usage_reservation_allocations, ai_quota_grants, ai_billing_adjustments,
+    ai_billing_period_items, buildings, users
+    TO fet3d_ai_accounting_owner;
+GRANT INSERT, UPDATE ON TABLE ai_requests, ai_usage_ledger, ai_usage_reservations,
+    ai_usage_reservation_allocations, ai_quota_grants, ai_billing_periods,
+    ai_billing_period_items, ai_billing_adjustments
+    TO fet3d_ai_accounting_owner;
+GRANT SELECT, INSERT ON TABLE integration_outbox_events TO fet3d_processing_owner;
+GRANT SELECT, UPDATE ON TABLE processing_jobs, processing_job_attempts
+    TO fet3d_processing_owner;
+
+GRANT SELECT ON TABLE users, buildings, ai_policy_versions TO fet3d_ai_request_owner;
+GRANT INSERT ON TABLE ai_requests TO fet3d_ai_request_owner;
+GRANT SELECT ON TABLE revision_artifacts, validation_runs, validation_issues
+    TO fet3d_processing_owner;
+
+-- Controlled AI request input boundary. The backend supplies the verified
+-- actor/scope and only this contract can create an Accepted request.
+CREATE OR REPLACE FUNCTION create_ai_request(
+    p_idempotency_key TEXT,
+    p_organization_id UUID,
+    p_building_id UUID,
+    p_user_id UUID,
+    p_audience TEXT,
+    p_request_type TEXT,
+    p_source_scope JSONB,
+    p_policy_version_id UUID,
+    p_input_hash TEXT,
+    p_input_reference TEXT
+)
+RETURNS UUID
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public
+AS $$
+DECLARE
+    v_id UUID;
+    v_existing public.ai_requests%ROWTYPE;
+    v_scope JSONB := COALESCE(p_source_scope, '{}'::JSONB);
+BEGIN
+    IF NULLIF(pg_catalog.btrim(p_idempotency_key), '') IS NULL
+       OR p_user_id IS NULL
+       OR NULLIF(pg_catalog.btrim(p_audience), '') IS NULL
+       OR NULLIF(pg_catalog.btrim(p_request_type), '') IS NULL
+       OR p_policy_version_id IS NULL
+       OR p_input_hash IS NULL
+       OR p_input_hash !~ '^[0-9a-fA-F]{64}$' THEN
+        RAISE EXCEPTION 'AI request identity, policy and canonical input hash are required';
+    END IF;
+    IF p_audience NOT IN ('organization','trainee') THEN
+        RAISE EXCEPTION 'AI request audience is invalid';
+    END IF;
+    IF p_audience = 'organization' AND p_organization_id IS NULL THEN
+        RAISE EXCEPTION 'organization AI request requires an organization';
+    END IF;
+    IF p_audience = 'trainee' AND (p_organization_id IS NOT NULL OR p_building_id IS NOT NULL) THEN
+        RAISE EXCEPTION 'trainee AI request cannot carry organization or Building scope';
+    END IF;
+
+    INSERT INTO public.ai_requests(
+        idempotency_key, organization_id, building_id, user_id, audience,
+        request_type, source_scope, policy_version_id, input_hash, input_reference
+    ) VALUES (
+        pg_catalog.btrim(p_idempotency_key), p_organization_id, p_building_id,
+        p_user_id, pg_catalog.btrim(p_audience), pg_catalog.btrim(p_request_type),
+        v_scope, p_policy_version_id, lower(pg_catalog.btrim(p_input_hash)), p_input_reference
+    )
+    ON CONFLICT (idempotency_key) DO NOTHING
+    RETURNING id INTO v_id;
+
+    IF v_id IS NOT NULL THEN
+        RETURN v_id;
+    END IF;
+
+    SELECT * INTO v_existing
+      FROM public.ai_requests
+     WHERE idempotency_key = pg_catalog.btrim(p_idempotency_key);
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'AI request idempotency result is unavailable';
+    END IF;
+    IF v_existing.organization_id IS DISTINCT FROM p_organization_id
+       OR v_existing.building_id IS DISTINCT FROM p_building_id
+       OR v_existing.user_id IS DISTINCT FROM p_user_id
+       OR v_existing.audience IS DISTINCT FROM pg_catalog.btrim(p_audience)
+       OR v_existing.request_type IS DISTINCT FROM pg_catalog.btrim(p_request_type)
+       OR v_existing.source_scope IS DISTINCT FROM v_scope
+       OR v_existing.policy_version_id IS DISTINCT FROM p_policy_version_id
+       OR lower(v_existing.input_hash) IS DISTINCT FROM lower(pg_catalog.btrim(p_input_hash))
+       OR v_existing.input_reference IS DISTINCT FROM p_input_reference THEN
+        RAISE EXCEPTION 'AI request idempotency key conflicts with another payload';
+    END IF;
+    RETURN v_existing.id;
+END;
+$$;
+
+ALTER FUNCTION create_ai_request(TEXT, UUID, UUID, UUID, TEXT, TEXT, JSONB, UUID, TEXT, TEXT)
+    OWNER TO fet3d_ai_request_owner;
+REVOKE ALL ON FUNCTION create_ai_request(TEXT, UUID, UUID, UUID, TEXT, TEXT, JSONB, UUID, TEXT, TEXT)
+    FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION create_ai_request(TEXT, UUID, UUID, UUID, TEXT, TEXT, JSONB, UUID, TEXT, TEXT)
+    TO fet3d_backend_executor;
+
+-- Controlled AI result/reconcile boundary. The service returns technical
+-- evidence; the backend records it here and then settles accounting separately.
+CREATE OR REPLACE FUNCTION record_ai_request_result(
+    p_request_id UUID,
+    p_status TEXT,
+    p_result_type TEXT,
+    p_result_reference TEXT,
+    p_response_snapshot JSONB,
+    p_result_hash TEXT,
+    p_citations JSONB,
+    p_model_provider TEXT,
+    p_model_version TEXT,
+    p_technical_usage JSONB,
+    p_failure_code TEXT
+)
+RETURNS UUID
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public
+AS $$
+DECLARE
+    v_request public.ai_requests%ROWTYPE;
+    v_citations JSONB := COALESCE(p_citations, '[]'::JSONB);
+    v_usage JSONB := COALESCE(p_technical_usage, '{}'::JSONB);
+BEGIN
+    IF p_request_id IS NULL OR p_status NOT IN ('Succeeded','Failed','NeedsReconcile') THEN
+        RAISE EXCEPTION 'AI result request and terminal/reconcile status are required';
+    END IF;
+    SELECT * INTO v_request
+      FROM public.ai_requests
+     WHERE id = p_request_id
+     FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'AI request does not exist'; END IF;
+
+    IF v_request.status IN ('Succeeded','Failed','Rejected') THEN
+        IF v_request.status = p_status
+           AND v_request.result_type IS NOT DISTINCT FROM p_result_type
+           AND v_request.response_snapshot IS NOT DISTINCT FROM p_response_snapshot
+           AND v_request.result_hash IS NOT DISTINCT FROM NULLIF(pg_catalog.btrim(p_result_hash), '')
+           AND v_request.citations IS NOT DISTINCT FROM v_citations
+           AND v_request.model_provider IS NOT DISTINCT FROM NULLIF(pg_catalog.btrim(p_model_provider), '')
+           AND v_request.model_version IS NOT DISTINCT FROM NULLIF(pg_catalog.btrim(p_model_version), '')
+           AND v_request.technical_usage IS NOT DISTINCT FROM v_usage
+           AND v_request.failure_code IS NOT DISTINCT FROM NULLIF(pg_catalog.btrim(p_failure_code), '') THEN
+            RETURN p_request_id;
+        END IF;
+        RAISE EXCEPTION 'AI result replay conflicts with the stored terminal result';
+    END IF;
+
+    IF p_status = 'Succeeded' THEN
+        IF p_result_type IS NULL
+           OR p_result_type NOT IN ('KnowledgeAnswer','ScenarioDraft','InsufficientEvidence','RejectedBySafetyGate')
+           OR p_response_snapshot IS NULL
+           OR NULLIF(pg_catalog.btrim(p_result_hash), '') IS NULL
+           OR p_result_hash !~ '^[0-9a-fA-F]{64}$'
+           OR pg_catalog.jsonb_typeof(v_citations) <> 'array'
+           OR pg_catalog.jsonb_typeof(v_usage) <> 'object'
+           OR NULLIF(pg_catalog.btrim(p_model_provider), '') IS NULL
+           OR NULLIF(pg_catalog.btrim(p_model_version), '') IS NULL
+           OR (p_result_type = 'ScenarioDraft' AND v_request.audience <> 'organization') THEN
+            RAISE EXCEPTION 'successful AI result lacks valid evidence or audience';
+        END IF;
+    ELSIF p_status = 'Failed' AND NULLIF(pg_catalog.btrim(p_failure_code), '') IS NULL THEN
+        RAISE EXCEPTION 'failed AI result requires a failure code';
+    END IF;
+
+    UPDATE public.ai_requests
+       SET status = p_status,
+           result_type = CASE WHEN p_status = 'Succeeded' THEN p_result_type ELSE NULL END,
+           result_reference = CASE WHEN p_status = 'Succeeded' THEN p_result_reference ELSE NULL END,
+           response_snapshot = CASE WHEN p_status = 'Succeeded' THEN p_response_snapshot ELSE NULL END,
+           result_hash = CASE WHEN p_status = 'Succeeded' THEN lower(pg_catalog.btrim(p_result_hash)) ELSE NULL END,
+           citations = CASE WHEN p_status = 'Succeeded' THEN v_citations ELSE '[]'::JSONB END,
+           model_provider = CASE WHEN p_status = 'Succeeded' THEN pg_catalog.btrim(p_model_provider) ELSE NULL END,
+           model_version = CASE WHEN p_status = 'Succeeded' THEN pg_catalog.btrim(p_model_version) ELSE NULL END,
+           technical_usage = CASE WHEN p_status = 'Succeeded' THEN v_usage ELSE '{}'::JSONB END,
+           failure_code = CASE WHEN p_status = 'Failed' THEN pg_catalog.btrim(p_failure_code) ELSE NULL END,
+           completed_at = CASE WHEN p_status IN ('Succeeded','Failed') THEN pg_catalog.clock_timestamp() ELSE NULL END,
+           last_reconciled_at = pg_catalog.clock_timestamp()
+     WHERE id = p_request_id
+       AND status IN ('Accepted','Processing','NeedsReconcile');
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'AI request is not in an accepted processing state';
+    END IF;
+    RETURN p_request_id;
+END;
+$$;
+
+ALTER FUNCTION record_ai_request_result(
+    UUID, TEXT, TEXT, TEXT, JSONB, TEXT, JSONB, TEXT, TEXT, JSONB, TEXT
+) OWNER TO fet3d_ai_request_owner;
+REVOKE ALL ON FUNCTION record_ai_request_result(
+    UUID, TEXT, TEXT, TEXT, JSONB, TEXT, JSONB, TEXT, TEXT, JSONB, TEXT
+) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION record_ai_request_result(
+    UUID, TEXT, TEXT, TEXT, JSONB, TEXT, JSONB, TEXT, TEXT, JSONB, TEXT
+) TO fet3d_backend_executor;
+GRANT SELECT, UPDATE ON TABLE ai_requests TO fet3d_ai_request_owner;
+GRANT SELECT ON TABLE users, buildings, ai_policy_versions TO fet3d_ai_request_owner;

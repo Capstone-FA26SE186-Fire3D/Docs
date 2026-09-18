@@ -1,14 +1,14 @@
 # Fire Evacuation Training 3D — Tổng Hợp Tính Năng
 
-> Đặc tả sản phẩm cho đồ án FET3D. Phạm vi được chia rõ giữa Phase 1 và Phase 2.
+> Đặc tả sản phẩm cho đồ án FET3D. Toàn bộ nhóm năng lực dưới đây thuộc mục tiêu bản cuối; phase chỉ dùng để sắp xếp triển khai.
 
 ## 1. Định vị sản phẩm
 
-FET3D biến mô hình **IFC** của một Building thành content package Unity dùng cho tập huấn sơ tán 3D trên Android. Người học cài ứng dụng một lần, đăng nhập và quét bất kỳ QR active pin một `Training` của release đã publish để tải package. Package đã xác minh được Unity dùng để chạy scenario, ghi nhận quyết định và trả result về React Native/Expo qua native Android bridge.
+FET3D biến mô hình **IFC** của một Building thành content package Unity dùng cho tập huấn sơ tán 3D trên Android. Người học cài ứng dụng một lần, đăng nhập và quét QR canonical của Building để xem danh sách bài đã publish, chọn một bài và tải package còn thiếu. Package đã xác minh được Unity dùng để chạy scenario, ghi nhận quyết định và trả result về React Native/Expo qua native Android bridge.
 
-Mỗi Building có QR canonical để mở đúng training của tòa nhà. Three.js chỉ được dùng cho hiệu ứng landing/giới thiệu trên web; gameplay BIM 3D/2.5D chạy trong Unity của Mobile, không chạy thành game Three.js trên trình duyệt. Landing và Learn là nội dung web công khai; không có guest account hoặc guest training không định danh. Xem [đặc tả UX web](fire3d-web-ux-design.md) để biết storyboard POV, nhận diện, motion và hai hướng nhu cầu.
+Mỗi Building có QR canonical để mở danh sách training của tòa nhà. Three.js được dùng cho landing và editor/preview 3D của organization; gameplay BIM 3D/2.5D đầy đủ chạy trong Unity của Mobile. Landing và Learn là nội dung web công khai; không có guest account hoặc guest training không định danh. Xem [đặc tả UX web](fire3d-web-ux-design.md) để biết storyboard POV, editor, nhận diện, motion và hai hướng nhu cầu.
 
-Headline Phase 1: **IFC → 3D → Unity Android → QR → Training → Result**.
+Luồng cốt lõi: **IFC → 3D → Unity Android → QR → Training → Result**.
 
 Giá trị cốt lõi là giúp người học làm quen với không gian đã được mô hình hóa, thử quyết định route trong hazard surrogate và nhận debrief sau buổi tập huấn. FET3D không thay thế biển báo, quy trình ứng phó khẩn cấp, tư vấn chuyên môn hoặc hoạt động PCCC thực tế.
 
@@ -18,7 +18,7 @@ Giá trị cốt lõi là giúp người học làm quen với không gian đã 
 | :--- | :--- |
 | `PlatformAdmin` | Quản lý nền tảng, organization, tài khoản, giám sát và support ở cấp nền tảng. |
 | `OrganizationUser` | Sở hữu Building, IFC, scenario, publish, QR, analytics và billing cho organization. |
-| `Trainee` | Tham gia training bằng ứng dụng Android qua bất kỳ QR active của release đã publish và chỉ xem dữ liệu của buổi tập huấn của chính mình. |
+| `Trainee` | Quét QR Building, chọn bài đã publish trong app Android và chỉ xem dữ liệu buổi tập huấn của chính mình. |
 
 Mô hình quyền không dùng cơ chế thành viên, lời mời, truy cập khách hoặc tập huấn không định danh. `organizationId` giới hạn ownership của Building, authoring, analytics và billing; nó không là điều kiện QR participation của `Trainee` đã xác thực.
 
@@ -28,34 +28,40 @@ Mô hình quyền không dùng cơ chế thành viên, lời mời, truy cập k
 
 - Tạo Building, quản lý revision và tải source IFC.
 - Theo dõi worker parse IFC, geometry runtime, hierarchy tầng, door/stair/exit, connectivity QA và log lỗi.
-- Xem preview 3D, issue list và metadata của revision trước khi đưa vào scenario.
+- Pipeline dùng Python/IfcOpenShell/IfcConvert, Blender script và Unity build worker để tạo GLB/metadata, mô hình nhẹ, collider, NavMesh và package; đây là pipeline dùng chung, không dựng thủ công từng Building.
+- Xem preview 3D/editor, issue list và metadata của revision trước khi đưa vào scenario. Nếu IFC thiếu đơn vị, tầng, cửa, cầu thang hoặc lối thoát, hệ thống tạo issue để người dùng sửa/xác nhận.
 - Chỉ source IFC hợp lệ mới có thể tạo package; raw IFC không được đưa xuống ứng dụng Android.
 
 ### 3.2. Scenario và ConfirmForTraining
 
 - Tạo version scenario với spawn, mục tiêu, hazard surrogate, time limit, rubric và cấu hình risk-aware A*.
+- Trên editor Three.js, chọn tầng, xoay/zoom/ẩn lớp, đặt và chỉnh nguồn lửa, tốc độ cháy, khói, hướng/cường độ gió, cửa/vùng chặn, bình chữa cháy, khăn, nguồn nước và các vật phẩm runtime đã hỗ trợ.
+- Lưu draft, undo/redo, validation và version scenario riêng với geometry. Đổi tham số scenario không convert lại toàn bộ IFC; đổi IFC tạo revision mới.
+- Preview web chỉ minh họa timeline/hiệu ứng; chạy thử đầy đủ hành vi, route và scoring bằng app Unity của organization.
 - Chạy checklist readiness: candidate package/manifest, graph, route kiểm tra và scenario; QR chưa tồn tại ở bước này.
-- Revision đạt IFC/connectivity QA ở `ReadyForScenario`; action `ConfirmForTraining` persist transition sang `ConfirmedForTraining`.
+- Revision đạt IFC/connectivity QA ở `ReadyForScenario`; OrganizationUser có thể tạo nhiều logical Scenario và version trên cùng geometry. `ConfirmForTraining` được persist cho đúng cặp revision/version và không khóa scenario khác.
+- OrganizationUser có thể chạy thử draft/version riêng trên Mobile/Unity trong hạn mức Admin cấu hình. Playtest phải thuộc đúng tenant, không mở qua QR Trainee và không tính learner analytics.
 
 `ConfirmForTraining` là nhãn readiness nội bộ. Nó không tuyên bố Building, lối thoát, scenario hay kết quả mô phỏng đã được chứng nhận, phê duyệt hoặc kiểm định về PCCC.
 
 ### 3.3. Publish, QR và analytics
 
-- Sau `ConfirmedForTraining`, tạo release `Built`, package và `Training` khớp revision/scenario/organization; publish release chỉ khi package và `Training` active đã tồn tại.
-- Sau publish, tạo, in, rotate và revoke QR pin đúng một `Training` cùng release. Mọi `Trainee` đã xác thực có thể resolve QR active này, không có account-specific permission, allowlist hoặc điều kiện `organizationId`.
-- Xem analytics cơ bản Phase 1 và expanded analytics Phase 2 cho Building/scenario thuộc organization.
-- Xem quotation, transaction, invoice metadata và revenue khi các năng lực billing Phase 2 được bật.
+- Sau `ConfirmedForTraining`, tạo release `Built`, package và `Training` khớp revision/scenario/organization; publish chỉ khi package có checksum/manifest/runtime tương thích, validation đạt, không còn issue Error/Critical mở và `Training` active đã tồn tại.
+- Sau publish, tạo, in và rotate QR canonical ở cấp Building. QR resolve danh sách `Training`/release đã publish; khi Trainee chọn bài, session mới pin đúng `trainingId`, `releaseId` và `scenarioVersionId`.
+- Publish chỉ được phép khi Building còn dịch vụ tháng hợp lệ. Hết hạn khóa publish và session mới; QR vẫn mở landing/trang trạng thái để đăng nhập, tải app hoặc gia hạn.
+- Xem analytics cơ bản và expanded analytics cho Building/scenario thuộc organization theo thứ tự rollout; tách learner plays, playtest, Trainee unique và active sessions ước tính từ heartbeat.
+- Xem quotation, transaction, invoice metadata, entitlement và revenue theo quyền billing.
 
 ## 4. Trải nghiệm Trainee
 
-1. Cài ứng dụng Android một lần và đăng nhập.
-2. Quét QR được phát cho hoạt động tập huấn.
-3. Ứng dụng resolve active, published release cho `Trainee` đã xác thực, tải manifest/content package và xác minh hash.
-4. React Native/Expo mở Unity qua native Android bridge với session và protocol version đã cấp.
+1. Chưa cài app: quét QR mở web, đăng nhập/đăng ký Google và hướng dẫn tải app; sau khi cài có thể quét lại QR.
+2. Đã cài nhưng chưa đăng nhập: app yêu cầu Google Sign-In.
+3. Đã đăng nhập: app resolve Building, hiển thị danh sách bài đã publish và cho chọn mode.
+4. App tải phần package còn thiếu, verify hash/schema/runtime và tạo session preparation; `POST /api/training/sessions/{sessionId}/start` mới kiểm tra dịch vụ Building/QR online và cấp launch grant để mở Unity qua native Android bridge.
 5. Người học hoàn thành Learn, Guided Drill hoặc Assessment; Unity trả event/result qua bridge để Mobile đồng bộ backend.
-6. Người học xem debrief của chính mình theo policy của mode.
+6. Người học hỏi AI trên web/Mobile ngoài gameplay và xem debrief của chính mình.
 
-Trong Phase 1, buổi tập huấn chạy online sau khi package được tải. Phase 2 bổ sung basic offline: package đã verify có thể mở khi mất mạng, event/result vào local queue và được đồng bộ lại khi kết nối trở lại.
+Mọi session mới phải kiểm tra online ở bước start, kể cả package đã cache; không hỗ trợ start offline. Nếu mất mạng hoặc dịch vụ hết hạn sau khi session bắt đầu, Unity tiếp tục chạy, Mobile lưu event/result local và đồng bộ lại khi có mạng.
 
 ### 4.1. Cổng web và hai nhu cầu
 
@@ -85,32 +91,36 @@ Trong Phase 1, buổi tập huấn chạy online sau khi package được tải.
 - Result/debrief chỉ xuất hiện sau khi nộp bài theo policy đã cấu hình.
 - Điểm là dữ liệu học tập trong mô phỏng, không là năng lực hay chứng nhận PCCC.
 
-## 6. Phase 1 — core online
+## 6. Năng lực bản cuối và thứ tự triển khai
 
 | Nhóm | Tính năng |
 | :--- | :--- |
-| Authoring | Building, IFC pipeline, geometry/connectivity QA, revision và scenario. |
-| Readiness/release | `ConfirmForTraining`, publish, manifest, package versioning và QR. |
-| Runtime | React Native/Expo shell, native Android Unity bridge, Unity, hazard surrogate, risk-aware A*, online event/result sync. |
-| Dữ liệu | session, result, audit và analytics cơ bản. |
+| Authoring | Building, IFC pipeline, geometry/connectivity QA, preview/editor 3D, revision và scenario. |
+| Readiness/release | `ConfirmForTraining`, payment dịch vụ, publish, manifest, package versioning và QR Building/list bài. |
+| Runtime | React Native/Expo shell, native Android Unity bridge, Unity library, lửa/khói/gió/cháy lan, tương tác, hazard surrogate, risk-aware A*, online start và sync sau mất mạng. |
+| AI | RAG hướng dẫn organization, tạo scenario draft có nguồn, AI Trainee có quota ngày và debrief ngoài game. |
+| Billing/operations | Gói theo Building/tháng, PayOS, usage AI cuối kỳ, dashboard account/service/usage và audit. |
+| Dữ liệu | session, result, audit, analytics người duy nhất/lượt chơi/active session và usage billing. |
 
-Phase 1 không có offline runtime, NPC runtime, PayOS production hoặc luồng hóa đơn/quotation/revenue.
+Thứ tự triển khai có thể chia thành các đợt kỹ thuật; các tính năng trên là mục tiêu bản cuối. Session offline launch không được hỗ trợ, nhưng mất mạng giữa session phải được xử lý.
 
-## 7. Phase 2 — mở rộng vận hành
+## 7. AI, payment và thư viện hành vi
 
 | Nhóm | Tính năng |
 | :--- | :--- |
-| Billing | PayOS production, quotation, transaction, invoice metadata và revenue. |
-| Trải nghiệm | basic offline, local queue/reconcile và basic NPC trong ngân sách hiệu năng công bố. |
+| AI organization | Hỏi đáp có nguồn, giải thích IFC/PCCC, draft scenario ở trạng thái `NeedsUserEdit`; người dùng tự edit và xác nhận. |
+| AI Trainee | Hỏi đáp kiến thức/bài học và giải thích kết quả cá nhân trên web/Mobile ngoài game; quota ngày riêng. |
+| Billing | Dịch vụ từng Building theo tháng; quota AI dùng chung organization; usage vượt mức thông báo và đối soát cuối kỳ. |
+| Runtime library | Hành vi di chuyển, camera, collider, cửa, vật phẩm, bình chữa cháy, khăn/nước theo rule đã kiểm tra, lửa/khói/gió/cháy lan và chấm điểm. Tác dụng khăn/nước/che mũi/khu vệ sinh không mặc định là đúng; phải có nội dung được duyệt. |
 | Vận hành | feedback/support, expanded analytics, filter/cohort/export và debrief aggregate. |
 
-Basic NPC chỉ là tác nhân mô phỏng phục vụ scenario; không đại diện cho hành vi con người thật. Expanded analytics chỉ dùng để xem hoạt động học tập/mô phỏng, không kết luận mức độ an toàn của công trình.
+Chủ tòa chọn/cấu hình hành vi đã có; không viết script Unity cho từng Building. Hiệu ứng hiển thị và trạng thái mô phỏng dùng cùng scenario state. Gió/khói là mô hình game, không phải mô phỏng CFD. Basic NPC chỉ là tác nhân mô phỏng; không đại diện cho hành vi con người thật. Expanded analytics chỉ dùng để xem hoạt động học tập/mô phỏng.
 
-PayOS request chỉ được tạo `Pending` qua function-only executor. Trusted webhook adapter xác thực `req.body` bằng SDK `webhooks.verify` hoặc canonicalize `data` theo thứ tự alphabet trước khi gọi database; database chỉ ghi attestation và đối soát, còn `returnUrl` không thể ghi `Paid`.
+PayOS request chỉ được tạo `Pending` qua function-only executor. Trusted webhook adapter xác thực `req.body` bằng SDK `webhooks.verify` hoặc canonicalize `data` theo thứ tự alphabet trước khi gọi database; database chỉ ghi attestation và đối soát, còn `returnUrl` không thể ghi `Paid`. Giá, quota, usage và quyền publish do backend quyết định; retry/webhook trùng không tạo usage hoặc quyền trùng.
 
 ## 8. Analytics và debrief
 
-Analytics cơ bản hiển thị số phiên, completion, thời lượng, route decision và modeled exposure. Expanded analytics bổ sung xu hướng theo thời gian, filter Building/scenario, cohort comparison, export và debrief aggregate.
+Analytics cơ bản hiển thị `Trainee unique` (Trainee khác nhau có session đã bắt đầu), `Learner plays` (session Trainee đã bắt đầu), `Active sessions` (heartbeat trong cửa sổ cấu hình), completion và duration. Completion rate = session hoàn tất / session đã bắt đầu; duration chỉ tính timestamp hợp lệ. Preparation/playtest không tính learner analytics, session chưa đồng bộ ghi riêng và chưa tính hoàn thành tới khi backend xác nhận. Expanded analytics bổ sung xu hướng theo thời gian, filter Building/scenario, cohort comparison, export và debrief aggregate.
 
 `Trainee` chỉ xem kết quả của chính mình. `OrganizationUser` chỉ xem aggregate và dữ liệu thuộc organization. Heatmap, route tham chiếu hoặc analytics không được gọi là bằng chứng tuân thủ, chứng nhận hoặc xác nhận PCCC.
 
@@ -119,3 +129,9 @@ Analytics cơ bản hiển thị số phiên, completion, thời lượng, route
 Đánh giá chuyên môn, usability session và user study là các hoạt động của capstone để nhận phản hồi về độ rõ ràng, khả năng sử dụng, hiệu năng và trải nghiệm training. Các hoạt động này không xuất hiện như loại tài khoản hoặc quyền hệ thống.
 
 Mô hình hazard dùng surrogate nhẹ, deterministic theo scenario và có giới hạn rõ ràng. Khi demo, tài liệu và giao diện phải nêu rằng kết quả chỉ phù hợp với phạm vi mô phỏng/tập huấn của đồ án.
+
+### 9.1. Tính bất biến và retry
+
+- Package/artifact đã publish hoặc đã được phiên pin không được thay tại chỗ; thay nội dung tạo release/package mới.
+- Đóng kỳ AI tạo snapshot item bất biến; điều chỉnh late/uncertain usage dùng adjustment riêng và không tính lại theo policy mới.
+- Worker/AI retry dùng idempotency và provenance; retry stale hoặc khác input không được tạo charge, artifact, publication hay analytics trùng.
