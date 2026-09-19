@@ -19,11 +19,25 @@ Kiến trúc phục vụ mô phỏng và tập huấn của đồ án. Nó khôn
 
 | Tài khoản | Quyền kiến trúc cần hỗ trợ |
 | :--- | :--- |
-| `PlatformAdmin` | Quản trị platform, organization, account, health, support và aggregate vận hành. |
+| `PlatformAdmin` | Quản trị platform, organization, account, Learn blog public, health, support và aggregate vận hành. |
 | `OrganizationUser` | Sở hữu Building, IFC, scenario, publish, QR, analytics và billing trong `organizationId`. |
 | `Trainee` | Quét QR Building, chọn Training đã publish, tham gia session và truy cập kết quả cá nhân. |
 
 Không triển khai bảng/cơ chế thành viên, lời mời, truy cập khách, token khách hoặc training không định danh. `organizationId` bảo vệ ownership của Building, authoring, analytics và billing. Mọi `Trainee` đã xác thực có thể resolve QR Building và chọn bài published; backend không dùng account-specific allowlist hoặc đối chiếu `organizationId` của Trainee để thay thế kiểm tra identity, Building entitlement và trạng thái bài.
+
+### 2.1. Learn blog và media ngoài
+
+Learn là blog/thư viện công khai theo tình huống, tách khỏi `Training`, `Session` và mode Learn trong Unity. `PlatformAdmin` tạo `learn_posts`, sửa version Draft, có thể phát hành ngay hoặc lưu nháp, ẩn/hiện hoặc xóa mềm bài. Không có bước duyệt riêng của Learn. `learn_post_versions` là snapshot; version Published bất biến. Post có `Unpublished | Published | Hidden | Deleted`: public API chỉ trả Published, Hidden vẫn là nguồn RAG hợp lệ, Deleted giữ lịch sử nhưng bị loại khỏi RAG. Restore bài từng public đưa về Hidden, không tự public.
+
+Version có loại `Article`, `Tip` hoặc `Video`, tóm tắt, ảnh, nguồn và `content_blocks` JSONB theo schema. Video block chỉ chứa provider được allowlist (`youtube`, `facebook`, `tiktok`), URL canonical và video ID đã chuẩn hóa. Backend từ chối iframe/HTML/script tùy ý, redirect/provider không hợp lệ và dữ liệu thiếu; renderer dùng cơ chế chính thức của provider. Video private, bị xóa hoặc không hỗ trợ embed trả trạng thái không khả dụng cùng tóm tắt/link fallback. Mobile mở provider bằng trình duyệt theo thiết kế mục tiêu.
+
+Contract media đối chiếu tài liệu provider: [YouTube Embedded Players and Player Parameters](https://developers.google.com/youtube/player_parameters) dùng iframe/player chính thức; [Facebook Embedded Video Player](https://developers.facebook.com/docs/plugins/embedded-video-player/) phụ thuộc video công khai và khả năng embed của provider; [TikTok Embed Videos](https://developers.tiktok.com/docs/en/embed-videos) hỗ trợ cơ chế embed/oEmbed chính thức. Hệ thống chỉ lưu URL chuẩn hóa/provider ID khi có, không lưu iframe/script; video bị xóa, private hoặc provider không cho nhúng vẫn hiển thị summary/link. Transcript là dữ liệu tùy chọn do Admin xác nhận, không tự ingest URL.
+
+`learn_situations` là danh mục nội dung; một version có thể gắn nhiều tình huống. Draft có thể tham chiếu nguồn `Common` chưa Approved để biên tập, còn Published/Hidden và RAG chỉ chấp nhận nguồn Common còn được phép và đã `Approved`; Unpublished/Deleted bị loại. Policy duyệt nguồn Common vẫn độc lập với lifecycle Learn. `knowledge_chunks` dùng lại cho indexing/RAG. Sau khi version Published, nội dung, phân loại và liên kết nguồn đều bất biến; chỉnh sửa phải tạo version mới. Bookmark chỉ có quyền tạo/xóa theo Trainee, không có đường sửa khóa chính để đổi chủ. Video không tự trở thành dữ liệu RAG: chỉ tóm tắt/transcript đã được Admin xác nhận mới được index.
+
+Publish/hide/show/delete/restore cập nhật PostgreSQL, audit và `PlatformCacheInvalidation` trong cùng transaction, sau đó dispatcher mới gửi qua outbox để invalidation Redis/index. Redis hoặc indexing lỗi không làm thay đổi source state; backend vẫn chặn retrieval theo trạng thái hiện hành. Không có enrollment, lesson bắt buộc, quiz, chứng chỉ hoặc bảng tiến độ Learn trong thiết kế này.
+
+Các gate editorial dùng actor PlatformAdmin đã được backend xác thực trong transaction context, không dùng `created_by` của version làm danh tính thao tác. Đường ghi liên kết khóa theo thứ tự `learn_post` → `learn_post_version` → situation/source link; backend chỉ được sửa nội dung Draft qua quyền cột, còn publication status, public pointer và version status đi qua gate.
 
 ## 3. Kiến trúc tổng thể
 
@@ -56,14 +70,14 @@ Backend là nguồn sự thật cho ownership scope, Building, revision, scenari
 
 | Lớp | Công nghệ | Trách nhiệm |
 | :--- | :--- | :--- |
-| Web | Next.js + Three.js (landing, preview/editor) | Next.js vận hành Building, IFC, scenario/editor, release, QR, analytics, billing, AI usage và support; Three.js hiển thị landing và model preview/editor. |
+| Web | Next.js + Three.js (landing, Learn, preview/editor) | Next.js vận hành Learn CMS/public reader, Building, IFC, scenario/editor, release, QR, analytics, billing, AI usage và support; Three.js hiển thị landing và model preview/editor. |
 | API/jobs | C# + ASP.NET Core trên .NET | Xác minh Firebase ID token, AuthZ, domain command, QR resolve, session, audit, billing webhook và job orchestration. |
 | Database | Supabase Database (PostgreSQL) | Dữ liệu tenant-scoped, revision, release, session/result, analytics, quotation/transaction/invoice metadata. Supabase Auth không được dùng. |
 | Vector database | `pgvector` trên cùng PostgreSQL/Supabase | Embedding, metadata-filtered retrieval và vector index cho RAG; thay thế ChromaDB của prototype cũ. |
 | Cache/event transport | Redis cache-aside + Redis Streams | Cache dữ liệu đọc và vận chuyển event/job sau transactional outbox; PostgreSQL vẫn là nguồn sự thật. Redis là kiến trúc đích, chưa triển khai; provider, version, retention và TTL còn mở. |
-| Authentication | Firebase Authentication + Google Sign-In | Xác thực danh tính. Backend ánh xạ Firebase UID sang user, role và `organizationId`; Firebase không quyết định authorization nghiệp vụ. |
+| Authentication | BE email/password + Firebase Authentication cho Google Sign-In | BE hash password, refresh/reset token và cấp phiên Fire3D. Firebase chỉ xác minh Google ID token; Firebase không quyết định authorization nghiệp vụ. |
 | Push notification | Firebase Cloud Messaging (FCM) | Gửi notification đến installation đã đăng ký; token FCM phải được rotate/revoke và không dùng làm credential đăng nhập. |
-| Object storage | Amazon S3 (AWS S3) | Raw IFC private, manifest và content package bất biến qua bucket policy và signed URL TTL ngắn. |
+| Object storage | Amazon S3 (AWS S3) | Raw IFC, manifest, content package và avatar private qua object key server-side và signed URL TTL ngắn. |
 | AI/RAG service | Python + FastAPI trên Azure; Container Apps là phương án triển khai đề xuất | Service nội bộ cho retrieval, grounded generation, citations, safety gate và usage kỹ thuật; client không gọi trực tiếp. Prototype hiện vẫn gọi API riêng. |
 | IFC/Blender worker | Python + IfcOpenShell/IfcConvert; Blender script/Container Apps Job khi phù hợp | Nhận job qua dispatch bền vững, parse IFC, geometry/LOD, GlobalId/facts, graph và QA; worker không phục vụ chat đồng thời. |
 | Unity build worker | Unity Editor + build toolchain riêng | Tạo collider/NavMesh/runtime package và manifest; không coi Python/GLB là AssetBundle nếu thiếu Unity Editor worker. |
@@ -209,7 +223,7 @@ Manifest tối thiểu gồm:
 
 ```text
 QR opens web/app context
-  -> Firebase Google Sign-In if needed
+  -> local email/password session or Firebase Google Sign-In if needed
   -> API checks Building service entitlement online
   -> resolve list of Published Trainings
   -> Trainee selects one training/mode
@@ -217,6 +231,8 @@ QR opens web/app context
   -> download missing content and verify hash/schema/runtime
   -> POST /api/training/sessions (prepare, idempotency key; chưa cấp quyền start)
   -> POST /api/training/sessions/{sessionId}/start (online entitlement/QR/package check)
+  -> POST /api/training/sessions/{sessionId}/events (stable event id/sequence; backend receipt)
+  -> POST /api/training/sessions/{sessionId}/complete (result key/hash; backend receipt)
   -> native Android bridge launches Unity(sessionId, manifestPath, launchGrant, protocolVersion)
   -> Unity emits versioned events/result through bridge to React Native/Expo
   -> React Native/Expo syncs API
@@ -274,6 +290,16 @@ POST /api/quotations
 POST /api/payments/payos/create
 POST /api/payments/payos/webhook
 POST /api/payments/{transactionId}/reconcile
+GET  /api/organizations/{organizationId}/buildings
+POST /api/organizations/{organizationId}/buildings
+PATCH /api/buildings/{buildingId}
+GET  /api/organizations/{organizationId}/service-packages
+POST /api/quotations/preview
+POST /api/organizations/{organizationId}/enterprise-quote-requests
+GET  /api/organizations/{organizationId}/enterprise-quote-requests
+POST /api/quotations/{quotationId}/renew
+GET  /api/organizations/{organizationId}/service-expiry-notifications
+POST /api/organizations/{organizationId}/service-expiry-notifications/{notificationId}/read
 GET  /api/organizations/{organizationId}/ai-usage
 POST /api/organizations/{organizationId}/ai-overage-consents
 GET  /api/ai/requests/{requestId}
@@ -281,9 +307,38 @@ POST /api/ai/usage/{requestId}/reconcile
 POST /api/ai/organization/scenario-draft
 POST /api/ai/trainee/answer
 POST /api/feedback
+GET  /api/learn/situations
+GET  /api/learn/posts
+GET  /api/learn/posts/{slug}
+GET  /api/learn/bookmarks
+PUT  /api/learn/bookmarks/{postId}
+DELETE /api/learn/bookmarks/{postId}
+POST /api/auth/register/trainee
+POST /api/auth/register/organization
+POST /api/auth/google
+POST /api/auth/google/onboarding/complete
+GET  /api/me/profile
+PATCH /api/me/profile
+POST /api/me/change-password
+POST /api/me/set-password
+POST /api/me/link-google
+GET  /api/me/organization
+PATCH /api/me/organization
+POST /api/me/avatar/upload-intent
+POST /api/me/avatar/complete
+DELETE /api/me/avatar
+POST /api/admin/learn/posts
+POST /api/admin/learn/posts/{postId}/versions
+PUT  /api/admin/learn/versions/{versionId}
+POST /api/admin/learn/versions/{versionId}/publish
+POST /api/admin/learn/posts/{postId}/hide
+POST /api/admin/learn/posts/{postId}/show
+POST /api/admin/learn/posts/{postId}/delete
+POST /api/admin/learn/posts/{postId}/restore
+POST /api/admin/learn/media/validate
 ```
 
-Các endpoint trên là contract mục tiêu; code hiện tại chưa chứng minh chúng đã được triển khai. Endpoint ownership phải enforce account type, `organizationId`, Building entitlement, release/scenario pin, protocol/schema version, quota và audit. Playtest chỉ dành cho OrganizationUser đúng tenant, pin draft/version và loại khỏi learner analytics; start dùng Trial quota hoặc Active Building entitlement. QR resolve trả danh sách bài theo Building; preparation không cấp quyền, session start bắt buộc online entitlement `Active` và bài Published. AI draft không được tự mutate scenario hoặc publish; request/usage/consent có idempotency và source citations.
+Các endpoint trên là contract mục tiêu; code hiện tại chưa chứng minh chúng đã được triển khai đầy đủ. Trainee đăng ký bằng email/username/password; OrganizationUser đăng ký email/password cùng hồ sơ tổ chức, còn username cá nhân là tùy chọn. Google mới qua `/api/auth/google` nhận onboarding token ngắn hạn, sau đó chọn Trainee hoặc OrganizationUser và hoàn tất thông tin; Google đã liên kết đăng nhập theo role/tenant cũ. BE quản lý password hash/refresh/reset token; Firebase chỉ xác minh Google ID token, FCM chỉ push, Mailgun gửi reset password và nhắc gia hạn. Đổi/reset password trong thiết kế đích phải khóa user, tiêu thụ token và thu hồi refresh-token family trong cùng transaction; hiện trạng BE đã kiểm tra family khi xác thực nhưng reset handler còn cần hoàn thiện. Trainee không còn username gate ở game start. `POST /api/admin/learn/posts` nhận `publishImmediately=false`; nếu true, tạo post/draft, kiểm tra nội dung và publish trong cùng transaction. Endpoint ownership phải enforce `PlatformAdmin`, ETag/revision, durable command receipt, idempotency và audit. Learn public chỉ trả khi `publication_status=Published` và pointer trỏ version Published cùng bài; Hidden không public nhưng vẫn có thể vào RAG, Deleted không vào RAG. Nhóm `/api/admin/learn/*` không có `/approve`, dùng `/publish`, `/hide`, `/show`, `/delete` và `/restore`. Publish/hide/show/delete/restore ghi audit và invalidation trong transaction; replay cùng key/payload trả kết quả cũ, khác payload trả conflict. Media validation nhận URL, trả provider/ID/canonical status và không nhận iframe/script. Bookmark chỉ dành cho Trainee và unique theo user/post; bài Hidden/Deleted giữ bookmark nhưng không trả nội dung. Playtest chỉ dành cho OrganizationUser đúng tenant, pin draft/version và loại khỏi learner analytics; start dùng Trial quota hoặc Active Building entitlement. QR resolve trả danh sách bài theo Building; preparation không cấp quyền, session start bắt buộc online entitlement `Active` và bài Published. AI draft không được tự mutate scenario hoặc publish; request/usage/consent có idempotency và source citations.
 
 ### 9.0. Quy tắc contract theo nhóm endpoint
 
@@ -292,10 +347,11 @@ Các endpoint trên là contract mục tiêu; code hiện tại chưa chứng mi
 | IFC, processing, QA | `OrganizationUser` đúng tenant; worker chỉ nhận artifact/source đã được backend cấp quyền | `buildingId`, `revisionId`, source hash, `jobId`, attempt, toolchain, artifact hash, QA issue/validation run | `jobKey` + attempt; retry không tạo artifact logic trùng; trả `409` khi revision không hợp lệ, `422` khi geometry/QA fail |
 | Draft, snapshot, interaction catalog | `OrganizationUser` đúng tenant; draft có thể sửa, version snapshot mới append-only | `scenarioId`, `scenarioDraftId`, `revisionId`, `scenarioVersionId`, schema/hash, capability identifiers | draft update dùng version/ETag; snapshot retry không tạo version trùng; trả `409` conflict và `422` capability/geometry không hỗ trợ |
 | Organization playtest | `OrganizationUser` đúng tenant; start kiểm tra Trial còn hạn/còn quota thử hoặc Building entitlement `Active`; không dùng QR công khai | `playtestId`, draft/version, package hash, service entitlement, runtime/protocol version | prepare/start key chống mở trùng; trả `403` sai tenant/hết entitlement/quota, `409` package chưa verify, `422` lỗi nghiêm trọng; hết hạn sau start không cắt phiên |
-| QR, training list, Trainee session | `GET /api/qr/{qrToken}` chỉ trả public metadata/trạng thái được phép; danh sách bài cần Firebase identity; preparation không cấp quyền, `start` mới cần bài Published và Building entitlement `Active` online | QR → Building; session pin `trainingId`, `releaseId`, `scenarioVersionId`, `qrCodeId`, manifest/package hash, preparation key, start key, launch grant | prepare/start request key và event sequence chống trùng; trả `404/410` QR không hợp lệ/thu hồi, `403` hết quyền, `409` package/hash/schema không khớp; cache không cho offline start |
-| Heartbeat, event, complete, reconcile | Chỉ Trainee sở hữu session; phải đúng launch grant và session status; mất mạng chỉ reconcile sau khi session đã bắt đầu | `sessionId`, `eventId`, release/scenario hash, sequence, client timestamps, sync state | event ID ổn định và sequence; trả `409` duplicate/conflict, `422` payload/schema lỗi, không cắt session đang chạy vì entitlement hết hạn |
-| Billing, entitlement, settlement | OrganizationUser đúng tenant tạo quotation/payment; PlatformAdmin quản lý giá/quota; webhook chỉ trusted adapter | Building/package/duration/term/price/terms snapshot; payment transaction; deterministic entitlement/payment provisioning key; AI period/usage snapshot | quotation/payment/webhook/provisioning key chống trùng; trả `409` duplicate/mismatch, `402/403` chưa thanh toán/chưa đồng ý overage, có reconcile khi payment Applied nhưng cấp quyền lỗi |
+| QR, training list, Trainee session | `GET /api/qr/{qrToken}` chỉ trả public metadata/trạng thái được phép; danh sách bài cần phiên FET3D hợp lệ từ local email/password hoặc Google exchange; preparation không cấp quyền, `start` mới cần bài Published và Building entitlement `Active` online | QR → Building; session pin `trainingId`, `releaseId`, `scenarioVersionId`, `qrCodeId`, manifest/package hash, preparation key, start key, launch grant | prepare/start request key và event sequence chống trùng; trả `404/410` QR không hợp lệ/thu hồi, `403` hết quyền, `409` package/hash/schema không khớp; cache không cho offline start |
+| Heartbeat, event, complete, reconcile | Trainee sở hữu session; OrganizationUser sở hữu playtest; phải đúng launch grant/start state; mất mạng chỉ reconcile sau khi gameplay đã bắt đầu | `sessionId`/`playtestId`, `eventId` hoặc result/completion key, release/scenario hash, sequence, client timestamps, sync state | stable ID/key chống trùng; trả `409` duplicate/conflict, `422` payload/schema lỗi, không cắt phiên đã bắt đầu vì entitlement hoặc creator bị vô hiệu hóa |
+| Billing, entitlement, settlement | OrganizationUser đúng tenant quản lý nhiều Building; PlatformAdmin quản lý package/discount/giá/quota; webhook chỉ trusted adapter | quotation header + `quotation_building_items` theo từng Building, package/duration/purchase action/discount/price/terms snapshot; payment transaction; `payment_provisioning_records` theo từng line; deterministic line entitlement/provisioning key; AI period/usage snapshot | quotation/payment/webhook/provisioning key chống trùng; trả `409` duplicate/mismatch, `402/403` chưa thanh toán/chưa đồng ý overage, reconcile từng line khi payment Applied nhưng cấp quyền lỗi; enterprise quote chưa tạo charge |
 | AI/RAG và usage | OrganizationUser chỉ corpus/BIM đúng tenant; Trainee chỉ corpus chung đã duyệt và dữ liệu cá nhân được phép | `requestId`, response type/status, citations/source version/scope, policy/reservation allocation, consent, usage/price snapshot | request idempotency; trả `422` input/safety gate, `409` quota/consent conflict, `200` `InsufficientEvidence` khi thiếu nguồn thay vì bịa |
+| Learn CMS/public | Public đọc Published; chỉ `PlatformAdmin` quản trị editorial; Trainee bookmark/hỏi AI; Hidden chỉ dùng RAG, Deleted bị loại | `postId`, `versionId`, slug, kind, situation IDs, content schema/hash, source IDs, media provider/canonical URL, audit actor | ETag/revision và idempotency cho draft/publish/bookmark/delete/restore; `409` version conflict, `422` content/media/source sai, `404/410` bài không public; cache không trả Draft/Hidden/Deleted |
 
 ### 9.1. Bảng thiết kế đích và hiện trạng code
 
@@ -307,6 +363,9 @@ Các endpoint trên là contract mục tiêu; code hiện tại chưa chứng mi
 | Playtest | Organization-only draft/version package, entitlement Trial/Active kiểm tra ở start, giới hạn thử, loại khỏi learner analytics | Chưa có contract/runtime đã triển khai | Thiết kế grant/session type, quota reservation và native Unity flow |
 | Billing | Quotation phân biệt BuildingService/AIUsage với duration/price/terms snapshot; entitlement/payment provisioning và AI settlement period | BE có entity payment/quotation nhưng chưa chứng minh provisioning/reconcile | Thiết kế EF/API/idempotency, deterministic provisioning và kiểm thử webhook sau task tài liệu |
 | AI quota | Grant organization hoặc Trainee user; reservation allocations phân bổ grant, usage liên kết request/consent/price snapshot | AI prototype còn ChromaDB/OpenAI; BE chưa có production ledger | Firebase/pgvector migration, quota service và tenant/evidence tests |
+| Identity/profile | `users` là nguồn chính cho local auth, Google link, username, display name, avatar key và profile revision; organization giữ name/address/phone/revision; Google onboarding session giữ trạng thái ngắn hạn trước khi tạo user và lưu kết quả hoàn tất để retry idempotent | Không lưu confirm password, signed URL, avatar base64 hoặc provider secret; `organizations.plan` bị loại | BE register/login/Google onboarding/link/reset/profile API, ETag, S3 intent/complete/delete và session revoke; chưa migration |
+| Building location | `buildings.address/city/district/latitude/longitude/geojson` là nguồn chính | Bỏ `building_locations`; không bỏ dữ liệu vị trí, chỉ hợp nhất vào Building | EF mapping/migration/backfill và kiểm thử cập nhật đồng thời còn thiếu |
+| Learn blog | `learn_posts` + immutable `learn_post_versions` + situations/bookmarks; `learn_post_version_sources` nối Common knowledge; post `Unpublished/Published/Hidden/Deleted` | Giữ revision/pointer/source/history; Hidden không public nhưng RAG hợp lệ, Deleted soft-delete và loại khỏi RAG; không có Approved step riêng của Learn | Prototype FE có Learn/chat demo; chưa có CMS, DB/API bookmark hoặc provider embed production; cần EF/API/SQL migration, provider validation, outbox/cache invalidation và RAG state filter |
 
 Đây là bảng truy vết thiết kế, không phải tuyên bố code đã khớp hoặc database đã được migrate.
 
@@ -325,17 +384,22 @@ Các endpoint trên là contract mục tiêu; code hiện tại chưa chứng mi
 
 ## 10. Security, privacy và reliability
 
-- Web/Mobile đăng nhập qua Firebase Authentication, gồm Google Sign-In. API phải xác minh Firebase ID token ở server rồi nạp role, trạng thái tài khoản và `organizationId` từ PostgreSQL; custom claim hoặc dữ liệu client không thay thế authorization server-side.
-- Firebase/Google refresh credential do Firebase SDK quản lý; database FET3D chỉ lưu Firebase UID mapping và metadata nghiệp vụ, không lưu password hash hoặc refresh token của Google. Launch grant/URL tải package vẫn là token ngắn hạn riêng do backend cấp cho đúng session/release.
+- Web/Mobile dùng email/password do BE quản lý hoặc Google Sign-In qua Firebase Authentication. API xác minh password/FET3D session hoặc Firebase ID token ở server rồi nạp role, trạng thái tài khoản và `organizationId` từ PostgreSQL; custom claim hoặc dữ liệu client không thay thế authorization server-side.
+- PostgreSQL chỉ lưu password hash, refresh-token hash, reset-token hash và Firebase UID mapping; không lưu password thô, Google refresh token hoặc FCM credential. Mailgun gửi email reset do BE tạo; FCM token thuộc installation và không dùng đăng nhập. Launch grant/URL tải package vẫn là token ngắn hạn riêng do backend cấp cho đúng session/release.
 - FCM registration token là dữ liệu thiết bị có thể thay đổi, không phải credential. Backend phải hỗ trợ cập nhật, vô hiệu hóa và xóa token khi logout, uninstall signal hoặc provider báo token không hợp lệ.
 - QR opaque không cấp quyền độc lập; row cấp Building không pin một Training/release. Preparation chỉ kiểm tra identity và bài/release/scenario; backend kiểm tra identity, Building service entitlement `Active`, QR và package ở explicit start trước khi cấp launch grant. Không biến Trainee thành thành viên organization hoặc cấp quyền đọc tài liệu nội bộ.
 - AWS S3 bucket private, signed URL TTL ngắn, hash verification và schema validation bảo vệ delivery pipeline. Không ghi AWS credential vào FE/Mobile hoặc QR.
+- Avatar user là object ảnh private trên S3; DB chỉ lưu `users.avatar_storage_key`, upload dùng intent/complete do BE cấp, đọc qua signed URL ngắn hạn và dọn object cũ bằng job retry.
 - Supabase PostgreSQL/`pgvector` chỉ được truy cập qua backend/service identity theo quyền tối thiểu; không đưa service-role key vào client. Tenant filter áp dụng cho dữ liệu quan hệ, BIM facts, chunks và vector retrieval.
 - LLM adapter chỉ gửi dữ liệu tối thiểu cần thiết đến provider đã chọn; không gửi raw IFC, secret hoặc dữ liệu tenant khác. Provider fallback không được tự động chuyển dữ liệu sang nhà cung cấp thứ hai nếu chưa có cấu hình/chấp thuận.
 - RAG Organization lọc tenant/Building/floor/room trước vector retrieval; RAG Trainee chỉ dùng corpus public/published và dữ liệu cá nhân được phép. Citation, source version, BIM anchor và usage request id phải được lưu cùng output.
 - AI usage chỉ được trừ một lần cho request thành công theo idempotency key, có reservation allocation, policy snapshot và overage consent. Lỗi provider, retry hoặc duplicate webhook không tạo usage trùng; overage hiển thị trước và được đối soát cuối kỳ organization.
 - Event/result có `sessionId`, `eventId` ổn định, sequence, protocol/schema version và release/scenario hash.
-- PayOS request được tạo `Pending` qua dedicated NOLOGIN executor chỉ có `EXECUTE`; function derive amount/currency/Building/organization từ quotation snapshot và runtime không có direct table DML. External PayOS call hoàn tất trước transaction database ngắn. Entitlement từng Building và lịch sử giá/điều khoản phải được ghi riêng.
+- PayOS request được tạo `Pending` qua dedicated NOLOGIN executor chỉ có `EXECUTE`; function derive amount/currency/organization từ quotation header và các dòng Building snapshot, runtime không có direct table DML. External PayOS call hoàn tất trước transaction database ngắn. Entitlement từng Building và lịch sử giá/điều khoản phải được ghi riêng.
+- Gói dịch vụ chuẩn tính theo số Building và thời hạn. Một quotation `BuildingService` có `quotation_building_items`; mỗi item bắt buộc trỏ Building có tên/địa chỉ, package, hành động `New|Renewal`, duration và price/discount/terms snapshot. Header quantity chỉ là số dòng suy ra, không thay danh sách Building. Một payment có thể provision nhiều item; mỗi entitlement giữ `quotation_item_id` và provisioning key riêng, còn Building mua/gia hạn sau có kỳ độc lập.
+- Quotation chuyển `Draft → Issued → Accepted` qua lifecycle backend; `Accepted` ghi `accepted_at` đúng một lần. Dòng Building không được chuyển sang quotation khác và mọi snapshot thương mại/identity đã phát hành hoặc chấp nhận là bất biến. `Accepted` chỉ được checkout khi quotation còn hạn và OrganizationUser cùng tenant còn hoạt động.
+- `service_package_discount_rules` do PlatformAdmin quản lý theo package, số Building, thời hạn và hiệu lực; một checkout chỉ áp dụng một rule phù hợp, không cộng dồn. Nếu nhiều rule cùng hợp lệ, backend chọn mức giảm lớn nhất và tie-break ổn định bằng rule ID; tổng giảm không vượt giá trị hợp lệ và được phân bổ xuống từng line theo quy tắc làm tròn của currency. Giá gốc, rule/value discount và amount theo dòng được đóng băng trong quotation. Số lượng lớn hoặc công trình ngoài phạm vi chuẩn dùng `enterprise_quote_requests`; yêu cầu liên hệ chưa tạo charge/entitlement. Trước khi báo giá riêng được thanh toán, backend vẫn phải xác định các Building cụ thể bằng các quotation line tương ứng.
+- Background task tìm entitlement Active còn 5 ngày, tạo `organization_notifications` và `notification_deliveries` cho web/email theo entitlement/kỳ/kênh. PostgreSQL giữ invariant recipient, Building, entitlement cùng organization và cùng `reference_ends_at`; delivery có retry/idempotency và kiểm tra hạn hiện hành. Gia hạn rồi không gửi lại kỳ cũ. Redis chỉ tăng tốc đọc, PostgreSQL/outbox giữ việc bền vững.
 - Trusted PayOS webhook adapter dùng SDK `webhooks.verify(req.body)` hoặc thuật toán chính thức canonicalize `data` theo thứ tự alphabet trước khi gọi dedicated webhook executor. SQL function không thực hiện mật mã; nó ghi attestation, chống replay/idempotent và so khớp `orderCode`, amount, currency. `returnUrl` chỉ điều hướng.
 - Audit lưu upload, process, scenario, `ConfirmForTraining`, publish, QR, session, billing và support action.
 
@@ -450,7 +514,7 @@ Luồng mục tiêu là: .NET transaction (nghiệp vụ + integration_outbox_ev
 
 - Outbox dùng idempotency_key làm event key ổn định, kèm event type, schema version, aggregate ID, organization scope và canonical payload hash. Stream ID chỉ là mã lần giao, không thay thế event key.
 - Dispatcher mất lease, message giao lặp hoặc mất ACK là tình huống bình thường. Cùng event key và hash được xử lý idempotent; khác hash trả conflict. Published chỉ có nghĩa đã gửi tới stream, không có nghĩa consumer đã hoàn tất.
-- Worker không nhận lease processing trước từ message. Worker claim attempt/lease qua backend và ghi artifact/validation/result vào PostgreSQL; ACK chỉ sau khi xử lý hoặc bàn giao bền vững thành công.
+- Worker không nhận lease processing trước từ message. Worker claim attempt/lease qua backend, đăng ký artifact/validation/issues qua `register_processing_output` với current lease rồi mới accept; validation lưu `issues_hash` để replay khác nội dung QA bị từ chối; worker không có DML trực tiếp vào các bảng provenance. ACK chỉ sau khi xử lý hoặc bàn giao bền vững thành công.
 - `enqueue_integration_outbox_event` là entry point tenant: allowlist duy nhất hiện tại là `ProcessingJob` + `ProcessingJobRequested` + schema `1`; function suy `organization_id` từ aggregate và từ chối `System`/`Platform`, event lạ và `ProcessingJobRequeue`. `enqueue_system_outbox_event` là entry point riêng cho `SystemNotification`/`PlatformCacheInvalidation` + schema `1`, chỉ executor hệ thống được gọi. Hai wrapper dùng helper nội bộ không cấp cho runtime; `ProcessingJobRequeue` chỉ được tạo bởi `requeue_processing_job`. Client không tự gửi scope tenant. Payload/hash/envelope bất biến, cùng key cùng envelope là no-op và khác envelope là conflict.
 - Với `ProcessingJobRequested`, payload bắt buộc chứa `job_id` trùng `aggregate_id`; message không chứa attempt/lease/token của worker. Sai payload hoặc sai provenance bị từ chối trước khi dispatcher giao event.
 - Requeue khóa theo event key trước khi xét trạng thái job. Cùng key và cùng envelope trả `AlreadyRequeued` dù job đã Queued, Running, Succeeded, Cancelled hoặc Failed lại; khác envelope trả `Conflict`. Key mới chỉ chuyển `Failed` sang Queued và tạo outbox trong cùng transaction; Queued/Running trả `Conflict`, Succeeded/Cancelled trả `NotClaimable`.
@@ -462,7 +526,7 @@ Luồng mục tiêu là: .NET transaction (nghiệp vụ + integration_outbox_ev
 - Cache không được cấp quyền start/publish, xác nhận revoke QR, quota hoặc billing. Redis lỗi thì API đọc PostgreSQL với giới hạn tải và thể hiện trạng thái chậm/chờ; không báo thành công giả.
 - Heartbeat và event/result gameplay vẫn ghi PostgreSQL trước khi backend xác nhận; Redis chỉ cache thống kê online. Production nên tách resource cache và Streams; số database logic trong một Redis instance không phải cách ly eviction.
 
-Ma trận quyền tối thiểu cho outbox/requeue là: `fet3d_backend_executor` chỉ gọi các entry point backend được cấp; `fet3d_system_event_executor` chỉ gọi `enqueue_system_outbox_event`; `fet3d_dispatcher_executor` chỉ claim/renew/mark/fail delivery; `fet3d_requeue_owner` là `NOLOGIN` và thực thi `requeue_processing_job` với quyền cần thiết để khóa outbox, đọc `processing_jobs`/`revisions`/`buildings` và cập nhật job; `fet3d_processing_worker_executor` và `fet3d_ai_service_executor` không có quyền enqueue, requeue hoặc ghi receipt. Helper nội bộ, owner role và trigger không được cấp cho `PUBLIC`; quyền trigger/đọc gián tiếp phải được kiểm tra cùng effective owner. SQL hiện chỉ mô tả thiết kế đích, chưa chứng minh quyền đã chạy trên database.
+Ma trận quyền tối thiểu cho outbox/requeue là: `fet3d_backend_executor` chỉ gọi các entry point backend được cấp; `fet3d_system_event_executor` chỉ gọi `enqueue_system_outbox_event`; `fet3d_dispatcher_executor` chỉ claim/renew/mark/fail delivery; `fet3d_requeue_owner` là `NOLOGIN` và thực thi `requeue_processing_job` với quyền cần thiết để khóa outbox, đọc `processing_jobs`/`revisions`/`buildings` và cập nhật job; `fet3d_processing_worker_executor` và `fet3d_ai_service_executor` không có quyền enqueue, requeue hoặc ghi receipt. Learn actor, ETag, idempotency, audit và publish/hide/show/delete/restore orchestration chạy trong application service .NET; SQL chỉ giữ quan hệ, trạng thái và bất biến Published snapshot. Helper nội bộ, owner role và trigger không được cấp cho `PUBLIC`; quyền trigger/đọc gián tiếp phải được kiểm tra cùng effective owner. SQL hiện chỉ mô tả thiết kế đích, chưa chứng minh quyền đã chạy trên database.
 
 ### 14.4. Quyết định còn mở về vận hành
 
@@ -481,7 +545,7 @@ Các trạng thái contract worker được backend ánh xạ thành `Claimed`, 
 
 ### 14.6. Hardening thiết kế đích — nguồn chính cho invariant
 
-- `close_ai_billing_period` khóa period, đọc usage `Recorded`/billable, tạo `ai_billing_period_items` và đóng băng currency/đơn giá/tổng tiền trong cùng transaction. Trigger item khóa period trước mọi insert/update/delete; usage chưa xác định hoặc đến muộn chỉ đi qua `ai_billing_adjustments` có organization và idempotency key riêng.
+- `close_ai_billing_period` khóa period, đọc usage `Recorded`/billable, tạo `ai_billing_period_items` và đóng băng currency/đơn giá/tổng tiền trong cùng transaction. `invoice_ai_billing_period` và `pay_ai_billing_period` là hai gate accounting còn lại cho `Closed → Invoiced → Paid`; retry cùng chứng từ là no-op. Trigger item khóa period trước mọi insert/update/delete; usage chưa xác định hoặc đến muộn chỉ đi qua `ai_billing_adjustments` có organization và idempotency key riêng. Payment Applied hợp lệ không bị chặn chỉ vì quotation đổi trạng thái sau khi đã được gắn.
 - Period mới chỉ được insert ở `Open`; quotation `AIUsage` chỉ gắn ở `Closed → Invoiced`, payment `Applied` chỉ gắn ở `Invoiced → Paid`. Quotation/payment replay cùng chứng từ là no-op, khác chứng từ là conflict. Policy version, terminal AI result và snapshot billing không được sửa lịch sử.
 - Reserve/settle khóa theo cùng thứ tự `billing period nếu có → ai_request → ledger/reservation → quota grant theo id tăng dần`. Request được khóa trước khi kiểm tra retry; không giữ transaction khi chờ FastAPI/LLM. User bị khóa sau khi request `Accepted` vẫn được reconcile. `close_ai_billing_period` lấy giá/currency/policy/consent đã lưu trên usage, không nhận đơn giá mới để tính lại lịch sử.
 - Worker claim/renew/accept/fail đều khóa job trước attempt. Requeue là gate backend riêng, owner `fet3d_requeue_owner`; helper enqueue nội bộ không được cấp cho worker. Claim chỉ trả lease token mới khi `Claimed`; `Busy`, `AlreadyCompleted`, `NotClaimable` và `Conflict` không cấp token mới. Requeue `Failed` có key mới là thao tác backend có quyền, idempotent qua outbox; `Cancelled` là terminal.
@@ -494,9 +558,10 @@ SQL/ERD bản 6.7 là thiết kế mục tiêu. Các ca concurrency, function pr
 
 | Invariant | INSERT/UPDATE/function chính | Quyền gọi thiết kế | Thành công | Từ chối/recovery | Tài liệu dẫn chiếu |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| AI billing snapshot | `close_ai_billing_period`, `enforce_ai_billing_period_item_write`, `validate_ai_billing_period_write` | `fet3d_accounting_executor`; `PUBLIC` không execute gate | `Open → Closed → Invoiced → Paid` với item/quotation/payment đúng snapshot | item/snapshot sửa sau close bị chặn; late usage qua adjustment; tranh chấp chỉ là metadata | Requirements FR-BILLING-RECOVERY-01, workflows 14 |
+| AI billing snapshot | `close_ai_billing_period`, `invoice_ai_billing_period`, `pay_ai_billing_period`, `enforce_ai_billing_period_item_write`, `validate_ai_billing_period_write` | `fet3d_accounting_executor`; `PUBLIC` không execute gate | `Open → Closed → Invoiced → Paid` với item/quotation/payment đúng snapshot | item/snapshot sửa sau close bị chặn; late usage qua adjustment; tranh chấp chỉ là metadata; chứng từ replay-safe | Requirements FR-BILLING-RECOVERY-01, workflows 14 |
+| Quotation/payment provenance | `validate_quotation_snapshot_write`, `validate_quotation_building_item_write`, `create_pending_payos_payment_request`, provisioning gate | PayOS ledger owner chỉ có quyền row-lock tối thiểu trên quotation; backend có đường ghi auth/profile/Building và quotation; request/webhook executor không có table DML trực tiếp | `Issued → Accepted` ghi `accepted_at` một lần; line không chuyển quotation; checkout đọc quotation đã khóa | snapshot/dòng đã phát hành bất biến; sai quyền hoặc sai tenant bị chặn; provisioning retry theo line key | Requirements FR-BILLING-03/07/10, workflows billing, database overview |
 | AI request/result | `create_ai_request`, `enforce_ai_request_write_v2`, `record_ai_request_result`, `reserve_ai_usage`, `settle_ai_usage` | Backend request/result executor và `fet3d_accounting_executor`; AI không có billing DML | request `Accepted`, result evidence được ghi có kiểm soát, reserve/settle đúng một lần | sai tenant/policy bị chặn; timeout `NeedsReconcile`; retry khác input/evidence conflict | BIM/RAG, API contract, context AI/BE |
-| Worker fencing | `claim_processing_attempt`, `renew_processing_attempt`, `accept_processing_attempt`, `fail_processing_attempt`, `requeue_processing_job` | worker dùng `fet3d_processing_worker_executor`; backend gọi requeue qua `fet3d_backend_executor`, function owner là `fet3d_requeue_owner`; bảng worker không DML trực tiếp | claim cấp lease, accept đúng provenance, requeue tạo outbox | `Busy`, `StaleAttempt`, `Conflict`, `NotClaimable`, `AlreadyRequeued`; attempt cũ không ghi đè | Requirements FR-PROCESS-02/03, workflows 15 |
+| Worker fencing | `claim_processing_attempt`, `renew_processing_attempt`, `register_processing_output`, `accept_processing_attempt`, `fail_processing_attempt`, `requeue_processing_job` | worker dùng `fet3d_processing_worker_executor`; backend gọi requeue qua `fet3d_backend_executor`, function owner là `fet3d_requeue_owner`; bảng worker không DML trực tiếp | claim cấp lease, register/accept đúng provenance, requeue tạo outbox | `Busy`, `StaleAttempt`, `Conflict`, `NotClaimable`, `AlreadyRequeued`; attempt cũ không ghi đè | Requirements FR-PROCESS-02/03, workflows 15 |
 | Redis outbox/consumer | `enqueue_integration_outbox_event`, `enqueue_system_outbox_event`, `requeue_processing_job`, `claim_integration_outbox_event`, `renew_integration_outbox_event`, `mark_integration_outbox_published`, `fail_integration_outbox_event`, `replay_integration_outbox_event`, `check_integration_event_consumption`, `record_integration_event_consumption` | Backend executor gọi tenant enqueue/replay/receipt và requeue; `fet3d_system_event_executor` chỉ system enqueue; `fet3d_dispatcher_executor` chỉ claim/renew/mark/fail; AI/worker không có enqueue | envelope `Pending` → dispatcher delivery; consumer effect + receipt commit rồi ACK; requeue tạo `ProcessingJobRequeue` qua gate riêng | key/envelope conflict, replay sau mọi trạng thái trả `AlreadyRequeued`, stale token, message sai metadata, Redis mất thì replay; không dùng cache để cấp quyền | Requirements Redis acceptance, workflows 13.4, ERD outbox |
 | Runtime/package | `fet3d_capabilities_are_valid`, `fet3d_runtime_package_is_compatible`, package/session/playtest triggers | Publish/start backend gate; catalog server-side | semver hợp lệ, catalog đủ capability, hash/manifest/build target khớp | metadata thiếu/sai hoặc package pinned sửa tại chỗ bị chặn | Requirements FR-COMPAT-01, ERD package/session |
 | Scenario/release | `validate_revision_review_action`, `apply_revision_review_action`, `validate_release_write` | OrganizationUser qua BE; release gate không cho client DML | readiness được xác nhận theo cặp revision–scenario version | Reject B không đổi A; revoke/supersede không chạy lại publish gate | Requirements FR-RELEASE, workflows 15 |
@@ -504,3 +569,11 @@ SQL/ERD bản 6.7 là thiết kế mục tiêu. Các ca concurrency, function pr
 Bảng này mô tả thiết kế đích và đường kiểm tra tĩnh; chưa phải bằng chứng đã chạy concurrency, authorization hoặc recovery trên PostgreSQL.
 
 Acceptance test triển khai cho contract Redis/outbox gồm: event đang leased không chặn event kế tiếp; hai dispatcher không nhận cùng lease; enqueue tenant không tạo được system event; system event chỉ executor riêng tạo được; trigger chặn INSERT sai trạng thái/hash; enqueue đồng thời cùng key chỉ tạo một envelope và khác envelope trả conflict; consumer mất ACK chỉ tạo một tác động và rollback không để receipt thành công; dispatcher không được ghi receipt/nghiệp vụ; replay key requeue sau Running/Succeeded/Cancelled/Failed trả `AlreadyRequeued`, key mới chỉ requeue `Failed`; Redis mất message có thể replay từ PostgreSQL; message sai metadata được giữ kèm event key/stream ID; cache cũ không vượt tenant/revoke/entitlement/quota/billing; heartbeat null bị chặn và preparation/playtest không vào learner analytics. Các luồng payment, AI quota/reconcile, publish/start và offline sync vẫn phải được chạy hồi quy. Đây là tiêu chí cho đợt triển khai, chưa phải kết quả đã pass.
+
+### 14.8. Đính chính rà soát cuối — 2026-09-19
+
+- `quotations` không còn ba field header `building_id`, `service_package_id`, `service_duration_months`; mọi BuildingService scope và duration nằm ở `quotation_building_items`. `quantity`/`unit_price` header chỉ là tổng hợp hiển thị, không phải nguồn danh sách Building hay giá dòng.
+- `application_command_receipts` là receipt bền vững cho các command Learn cần replay kết quả; nó lưu actor, operation, idempotency key, canonical input hash và result đã commit, không lưu secret. Audit/outbox/state vẫn commit trong cùng transaction.
+- Reset/change password mục tiêu thu hồi refresh-token family trong transaction user hiện có. BE hiện đã kiểm tra family ở `OnTokenValidated`, nhưng handler reset hiện tại chưa hoàn tất việc khóa user, tiêu thụ token và revoke family; đây là implementation gap, không được ghi là đã triển khai.
+- Local email/password và Google đều là đường đăng nhập hợp lệ. Google onboarding mới chỉ cho chọn Trainee hoặc OrganizationUser; tài khoản Google đã liên kết giữ role/tenant. Username Trainee được nhập lúc đăng ký/onboarding, không hỏi lại ở game start.
+- Các kiểm tra lần này là kiểm tra tĩnh tài liệu/schema/quyền; chưa chạy PostgreSQL, concurrency, auth revoke, payment provider, S3, email, RAG hoặc Redis recovery.

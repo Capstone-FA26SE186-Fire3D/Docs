@@ -16,7 +16,7 @@ Giá trị cốt lõi là giúp người học làm quen với không gian đã 
 
 | Tài khoản | Phạm vi |
 | :--- | :--- |
-| `PlatformAdmin` | Quản lý nền tảng, organization, tài khoản, giám sát và support ở cấp nền tảng. |
+| `PlatformAdmin` | Quản lý nền tảng, organization, tài khoản, Learn public content, giám sát và support ở cấp nền tảng. |
 | `OrganizationUser` | Sở hữu Building, IFC, scenario, publish, QR, analytics và billing cho organization. |
 | `Trainee` | Quét QR Building, chọn bài đã publish trong app Android và chỉ xem dữ liệu buổi tập huấn của chính mình. |
 
@@ -54,8 +54,8 @@ Mô hình quyền không dùng cơ chế thành viên, lời mời, truy cập k
 
 ## 4. Trải nghiệm Trainee
 
-1. Chưa cài app: quét QR mở web, đăng nhập/đăng ký Google và hướng dẫn tải app; sau khi cài có thể quét lại QR.
-2. Đã cài nhưng chưa đăng nhập: app yêu cầu Google Sign-In.
+1. Chưa cài app: quét QR mở web, đăng nhập/đăng ký email/password hoặc Google và hướng dẫn tải app; sau khi cài có thể quét lại QR.
+2. Đã cài nhưng chưa đăng nhập: app dùng phiên local email/password hoặc Google Sign-In qua Firebase.
 3. Đã đăng nhập: app resolve Building, hiển thị danh sách bài đã publish và cho chọn mode.
 4. App tải phần package còn thiếu, verify hash/schema/runtime và tạo session preparation; `POST /api/training/sessions/{sessionId}/start` mới kiểm tra dịch vụ Building/QR online và cấp launch grant để mở Unity qua native Android bridge.
 5. Người học hoàn thành Learn, Guided Drill hoặc Assessment; Unity trả event/result qua bridge để Mobile đồng bộ backend.
@@ -69,15 +69,28 @@ Mọi session mới phải kiểm tra online ở bước start, kể cả packag
 - Landing mở bằng hành trình góc nhìn thứ nhất cuộn qua công trình đang cháy. Cuối hành trình, **Tôi muốn tập huấn** dẫn tới cảnh thu vào điện thoại rồi đăng nhập/Góc học tập; **Tôi muốn tổ chức tập huấn** dẫn tới mặt cắt tòa nhà và trang Dành cho tổ chức.
 - Góc học tập của Trainee đã đăng nhập gồm hỏi AI, bài đã lưu, lịch sử và kết quả cá nhân. Hỏi AI, hỏi về bài đang đọc và lưu bài yêu cầu đăng nhập.
 - Trang Dành cho tổ chức công khai giải thích năng lực sản phẩm; thao tác quản lý Building, IFC, scenario, publish, QR, analytics và billing vẫn yêu cầu `OrganizationUser` đúng ownership.
-- Learn web (kiến thức cộng đồng có nguồn) là luồng riêng với mode Learn trong Unity (làm quen không gian/runtime); cổng web và AI cộng đồng là phần mở rộng cần bổ sung vào đặc tả, chưa coi là đã triển khai.
+- Learn web (blog kiến thức cộng đồng có nguồn) là luồng riêng với mode Learn trong Unity (làm quen không gian/runtime). Learn web là thiết kế mục tiêu; prototype hiện có chưa chứng minh CMS, video provider hoặc indexing production.
 
 ## 5. Nội dung training
 
 ### 5.1. Learn
 
-- Tự do quan sát không gian và route đã mô hình hóa.
-- Có highlight và gợi ý route để làm quen.
-- Không dùng kết quả như thước đo an toàn thực tế.
+Learn web là thư viện bài viết, tip & trick và video PCCC theo tình huống để mọi người đọc/xem công khai.
+
+- `PlatformAdmin` tạo và chỉnh sửa draft; có thể lưu nháp, phát hành ngay, hoặc ẩn/hiện bài đã phát hành. Không có bước duyệt riêng của Learn; audit lưu actor, thời điểm và phiên bản.
+- Bài có loại `Article`, `Tip` hoặc `Video`, tiêu đề, tóm tắt, ảnh, content blocks, nguồn và một hoặc nhiều tình huống. Tình huống chỉ là danh mục nội dung, không phải scenario Unity.
+- Video YouTube, Facebook Video và TikTok được nhập bằng URL chuẩn hóa; backend chỉ cho provider allowlist và renderer chính thức. URL private, bị xóa hoặc không hỗ trợ embed phải có fallback link/mô tả.
+- Bản phát hành bất biến. Chỉnh sửa tạo version mới; public API/cache chỉ trả version đang Published. Không có lesson bắt buộc, quiz, chứng chỉ hoặc bảng tiến độ khóa học trong thiết kế này.
+- Khách được tìm/đọc bài Published; bài Hidden/Unpublished/Deleted không xuất hiện công khai. Trainee đăng nhập để lưu bookmark và hỏi AI về đúng bài/version. Hidden vẫn có thể là nguồn RAG khi pointer/version và nguồn Common hợp lệ; Deleted bị loại ngay cả khi cache/index cũ còn tham chiếu.
+
+### 5.1.1. Tài khoản và hồ sơ
+
+- Trainee đăng ký bằng email/username/password/confirm password; username được BE chuẩn hóa lowercase và unique không phân biệt hoa thường. OrganizationUser đăng ký email/password/confirm password cùng tên, địa chỉ và số điện thoại tổ chức; username cá nhân có thể bổ sung sau. Confirm password không được lưu.
+- Google mới sau khi xác minh Firebase được onboarding chọn Trainee hoặc OrganizationUser rồi nhập thông tin tương ứng; Google đã liên kết đăng nhập theo role/tenant cũ. Không có lựa chọn PlatformAdmin hoặc tự chọn organization có sẵn. Game start không còn hỏi username.
+- Hồ sơ cho phép đổi username, tên hiển thị, mật khẩu và avatar; OrganizationUser có thể cập nhật tên/địa chỉ/điện thoại tổ chức. Không cho đổi role, tenant, email đăng nhập hoặc trạng thái qua profile API.
+- Avatar dùng private S3 object key do backend cấp upload intent; API tạo signed URL ngắn hạn để đọc. Firebase chỉ dùng Google Sign-In, FCM chỉ dùng push và Mailgun gửi reset password.
+
+Mode Learn trong Unity vẫn là trải nghiệm tự do quan sát không gian và route đã mô hình hóa; nó không dùng kết quả như thước đo an toàn thực tế.
 
 ### 5.2. Guided Drill
 

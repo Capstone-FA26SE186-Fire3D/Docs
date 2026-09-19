@@ -18,7 +18,7 @@ Sản phẩm là công cụ học tập và đánh giá hoạt động của đ�
 | :--- | :--- |
 | `PlatformAdmin` | Quản trị nền tảng, tổ chức, tài khoản, cấu hình vận hành và giám sát tổng quan. |
 | `OrganizationUser` | Sở hữu Building, IFC, editor/scenario, publish, QR, analytics, billing và AI usage của tổ chức. |
-| `Trainee` | Đăng nhập web/Mobile bằng Google, quét QR Building, chọn bài đã publish, tải package, thực hiện buổi tập huấn, hỏi AI ngoài game và xem kết quả của chính mình. |
+| `Trainee` | Đăng ký/đăng nhập email và mật khẩu hoặc Google với username theo quy trình onboarding, quét QR Building, chọn bài đã publish, tải package, thực hiện buổi tập huấn, hỏi AI ngoài game và xem kết quả của chính mình. Tài khoản cũ thiếu username hoàn thiện qua profile/onboarding; game start không tự tạo username gate. |
 
 Không có cơ chế thành viên tổ chức, lời mời tài khoản, guest account, token khách hoặc guest training không định danh. Landing/QR status có thể mở trước đăng nhập, nhưng mọi session phải gắn với `Trainee` đã xác thực; QR Building không dùng account-specific permission, allowlist hoặc đối chiếu `organizationId` của Trainee để thay thế kiểm tra identity, entitlement và bài đã publish. Nội dung landing, Learn và trang giới thiệu Dành cho tổ chức vẫn có thể xem công khai.
 
@@ -41,10 +41,32 @@ Sau IFC/connectivity QA, revision ở `ReadyForScenario`. `OrganizationUser` có
 
 | ID | Yêu cầu | Phase |
 | :--- | :--- | :--- |
-| FR-AUTH-01 | Ba loại tài khoản đăng nhập qua Firebase Authentication, gồm Google Sign-In. API xác minh Firebase ID token và ánh xạ Firebase UID sang user, role, trạng thái và `organizationId` trong PostgreSQL; authorization không dựa riêng vào dữ liệu client/custom claim. | 1 |
+| FR-AUTH-01 | Tài khoản local dùng email/password do BE quản lý; Google Sign-In dùng Firebase Authentication. BE xác minh Firebase ID token cho Google, ánh xạ UID vào user và cấp phiên Fire3D; authorization lấy role/tenant/trạng thái từ PostgreSQL. Tài khoản Google-only có thể chưa có password hash nhưng luôn có ít nhất một phương thức đăng nhập. | 1 |
 | FR-AUTH-02 | `PlatformAdmin` có thể tạo, khóa hoặc khôi phục tài khoản và organization; `OrganizationUser` không cấp thêm loại tài khoản. | 1 |
-| FR-AUTH-03 | `Trainee` đã xác thực có thể resolve QR Building, xem bài đã publish, chọn bài và chỉ xem kết quả cá nhân của chính mình; preparation không cấp quyền, API start mới kiểm tra entitlement online trước session mới. | 1 |
-| FR-AUTH-04 | Firebase/Google quản lý credential đăng nhập; FET3D không lưu password hash hoặc Google refresh token. Backend vẫn cấp launch grant và signed content URL ngắn hạn theo session/release. | 1 |
+| FR-AUTH-03 | `Trainee` đã xác thực có thể resolve QR Building, xem bài đã publish, chọn bài và chỉ xem kết quả cá nhân của chính mình; preparation không cấp quyền, API start mới kiểm tra entitlement online trước session mới. Username phải hoàn tất khi đăng ký hoặc Google onboarding; game start không hỏi lại username. | 1 |
+| FR-AUTH-04 | BE lưu password hash local, refresh-token hash và reset-token hash; không lưu mật khẩu thô, Google refresh token hoặc credential provider. Mailgun gửi email reset do BE tạo. | 1 |
+| FR-AUTH-05 | Đăng ký Trainee nhận email/username/password/confirm password; confirm password chỉ kiểm tra. Đăng ký OrganizationUser nhận email/password/confirm password cùng tên, địa chỉ và số điện thoại tổ chức; username cá nhân có thể bổ sung sau. Client không tự chọn role/tenant. | 1 |
+| FR-AUTH-06 | Username Trainee là tên đăng nhập bắt buộc, duy nhất và không phân biệt hoa thường ngay khi đăng ký. OrganizationUser có thể chưa có username; `full_name` và tên tổ chức là tên hiển thị được phép trùng. | 1 |
+| FR-AUTH-07 | Trainee và OrganizationUser có thể xem/sửa hồ sơ, đổi username, tên hiển thị, avatar và mật khẩu theo ETag; không được sửa role, tenant, email hoặc trạng thái tài khoản. | 1 |
+| FR-AUTH-08 | Firebase UID nullable và unique khi liên kết Google; Google trùng email local chưa liên kết phải xác thực tài khoản local trước khi link, không tự đổi role/tenant. | 1 |
+| FR-AUTH-09 | Avatar lưu ở S3 private qua upload intent/complete; PostgreSQL chỉ lưu object key. File phải là ảnh hợp lệ, đúng giới hạn và URL đọc là signed URL ngắn hạn. | 1 |
+| FR-AUTH-10 | Google exchange trả `Authenticated`, `OnboardingRequired` hoặc `AccountLinkRequired`. Google mới chỉ được chọn `Trainee` hoặc `OrganizationUser`, hoàn tất thông tin tương ứng; không được tự tạo PlatformAdmin hoặc gia nhập organization có sẵn. | 1 |
+| FR-AUTH-11 | Đổi/reset password phải khóa user, tiêu thụ reset token và thu hồi toàn bộ refresh-token family trong cùng transaction; access token cũ bị từ chối khi backend kiểm tra family. Reset không tiết lộ email, không dùng để cấp password local cho Google-only. | 1 |
+
+### FR-LEARN: Learn blog công khai và biên tập nội dung
+
+| ID | Yêu cầu | Phase |
+| :--- | :--- | :--- |
+| FR-LEARN-01 | Learn cung cấp danh sách và trang chi tiết công khai cho bài `Article`, `Tip` và `Video`; khách có thể tìm theo tiêu đề/mô tả và lọc theo một hoặc nhiều tình huống. | 1 |
+| FR-LEARN-02 | `PlatformAdmin` tạo, sửa Draft, có thể phát hành ngay hoặc lưu nháp, ẩn/hiện hoặc xóa mềm/khôi phục bài Learn; mỗi thao tác lưu actor, thời điểm và audit. Không có bước duyệt riêng của Learn. `OrganizationUser` và `Trainee` không có quyền quản trị Learn. | 1 |
+| FR-LEARN-03 | Bài Learn có identity/slug ổn định và các version snapshot. Version chỉ dùng `Draft → Published`; version Published bất biến, gồm cả phân loại tình huống và nguồn liên kết. Post dùng `Unpublished`, `Published`, `Hidden`, `Deleted`; Hidden giữ pointer để RAG dùng version Published, Deleted giữ lịch sử nhưng bị loại khỏi RAG. | 1 |
+| FR-LEARN-04 | Bài có thể gắn nhiều situation; situation bị tham chiếu không được xóa cứng. Bài đã gỡ không xuất hiện trong public search/list và bookmark chỉ hiển thị trạng thái không còn khả dụng. | 1 |
+| FR-LEARN-05 | Content blocks hỗ trợ text, image và external video. YouTube, Facebook Video và TikTok dùng URL chuẩn hóa/provider allowlist; iframe, HTML, script và URL provider không hỗ trợ bị từ chối. | 1 |
+| FR-LEARN-06 | Video lỗi, private, bị xóa hoặc không cho embed phải có mô tả/fallback link; Mobile có thể mở provider bằng trình duyệt. Hệ thống không tự tải hoặc đăng lại video. | 1 |
+| FR-LEARN-07 | Nguồn tham khảo được gắn với đúng Learn version. Draft có thể tham chiếu Common chưa Approved; Published và Hidden có thể dùng cho Common RAG khi nguồn còn được phép/đã Approved. Unpublished và Deleted không được retrieval. | 1 |
+| FR-LEARN-08 | Trainee đã xác thực có thể thêm/xóa bookmark idempotent cho bài Learn; bookmark không cho đổi chủ bằng UPDATE; không có enrollment, quiz, chứng chỉ hoặc tiến độ khóa học trong thiết kế này. | 1 |
+| FR-LEARN-09 | Public API không trả Draft, Hidden, Unpublished hoặc Deleted; bookmark Hidden/Deleted chỉ báo không khả dụng. API dùng pagination, ETag/revision và trả `404/410`, `409` hoặc `422 InvalidContent`. | 1 |
+| FR-LEARN-10 | Publish/hide/show/delete/restore tạo audit và `PlatformCacheInvalidation` trong cùng transaction PostgreSQL; Redis/indexing lỗi không làm mất trạng thái. Hidden vẫn là nguồn RAG hợp lệ; Deleted bị loại ngay tại backend dù cache/index cũ. | 1 |
 
 ### FR-NOTIFY: thông báo thiết bị
 
@@ -93,7 +115,7 @@ Sau IFC/connectivity QA, revision ở `ReadyForScenario`. `OrganizationUser` có
 | FR-TRAINING-03 | Runtime cung cấp risk-aware A*, hazard surrogate và debrief cơ bản; không trình bày output là hướng dẫn thoát nạn thực tế. | 1 |
 | FR-TRAINING-04 | Tách `prepare` (identity/bài/QR/package hash, manifest hash, build target, metadata, idempotency, tải và verify) khỏi `start` (`POST /api/training/sessions/{sessionId}/start`, online entitlement/QR/package/runtime check). Package cache không cho mở session mới offline. | 1 |
 | FR-TRAINING-05 | Basic NPC: scenario hỗ trợ số lượng NPC giới hạn, state đơn giản và budget hiệu năng trên Android. | 2 |
-| FR-TRAINING-06 | Mỗi session mới kiểm tra online ở bước start kể cả package đã cache; sau khi launch grant/gameplay đã bắt đầu, mất mạng hoặc entitlement hết hạn không dừng gameplay, event/result được xếp hàng và đồng bộ khi có mạng. `training`, `release`, `scenario`, tenant và QR đã pin không được đổi. | 1 |
+| FR-TRAINING-06 | Mỗi session mới kiểm tra online ở bước start kể cả package đã cache; sau khi launch grant/gameplay đã bắt đầu, mất mạng hoặc entitlement hết hạn không dừng gameplay, event/result được xếp hàng và đồng bộ khi có mạng. `training`, `release`, `scenario`, tenant và QR đã pin không được đổi. Gate event/result dùng actor sở hữu session, event ID/sequence hoặc result key/hash để replay an toàn; không kiểm tra lại entitlement hay trạng thái active hiện tại để chặn sync phiên đã bắt đầu. | 1 |
 | FR-TRAINING-07 | Unity runtime cung cấp thư viện dùng chung cho movement, camera, collision, cửa, vật phẩm, lửa/khói/gió/cháy lan và chấm điểm. Organization chỉ cấu hình capability đã có. | 1 |
 
 ### FR-ANALYTICS: analytics
@@ -108,19 +130,23 @@ Sau IFC/connectivity QA, revision ở `ReadyForScenario`. `OrganizationUser` có
 
 | ID | Yêu cầu | Phase |
 | :--- | :--- | :--- |
-| FR-BILLING-01 | Mỗi Building có service subscription theo tháng và ngày hiệu lực/hết hạn riêng; import/editor/playtest thử có thể hoạt động trong hạn mức do Admin cấu hình trước thanh toán. Trial không publish và không mở session Trainee. | 1 |
+| FR-BILLING-01 | Mỗi Building có service subscription theo tháng và ngày hiệu lực/hết hạn riêng; import/editor/playtest thử có thể hoạt động trong hạn mức do Admin cấu hình trước thanh toán. Trial không publish và không mở session Trainee. Tổ chức có thể quản lý và gia hạn chọn lọc nhiều Building. | 1 |
 | FR-BILLING-02 | Publish và mở session mới yêu cầu Building còn service hợp lệ. Hết hạn khóa publish/session mới, giữ dữ liệu và cho session đang chạy hoàn tất. | 1 |
 | FR-BILLING-03 | Tích hợp PayOS production: quotation lưu purpose, thời hạn, giá và điều khoản snapshot; backend tạo duy nhất request `Pending` với idempotency key qua `SECURITY DEFINER` entry point dành cho NOLOGIN executor, không có table DML; webhook adapter dùng SDK `webhooks.verify(req.body)` hoặc canonicalize và sắp xếp tăng dần các trường trong `data` theo thuật toán chính thức trước khi gọi entry point webhook idempotent. Database không tự xác thực mật mã. Payment `Applied` có provisioning key ổn định và record reconcile nếu cấp entitlement lỗi. | 1 |
 | FR-BILLING-04 | Lưu invoice metadata, trạng thái thanh toán, service entitlement từng Building, giá/điều khoản snapshot và revenue aggregate theo organization. | 1 |
 | FR-BILLING-05 | Quota AI organization dùng chung; Trainee có quota ngày theo user. Admin cấu hình quota miễn phí theo gói/tòa nhà/user. Usage ghi grant, organization/building/user/audience, loại yêu cầu, request id, đơn giá snapshot và consent overage; vượt quota được thông báo, tính theo usage và đối soát cuối kỳ riêng của organization. | 1 |
 | FR-BILLING-06 | `returnUrl`/`cancelUrl` chỉ điều hướng; chỉ trusted webhook đã được adapter xác thực và khớp `orderCode`, amount, currency mới có thể ghi `Paid`, gia hạn entitlement hoặc tạo AI settlement. Retry/webhook trùng không tạo cấp quyền hoặc usage trùng; payment AI không cấp service Building. | 1 |
+| FR-BILLING-07 | Một quotation `BuildingService` có nhiều dòng, mỗi dòng xác định Building, gói, thời hạn, hành động mua mới/gia hạn và snapshot giá/điều khoản. Số lượng được suy ra từ dòng; thanh toán một lần có thể cấp entitlement riêng cho từng dòng. | 1 |
+| FR-BILLING-08 | PlatformAdmin cấu hình discount phần trăm hoặc số tiền theo package, số Building, thời hạn và thời gian hiệu lực. Discount không cộng dồn; nếu nhiều rule hợp lệ, backend chọn mức giảm lớn nhất và tie-break ổn định bằng rule ID, không vượt tổng hợp lệ, rồi phân bổ xuống từng dòng theo quy tắc làm tròn currency. Giá/discount áp dụng được snapshot trong quotation. Số lượng lớn hoặc công trình ngoài phạm vi chuẩn dùng yêu cầu báo giá riêng; yêu cầu chưa phát sinh phí/quyền và quotation riêng phải xác định từng Building trước khi thanh toán. | 1 |
+| FR-BILLING-09 | Hệ thống tạo thông báo web và email trước 5 ngày so với hạn Building. Thông báo theo entitlement/kỳ/kênh có idempotency, retry và không gửi lại kỳ đã gia hạn; OrganizationUser chọn Building cần gia hạn. | 1 |
+| FR-BILLING-10 | Quotation chỉ chuyển `Draft → Issued → Accepted` theo lifecycle hợp lệ; `Accepted` phải ghi `accepted_at` đúng một lần. Sau khi phát hành, dòng Building không được chuyển quotation, và snapshot tenant, mục đích, giá, discount, currency, điều khoản, thời hạn và tổng tiền không được sửa. | 1 |
 | FR-SUPPORT-01 | `OrganizationUser` và `Trainee` gửi feedback/support; `PlatformAdmin` theo dõi và phản hồi ticket. | 2 |
 
 ### FR-AUDIT: truy vết
 
 | ID | Yêu cầu | Phase |
 | :--- | :--- | :--- |
-| FR-AUDIT-01 | Lưu audit cho tải IFC, xử lý revision, scenario, `ConfirmForTraining`, publish, QR, billing và các thao tác quản trị. | 1 |
+| FR-AUDIT-01 | Lưu audit cho tải IFC, xử lý revision, scenario, `ConfirmForTraining`, publish, QR, billing, Learn editorial action và các thao tác quản trị. | 1 |
 | FR-AUDIT-02 | Lưu audit cho AI request/usage, nguồn truy xuất, quota, overage, consent dùng vượt hạn mức và quyết định accept/edit/reject draft scenario. | 1 |
 
 ### FR-AI: RAG cho Organization và Trainee
@@ -176,10 +202,12 @@ Hoạt động đánh giá chuyên môn và user study là hoạt động thu th
 - Heartbeat PostgreSQL và event/result gameplay là nguồn hiện hành; Redis chỉ cache thống kê online. Preparation/playtest vẫn bị loại khỏi learner analytics.
 
 - **FR-COMPAT-01:** Publish, Trainee start và OrganizationUser playtest phải dùng chung runtime catalog và manifest contract. Runtime version phải đúng `major.minor.patch`; thiếu minimum runtime, protocol, manifest schema, manifest hash, build target hoặc capability array thì từ chối. Capability phải là các chuỗi không rỗng; array rỗng chỉ hợp lệ khi được khai báo rõ. Release package, session và playtest phải pin đúng artifact ID, validation-run ID, hash và build target; provenance sai hoặc package đã pin bị sửa tại chỗ thì từ chối.
-- **FR-BILLING-RECOVERY-01:** Kỳ AI chuyển `Open → Closed → Invoiced → Paid`; snapshot và membership item không đổi sau `Closed`, nhưng quotation `AIUsage` và payment `Applied` được gắn đúng ở từng bước. Retry chứng từ cùng định danh không tạo bản ghi mới; chứng từ khác trả conflict. Lock order là period nếu có → request → ledger/reservation → grant theo ID tăng dần. Late/uncertain usage đi qua adjustment riêng có tenant, actor, lý do và idempotency.
+- **FR-BILLING-RECOVERY-01:** Kỳ AI chuyển `Open → Closed → Invoiced → Paid` qua các gate close/invoice/pay; snapshot và membership item không đổi sau `Closed`, nhưng quotation `AIUsage` và payment `Applied` được gắn đúng ở từng bước. Retry chứng từ cùng định danh không tạo bản ghi mới; chứng từ khác trả conflict. Nếu quotation đã gắn sau đó hết hạn/hủy, payment `Applied` hợp lệ vẫn được ghi nhận theo provenance đã khóa. Lock order là period nếu có → request → ledger/reservation → grant theo ID tăng dần. Late/uncertain usage đi qua adjustment riêng có tenant, actor, lý do và idempotency.
 - **FR-AI-RECOVERY-01:** AI request phải được authorize tại thời điểm tạo theo audience, user, tenant, Building và policy version. Request mới bắt đầu `Accepted` không có kết quả; policy/input identity và terminal result bất biến sau tiếp nhận, request đã nhận vẫn được reconcile nếu user bị khóa. FastAPI chỉ trả usage kỹ thuật/evidence; backend ghi result và accounting qua executor/contract riêng.
 - **FR-PROCESS-02:** Logical job giữ input hash. Worker chỉ claim job queued hoặc attempt đã hết lease; lease hiện hành không bị thay thế, job thành công không chạy lại do message trùng, và kết quả phải khớp attempt/artifact/validation hiện hành.
 - **FR-PROCESS-03:** Requeue job `Failed` là thao tác backend có quyền, có idempotency key và outbox; cùng key/envelope replay trả `AlreadyRequeued` dù job đã tiến trạng thái, khác envelope trả `Conflict`, key mới chỉ requeue `Failed`; job `Cancelled` không tự chạy lại. Hai worker claim đồng thời chỉ một worker nhận lease mới.
+- **FR-PROCESS-04:** Worker không ghi trực tiếp artifact/validation/issue. Sau khi claim, worker dùng gate lease-bound để đăng ký output, provenance và QA; `issues_hash` lưu hash canonical của toàn bộ danh sách issue để replay khác nội dung bị từ chối. Chỉ output của current attempt có lease hợp lệ mới được accept. Retry cùng artifact/validation trả kết quả cũ, khác provenance trả `Conflict`.
+- **FR-TRAINING-RECOVERY-01:** Backend có gate ghi event và complete cho session đã bắt đầu. Kết quả được lưu với idempotency key/hash và snapshot; replay giống nhau là no-op, payload khác bị từ chối, còn entitlement hết hạn hoặc user bị khóa sau start không làm mất khả năng reconcile.
 - **NFR-RECOVERY-02:** Retry, timeout và duplicate delivery phải trả trạng thái xác định (`Claimed`, `Busy`, `AlreadyCompleted`, `NotClaimable`, `StaleAttempt`, `Conflict`) và không tạo charge, entitlement, artifact hoặc publication trùng.
 
 Các tiêu chí trên là contract thiết kế và acceptance criteria cho đợt triển khai; chưa được gọi là đạt nếu chưa có test database/concurrency/recovery tương ứng.

@@ -103,7 +103,7 @@ Camera rẽ vào một vùng sáng hơn; cảnh công trình thu nhỏ thành m�
 - Khách chưa đăng nhập: chọn tiếp tục sẽ đưa tới đăng nhập, sau đó về Góc học tập.
 - Trainee đã đăng nhập: đi thẳng tới Góc học tập với AI, bài lưu, lịch sử và kết quả cá nhân.
 - QR công khai là QR ổn định của **Building**, không pin một Training. QR mở landing web/app để xem danh sách bài đã phát hành; Trainee chọn bài rồi phiên mới pin `training/release/scenario` cụ thể.
-- Chưa cài app: QR mở trang web của tòa nhà, có đăng ký/đăng nhập và hướng dẫn tải app. Đã cài nhưng chưa đăng nhập: mở app và yêu cầu Google Sign-In/Firebase Auth. Đã đăng nhập: chỉ bắt đầu phiên sau khi backend kiểm tra service entitlement online.
+- Chưa cài app: QR mở trang web của tòa nhà, có đăng ký/đăng nhập và hướng dẫn tải app. Đã cài nhưng chưa đăng nhập: mở app và cho chọn email/password hoặc Google Sign-In qua Firebase. Đã đăng nhập: chỉ bắt đầu phiên sau khi backend kiểm tra service entitlement online.
 - Nếu service hết hạn, QR và landing vẫn mở được nhưng chặn phát hành/bắt đầu phiên mới; phiên đang chạy có thể hoàn tất. Mất mạng sau khi bắt đầu thì app giữ kết quả và đồng bộ lại; mất mạng trước khi bắt đầu không được mở phiên.
 - Web không suy đoán trạng thái “đã cài app”. Không hứa giữ deep link xuyên cài đặt nếu chưa kiểm chứng; có nút quay lại trang tòa nhà hoặc quét lại QR.
 
@@ -127,13 +127,21 @@ Khu billing/AI usage hiển thị dịch vụ theo từng Building, ngày hiệu
 
 ### Learn công khai
 
-- Tìm và đọc bài không cần tài khoản.
-- Bài ngắn, dễ hiểu, có ảnh/diagram và nguồn.
-- **Hỏi AI** yêu cầu đăng nhập; câu trả lời phải hiển thị nguồn.
-- **Hỏi về bài này** mở chat mang theo ngữ cảnh bài đang đọc.
-- **Lưu bài** đưa bài vào Góc học tập và yêu cầu đăng nhập.
+- Tìm và đọc bài không cần tài khoản; bộ lọc dùng tình huống và loại `Article`, `Tip`, `Video`.
+- Bài ngắn, dễ hiểu, có ảnh/diagram, video ngoài nếu có và nguồn gắn với đúng version.
+- `PlatformAdmin` có khu biên tập để tạo Draft, preview, lưu nháp, phát hành ngay, ẩn/hiện hoặc xóa mềm/khôi phục bài. Không có bước duyệt riêng của Learn; bản public cũ giữ nguyên tới khi bản mới được publish. Hidden giữ version để hiện lại và vẫn là nguồn RAG hợp lệ; Deleted không public và không vào RAG.
+- Video YouTube, Facebook Video và TikTok hiển thị qua provider allowlist. Nếu video private, bị xóa hoặc tắt embed, trang hiển thị tóm tắt và link mở nguồn; không nhận iframe/script tùy ý.
+- **Hỏi AI** yêu cầu đăng nhập; câu trả lời phải hiển thị citation của bài/version hoặc nguồn Common đã duyệt.
+- **Hỏi về bài này** mở chat mang theo `postId` và `versionId`; backend chỉ cho nguồn Published/Hidden hợp lệ, loại Deleted/Unpublished, rồi kiểm tra quota trước khi trả lời.
+- **Lưu bài** đưa bài vào Góc học tập và yêu cầu đăng nhập. Đây là bookmark cá nhân, không phải enrollment hoặc tiến độ khóa học.
 
-Phân biệt rõ Learn web (kiến thức cộng đồng) với mode Learn trong Unity (làm quen không gian/runtime). FE đã có prototype Learn và chat mẫu; tích hợp AI kiến thức cộng đồng/backend thực còn pending implementation, nhưng thuộc mục tiêu bản cuối và không được coi là ngoài scope.
+Phân biệt rõ Learn web (blog kiến thức cộng đồng) với mode Learn trong Unity (làm quen không gian/runtime). FE đã có prototype Learn và chat mẫu; CMS, provider embed, bookmark backend và tích hợp AI kiến thức cộng đồng vẫn pending implementation, nhưng thuộc mục tiêu bản cuối.
+
+### Tài khoản và hồ sơ
+
+- Đăng ký Trainee dùng email/username/password/confirm password; username được chuẩn hóa lowercase và kiểm tra không trùng ngay trong form/backend. OrganizationUser đăng ký email/password/confirm password cùng tên, địa chỉ và số điện thoại tổ chức; username cá nhân có thể bổ sung sau.
+- Google mới sau xác minh Firebase hiển thị bước chọn `Trainee` hoặc `OrganizationUser`; Trainee nhập username, OrganizationUser nhập thông tin tổ chức. Google đã liên kết không chọn lại role. Hồ sơ cho phép đổi username, tên hiển thị, avatar và mật khẩu; game start không còn username gate.
+- Avatar dùng upload intent tới S3 private và signed URL ngắn hạn; không nhận URL ảnh tùy ý. Google Sign-In dùng Firebase, FCM chỉ là push, Mailgun gửi reset password.
 
 AI Trainee hoạt động trên web/mobile ngoài gameplay, dùng quota ngày do Admin cấu hình, chỉ truy cập kho kiến thức chung đã duyệt và dữ liệu cá nhân được phép. AI tổ chức dùng corpus riêng theo tenant và dữ liệu BIM được cấp quyền; hai nhóm không dùng chung phạm vi truy xuất.
 

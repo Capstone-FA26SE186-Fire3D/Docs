@@ -25,13 +25,40 @@ Khách mở website chung
 3. Nhánh tập huấn đưa khách chưa đăng nhập đến đăng nhập; Trainee đã đăng nhập vào Góc học tập. Nhánh tổ chức dẫn tới trang giới thiệu công khai; thao tác quản lý vẫn đi qua authz `OrganizationUser` và `organizationId`.
 4. Learn web (bài có nguồn, hỏi AI, lưu bài) là luồng riêng với mode Learn trong Unity. Chức năng hỏi AI/lưu bài cần auth và nguồn trả lời.
 
+### 1.2. Workflow Learn blog
+
+```text
+PlatformAdmin tạo Draft
+  -> gắn situation + content blocks + nguồn
+  -> chuẩn hóa/kiểm tra video provider
+  -> lưu nháp hoặc publish ngay qua gate
+  -> Published immutable version
+  -> public API/cache/Common RAG
+```
+
+1. `PlatformAdmin` tạo `learn_post` và version Draft, chọn `Article`, `Tip` hoặc `Video`, gắn một hoặc nhiều tình huống và nguồn Common.
+2. Backend kiểm tra slug/ETag, content schema và URL video. Draft có thể gắn Common source chưa Approved; publish/show mới kiểm tra source Common đã Approved. Chỉ URL YouTube/Facebook/TikTok hợp lệ theo allowlist mới được renderer xử lý; iframe, HTML hoặc script tùy ý bị từ chối.
+3. `publishImmediately=true` tạo post/draft và publish trong cùng transaction; nếu false, chỉ lưu Draft. Publish version Draft qua gate cập nhật pointer và audit cùng transaction. Bản Published không được sửa tại chỗ.
+4. Sửa nội dung tạo version Draft mới. Public API tiếp tục trả version Published cũ tới khi version mới được publish; hide chuyển bài sang Hidden nhưng giữ pointer, show dùng lại version cũ; delete là soft-delete giữ lịch sử nhưng loại khỏi public/RAG; restore đưa bài từng public về Hidden và bài chưa public về Unpublished.
+5. Khách chỉ đọc/tìm version Published của bài đang Published. Trainee đăng nhập để bookmark và hỏi AI với `postId`/`versionId`; AI kiểm tra pointer/trạng thái tại backend, cho phép Published/Hidden hợp lệ nhưng loại Unpublished/Deleted, và chỉ truy xuất nguồn Common đã Approved.
+6. Video không xem được phải có tóm tắt/link fallback. Mobile mở provider bằng trình duyệt trong thiết kế mục tiêu; hệ thống không tự tải hoặc đăng lại video.
+7. Publish/hide/show ghi post, audit và `PlatformCacheInvalidation` vào PostgreSQL cùng transaction; dispatcher sau commit cập nhật Redis/index. Redis/indexing lỗi không đổi trạng thái PostgreSQL và phải retry/dedup được; event cũ không ghi đè index mới.
+
 ## 2. Workflow quản trị nền tảng
 
-1. Người dùng đăng nhập qua Firebase Authentication/Google Sign-In; backend xác minh Firebase ID token rồi ánh xạ Firebase UID sang bản ghi FET3D. `PlatformAdmin` tạo organization và gán ba loại tài khoản nghiệp vụ cần thiết.
-2. Hệ thống gắn `OrganizationUser` với phạm vi `organizationId` để ownership. `Trainee` là tài khoản xác thực có thể xem danh sách bài qua QR canonical của Building; session participation pin bài đã chọn và không biến Trainee thành thành viên của organization. Firebase chỉ xác thực danh tính, không quyết định quyền nghiệp vụ.
+1. Người dùng đăng nhập bằng email/password do BE xác minh hoặc Google Sign-In qua Firebase; backend ánh xạ Firebase UID (khi có) sang bản ghi FET3D. `PlatformAdmin` tạo organization và gán ba loại tài khoản nghiệp vụ cần thiết. Mailgun phục vụ reset password, FCM chỉ phục vụ push.
+2. Hệ thống gắn `OrganizationUser` với phạm vi `organizationId` để ownership. `Trainee` là tài khoản xác thực có thể xem danh sách bài qua QR canonical của Building; session participation pin bài đã chọn và không biến Trainee thành thành viên của organization. Firebase chỉ xác thực Google identity, không quyết định quyền nghiệp vụ.
 3. `PlatformAdmin` khóa/mở khóa tài khoản, xem health, audit, support và billing aggregate cấp nền tảng.
+   Quản trị Learn theo workflow riêng: tạo/sửa draft, phát hành ngay hoặc lưu nháp, ẩn/hiện bài; thao tác editorial được audit và không trao quyền CMS cho `OrganizationUser` hay `Trainee`.
 4. API từ chối request ownership không có tài khoản đã xác thực hoặc không khớp `organizationId`; QR resolve cần identity để mở danh sách, còn explicit session start mới cần entitlement Building, bài Published và kiểm tra online.
-5. Mobile đăng ký/rotate token FCM theo installation. Backend xóa hoặc vô hiệu hóa token không hợp lệ; token FCM không thay thế Firebase ID token.
+5. Mobile đăng ký/rotate token FCM theo installation. Backend xóa hoặc vô hiệu hóa token không hợp lệ; token FCM không thay thế password session hoặc Firebase ID token.
+
+### 2.1. Đăng ký, username và hồ sơ
+
+1. `POST /api/auth/register/trainee` nhận email/username/password/confirm password; `POST /api/auth/register/organization` nhận email/password/confirm password cùng tên, địa chỉ và số điện thoại tổ chức. BE tự gán role/tenant và retry không tạo bản ghi trùng.
+2. Google exchange xác minh Firebase ID token. Tài khoản Google đã liên kết đăng nhập theo role/tenant hiện có; Google mới nhận onboarding token ngắn hạn, chọn Trainee hoặc OrganizationUser rồi hoàn tất thông tin tương ứng. Không có lựa chọn PlatformAdmin hoặc organization có sẵn.
+3. Username Trainee phải unique, lowercase và đúng pattern ngay trong đăng ký local hoặc bước Google onboarding. OrganizationUser có thể bổ sung username sau. Game start không còn `ProfileIncomplete`; tài khoản Trainee cũ thiếu username phải hoàn thiện trong profile/onboarding trước khi dùng chức năng phụ thuộc username.
+4. `GET/PATCH /api/me/profile`, change/set password, link Google và `GET/PATCH /api/me/organization` kiểm tra ETag/actor; không cập nhật role, tenant, email hoặc account status. Avatar upload dùng S3 intent/complete/delete, không nhận URL tùy ý.
 
 ## 3. Workflow Building và IFC
 
@@ -117,8 +144,8 @@ QR
   -> React Native/Expo native bridge launch Unity
 ```
 
-1. QR mở web nếu chưa cài app; người dùng có thể đăng ký/đăng nhập Google và tải app rồi quét lại QR.
-2. Mobile yêu cầu Google Sign-In nếu chưa xác thực, gửi Firebase ID token để backend kiểm tra.
+1. QR mở web nếu chưa cài app; người dùng có thể đăng ký/đăng nhập email/password hoặc Google rồi tải app và quét lại QR.
+2. Mobile dùng phiên FET3D từ local email/password hoặc Google exchange; với Google, gửi Firebase ID token để backend kiểm tra. Không bắt buộc Google nếu người dùng đã có phiên local hợp lệ.
 3. Backend resolve QR và trả danh sách bài Published được phép hiển thị; bước preparation chỉ kiểm tra identity, bài, QR, release/scenario và package metadata, chưa cấp quyền chơi.
 4. Trainee chọn bài, Mobile nhận manifest/package URL ký ngắn hạn, tải phần còn thiếu, xác minh hash/schema/runtime rồi tạo preparation record với idempotency key.
 5. Chỉ `POST /api/training/sessions/{sessionId}/start` kiểm tra Building entitlement `Active`, QR chưa revoke, release/training/scenario tương thích, package hash/schema/runtime và cấp launch grant online; không cho start mới offline dù package đã cache. Sau start, backend pin `trainingId`/`releaseId`/`scenarioId`/`qrCodeId` bất biến.
@@ -183,9 +210,10 @@ Contract bên gửi/nhận và checklist tích hợp được mô tả tại m�
 ## 11. Workflow dịch vụ Building, AI usage, thanh toán và support
 
 ```text
-OrganizationUser chọn Building/service package
-  -> dùng thử trong hạn mức nếu được phép
-  -> PlatformAdmin hoặc backend phát hành quotation
+OrganizationUser quản lý nhiều Building có tên + địa chỉ
+  -> chọn Building mới hoặc Building đã import/thử nghiệm
+  -> chọn một/nhiều Building, gói và thời hạn
+  -> backend tính discount đủ điều kiện và phát hành quotation nhiều dòng
   -> backend gọi PayOS ngoài DB transaction
   -> webhook xác thực + DB idempotent
   -> cấp/gia hạn entitlement đúng Building
@@ -193,14 +221,16 @@ OrganizationUser chọn Building/service package
   -> đối soát cuối kỳ AI + invoice/revenue
 ```
 
-1. `OrganizationUser` chọn Building và xem gói/thời hạn/giá. Import/editor/playtest thử chỉ bị giới hạn bởi quota thử do Admin cấu hình; playtest cũng được phép khi entitlement Building đã Active.
-2. Thanh toán trước khi publish. Quotation snapshot phải ghi Building, mục đích, thời hạn dịch vụ, giá và điều khoản; AI settlement dùng quotation `AIUsage`/kỳ AI riêng và không cấp quyền service Building.
-3. Backend gọi PayOS bên ngoài database transaction; executor chỉ tạo request `Pending`. Trusted webhook adapter xác thực `req.body`; chỉ webhook hợp lệ và idempotent mới ghi `Paid`.
-4. Sau payment, provisioning/reconcile cấp hoặc gia hạn đúng entitlement bằng khóa idempotency. Payment đã ghi nhận nhưng provisioning lỗi phải có trạng thái chờ reconcile, không cấp trùng.
-5. `returnUrl` và `cancelUrl` chỉ điều hướng UI. Mismatched/duplicate webhook được lưu trace, không gia hạn hoặc ghi Paid lần hai.
-6. Mỗi Building có kỳ tháng riêng. Organization có quota AI dùng chung; Trainee có grant theo user/ngày. Mỗi AI request ghi `requestId`, grant, Building/user/audience, loại request, consent overage, đơn giá và trạng thái thành công/lỗi.
-7. Khi vượt quota miễn phí, web/mobile hiển thị overage và yêu cầu đồng ý trước khi phát sinh phí; usage được chốt theo kỳ đối soát organization riêng. Khoản chưa thanh toán xử lý theo chính sách còn mở, không tự suy ra.
-8. `OrganizationUser` xem billing/usage trong organization; `PlatformAdmin` quản lý giá, quota, entitlement và aggregate. Playtest tách khỏi learner analytics.
+1. `OrganizationUser` quản lý nhiều Building; mỗi Building bắt buộc có tên và địa chỉ trước khi đưa vào quotation. Có thể chọn Building đã tạo để thử nghiệm/import hoặc tạo mới. Import/editor/playtest thử chỉ bị giới hạn bởi quota thử do Admin cấu hình; playtest cũng được phép khi entitlement Building đã Active.
+2. Organization chọn một hoặc nhiều Building, thời hạn và gói chuẩn. Backend tính số dòng, lọc rule theo package/số Building/thời hạn/thời gian hiệu lực; nếu nhiều rule hợp lệ thì chọn mức giảm lớn nhất, tie-break ổn định bằng rule ID, không cộng dồn, không vượt tổng hợp lệ và phân bổ discount xuống từng dòng theo quy tắc làm tròn của currency. Giá/discount/terms snapshot được lưu vào quotation `BuildingService`. Số lượng không được dùng thay cho danh sách Building. Với yêu cầu Liên hệ, request chỉ ghi nhu cầu ban đầu; trước khi checkout, Admin/backend vẫn phải chốt danh sách Building cụ thể thành các quotation line.
+3. Thanh toán trước khi publish. Quotation snapshot phải ghi từng Building, mục đích, thời hạn dịch vụ, giá và điều khoản; AI settlement dùng quotation `AIUsage`/kỳ AI riêng và không cấp quyền service Building.
+   Quotation đi qua `Draft → Issued → Accepted`; khi chuyển sang `Accepted`, backend/trigger ghi `accepted_at` đúng một lần. Sau khi phát hành, line không thể chuyển sang quotation khác và snapshot thương mại không thể sửa.
+4. Backend gọi PayOS bên ngoài database transaction; executor chỉ tạo request `Pending`. Trusted webhook adapter xác thực `req.body`; chỉ webhook hợp lệ và idempotent mới ghi `Paid`.
+5. Sau payment, provisioning/reconcile cấp hoặc gia hạn entitlement riêng cho từng dòng bằng khóa `quotation_item + payment`; cùng đợt dùng chung mốc kích hoạt, tòa mua sau có kỳ riêng. Gia hạn chọn lọc, gia hạn sớm nối tiếp hạn cũ; payment lỗi không cấp trùng.
+6. `returnUrl` và `cancelUrl` chỉ điều hướng UI. Mismatched/duplicate webhook được lưu trace, không gia hạn hoặc ghi Paid lần hai.
+7. Trước hạn 5 ngày, background task tạo notification web và email cho OrganizationUser theo từng entitlement. Notification/delivery có idempotency và retry; thông báo dẫn tới danh sách để chọn Building gia hạn. Redis không phải nguồn duy nhất của lịch nhắc.
+8. Mỗi Building có kỳ tháng riêng. Organization có quota AI dùng chung; Trainee có grant theo user/ngày. Mỗi AI request ghi `requestId`, grant, Building/user/audience, loại request, consent overage, đơn giá và trạng thái thành công/lỗi.
+9. Khi vượt quota miễn phí, web/mobile hiển thị overage và yêu cầu đồng ý trước khi phát sinh phí; usage được chốt theo kỳ đối soát organization riêng. `OrganizationUser` xem billing/usage trong organization; `PlatformAdmin` quản lý giá, discount, quota, entitlement và aggregate. Playtest tách khỏi learner analytics.
 
 ## 12. Đánh giá capstone
 
@@ -211,12 +241,12 @@ Các buổi phản hồi chuyên môn, usability test và user study được t�
 ### 13.1. AI/RAG trên Azure
 
 1. Web/Mobile gửi request tới `.NET API`, không gọi trực tiếp FastAPI trong contract production.
-2. `.NET API` xác minh Firebase identity, role, tenant, audience, corpus scope và quota/consent.
+2. `.NET API` xác minh phiên FET3D, role, tenant, audience, corpus scope và quota/consent; nếu phiên bắt nguồn từ Google thì Firebase chỉ cung cấp bước xác minh Google identity.
 3. Backend tạo `ai_requests`, reserve quota và tạo request ledger bằng transaction PostgreSQL ngắn; nếu có kỳ billing thì khóa kỳ trước, sau đó khóa request, ledger/reservation và các grant theo `id` tăng dần. Sau commit mới gọi AI/RAG FastAPI trên Azure.
 4. AI trả `requestId`, response type/status, citations/source version, BIM anchors khi có, model/version và usage kỹ thuật. AI không quyết định giá, overage hoặc entitlement.
 5. Backend ghi kết quả qua contract `record_ai_request_result` sau khi xác minh request, evidence/citations, model và usage kỹ thuật; sau đó chốt `Recorded` hoặc giải phóng reservation đúng một lần. Timeout chuyển request/ledger sang `NeedsReconcile`; backend gọi `GET /api/ai/requests/{requestId}` hoặc reconcile nội bộ trước khi quyết định chốt/hoàn, không tự hoàn rồi tạo request mới.
 
-IFC/Blender và Unity build không chạy trong request chat. Backend ghi processing job + outbox trong transaction; dispatcher giao message, worker claim lease và ghi attempt/input hash/output hash/toolchain. Attempt cũ hết lease không được ghi đè kết quả mới; package fail hoặc QA còn Error/Critical thì không publish.
+IFC/Blender và Unity build không chạy trong request chat. Backend ghi processing job + outbox trong transaction; dispatcher giao message, worker claim lease, gọi `register_processing_output` để ghi artifact/validation/issues theo lease rồi mới accept attempt. `issues_hash` giữ dấu vết canonical của danh sách QA để replay khác nội dung bị từ chối. Attempt cũ hết lease không được ghi đè kết quả mới; package fail hoặc QA còn Error/Critical thì không publish.
 
 ### 13.2. Quy tắc nhất quán và mất kết nối
 
@@ -229,7 +259,7 @@ IFC/Blender và Unity build không chạy trong request chat. Backend ghi proces
 
 - Mobile gửi event bằng `event_id` ổn định do client tạo, `sequence_number`, `schema_version` và thời gian trên thiết bị; backend ghi thêm `received_at`. Retry cùng session/ID hoặc sequence không nhân đôi dữ liệu.
 - Heartbeat ghi `last_heartbeat_received_at` và sequence phía server; `Active sessions` chỉ là ước tính trong cửa sổ cấu hình, không phải trạng thái chắc chắn người học còn thao tác. `p_sequence` null bị từ chối trước khi cập nhật.
-- Completion chỉ được tính sau khi backend xác nhận result hợp lệ. Preparation, playtest và result chưa sync không vào learner analytics.
+- Completion chỉ được tính sau khi backend xác nhận result hợp lệ. `record_session_event` và `complete_training_session` khóa session theo owner, dedup bằng event/result key và không kiểm tra lại entitlement hoặc trạng thái active hiện tại sau khi gameplay đã bắt đầu. `complete_playtest_session` áp dụng cùng nguyên tắc cho playtest và không tạo learner analytics. Preparation, playtest và result chưa sync không vào learner analytics.
 
 ### 13.4. Redis Streams, outbox và cache
 

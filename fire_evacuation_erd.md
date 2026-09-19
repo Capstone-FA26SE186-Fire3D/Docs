@@ -5,7 +5,7 @@ This ERD mirrors the design target in `fire_evacuation_schema.sql` version 6.7. 
 ## Contract notes
 
 - `user_role_enum` is exactly `PlatformAdmin | OrganizationUser | Trainee`. `OrganizationUser` requires `organization_id`; `PlatformAdmin` and `Trainee` require it to be null.
-- Firebase Authentication owns login credentials. `users.firebase_uid` maps the verified Firebase identity to FET3D roles/tenant data; the database does not store password hashes or Google refresh tokens. FCM registration tokens belong to device installations and are not authentication credentials.
+- BE owns local email/password credentials and Fire3D sessions. `users.password_hash` is nullable for Google-only accounts, while `users.firebase_uid` maps a verified Firebase Google identity to FET3D roles/tenant data. The database stores only password/refresh/reset token hashes, never plaintext passwords or Google refresh tokens. FCM registration tokens belong to device installations and are not authentication credentials.
 - Supabase hosts PostgreSQL and the `pgvector` extension for RAG storage; Supabase Auth is not used. Raw IFC and immutable runtime packages are stored in private AWS S3 buckets.
 - `file_type_enum` is exactly `IFC`.
 - Redis is a target cache/Streams transport behind the backend; PostgreSQL remains authoritative and Redis is not modeled as a source table. Outbox and consumer dedup are represented by `integration_outbox_events` and `integration_event_consumptions`.
@@ -24,7 +24,8 @@ This ERD mirrors the design target in `fire_evacuation_schema.sql` version 6.7. 
 - `close_ai_billing_period` locks the period, includes only confirmed billable usage, creates immutable items and freezes the totals in one transaction. Items cannot be added, edited or deleted after close; late/uncertain usage becomes an adjustment with its own organization and idempotency key.
 - Runtime capability arrays are valid only when every element is a non-empty string; an explicitly declared empty array is valid. Publish accepts any active catalog runtime that is numerically at least the package minimum and matches protocol/schema.
 - Worker claim returns `Claimed`, `Busy`, `AlreadyCompleted`, `NotClaimable` or `Conflict`; requeue is an explicit idempotent outbox operation. Job identity/input hash, artifact rows, accepted validation provenance and policy versions are immutable.
-- `fet3d_session_owner`, `fet3d_ai_accounting_owner` and `fet3d_processing_owner` are `NOLOGIN` function owners. Runtime executors receive only the listed `EXECUTE` privileges and no direct DML on protected tables.
+- `fet3d_session_owner`, `fet3d_ai_accounting_owner` and `fet3d_processing_owner` are `NOLOGIN` function owners. Runtime executors receive only the listed `EXECUTE` privileges and no direct DML on protected tables. Learn actor, ETag, idempotency, audit and publish/hide/show/delete/restore orchestration belongs to the .NET application service; SQL retains only relational and immutable Published-snapshot checks.
+- Learn is a public blog/library, separate from Unity `trainings` and `sessions`. `PlatformAdmin` owns editorial writes; a post can be created as Unpublished or published immediately, then moved Published ↔ Hidden or soft-deleted/restored through controlled gates. `learn_posts` is the stable identity and `learn_post_versions` is the immutable published snapshot; Hidden retains `published_version_id` and remains eligible for RAG, while Deleted is excluded from public reads and retrieval. A Published version also freezes its situation/source join rows; bookmark rows are Trainee-owned create/delete records, not editable enrollment. Drafts may reference Common sources before independent approval, but publish/show and RAG require an allowed Approved Common source. Video blocks store validated provider/URL metadata; no provider-specific media table or arbitrary iframe/script is part of the design.
 
 ## Enum values
 
@@ -56,7 +57,9 @@ erDiagram
         UUID id PK
         VARCHAR name
         VARCHAR slug
-        VARCHAR plan
+        TEXT address
+        VARCHAR phone
+        BIGINT profile_revision_no
         BOOLEAN is_active
         JSONB metadata
         TIMESTAMPTZ created_at
@@ -69,13 +72,31 @@ erDiagram
         UUID organization_id FK
         VARCHAR firebase_uid
         VARCHAR email
+        TEXT password_hash
+        VARCHAR username UK
         VARCHAR full_name
+        TEXT avatar_storage_key
+        BIGINT profile_revision_no
         user_role_enum role
         BOOLEAN is_active
         TIMESTAMPTZ last_login_at
         TIMESTAMPTZ created_at
         TIMESTAMPTZ updated_at
         TIMESTAMPTZ deleted_at
+    }
+
+    auth_google_onboarding_sessions {
+        UUID id PK
+        VARCHAR firebase_uid
+        VARCHAR email
+        VARCHAR onboarding_token_hash UK
+        user_role_enum requested_role
+        JSONB organization_draft
+        TIMESTAMPTZ expires_at
+        TIMESTAMPTZ completed_at
+        UUID completed_user_id FK
+        VARCHAR completed_input_hash
+        TIMESTAMPTZ created_at
     }
 
     user_devices {
@@ -98,24 +119,17 @@ erDiagram
         VARCHAR name
         VARCHAR building_type
         INT total_floors
-        BOOLEAN is_active
-        UUID created_by FK
-        TIMESTAMPTZ created_at
-        TIMESTAMPTZ updated_at
-        TIMESTAMPTZ deleted_at
-    }
-
-    building_locations {
-        UUID id PK
-        UUID building_id FK
         TEXT address
         VARCHAR city
         VARCHAR district
         DECIMAL latitude
         DECIMAL longitude
         JSONB geojson
+        BOOLEAN is_active
+        UUID created_by FK
         TIMESTAMPTZ created_at
         TIMESTAMPTZ updated_at
+        TIMESTAMPTZ deleted_at
     }
 
     building_floors {
@@ -257,6 +271,7 @@ erDiagram
         VARCHAR validator_version
         VARCHAR status
         JSONB summary
+        VARCHAR issues_hash
         TIMESTAMPTZ started_at
         TIMESTAMPTZ finished_at
         TIMESTAMPTZ created_at
@@ -411,6 +426,7 @@ erDiagram
         VARCHAR package_hash
         UUID package_artifact_id FK
         UUID package_validation_run_id FK
+        VARCHAR prepare_idempotency_key
         VARCHAR manifest_sha256
         VARCHAR build_target
         VARCHAR protocol_version
@@ -449,6 +465,7 @@ erDiagram
         VARCHAR unity_engine_version
         UUID runtime_catalog_id FK
         VARCHAR start_idempotency_key
+        VARCHAR completion_idempotency_key
         VARCHAR status
         TIMESTAMPTZ created_at
         TIMESTAMPTZ started_at
@@ -471,6 +488,9 @@ erDiagram
         TIMESTAMPTZ client_ended_at
         BOOLEAN is_synced
         TIMESTAMPTZ synced_at
+        VARCHAR result_idempotency_key
+        VARCHAR result_hash
+        JSONB result_snapshot
         TIMESTAMPTZ created_at
         TIMESTAMPTZ updated_at
     }
@@ -515,7 +535,10 @@ erDiagram
 
     audit_logs {
         UUID id PK
-        UUID user_id
+        UUID user_id FK
+        UUID organization_id FK
+        UUID correlation_id
+        VARCHAR actor_type
         audit_action_enum action
         VARCHAR target_entity
         UUID target_id
@@ -545,9 +568,6 @@ erDiagram
         UUID id PK
         UUID organization_id FK
         VARCHAR billing_purpose
-        UUID building_id FK
-        UUID service_package_id FK
-        INT service_duration_months
         UUID requested_by FK
         UUID issued_by FK
         VARCHAR quotation_number
@@ -559,11 +579,50 @@ erDiagram
         DECIMAL discount_amount
         DECIMAL total_amount
         VARCHAR currency
+        UUID discount_rule_id FK
+        JSONB discount_snapshot
         JSONB price_snapshot
         JSONB terms_snapshot
         TIMESTAMPTZ valid_until
         TIMESTAMPTZ issued_at
         TIMESTAMPTZ accepted_at
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
+
+    quotation_building_items {
+        UUID id PK
+        UUID quotation_id FK
+        UUID building_id FK
+        UUID service_package_id FK
+        VARCHAR purchase_action
+        INT service_duration_months
+        DECIMAL unit_price
+        DECIMAL discount_amount
+        DECIMAL subtotal_amount
+        DECIMAL total_amount
+        VARCHAR currency
+        JSONB price_snapshot
+        JSONB terms_snapshot
+        JSONB discount_snapshot
+        VARCHAR line_provisioning_key UK
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
+
+    enterprise_quote_requests {
+        UUID id PK
+        UUID organization_id FK
+        UUID requested_by FK
+        INT requested_building_count
+        INT requested_duration_months
+        TEXT contact_name
+        VARCHAR contact_email
+        VARCHAR contact_phone
+        TEXT notes
+        VARCHAR status
+        UUID quotation_id FK
+        VARCHAR idempotency_key UK
         TIMESTAMPTZ created_at
         TIMESTAMPTZ updated_at
     }
@@ -609,6 +668,7 @@ erDiagram
         UUID id PK
         UUID payment_transaction_id FK
         UUID quotation_id FK
+        UUID quotation_item_id FK
         UUID organization_id FK
         VARCHAR provisioning_key
         VARCHAR status
@@ -644,6 +704,7 @@ erDiagram
         UUID building_id FK
         UUID service_package_id FK
         UUID quotation_id FK
+        UUID quotation_item_id FK
         UUID payment_transaction_id FK
         VARCHAR provisioning_key
         VARCHAR status
@@ -869,6 +930,7 @@ erDiagram
         UUID organization_id FK
         VARCHAR visibility
         TEXT title
+        TEXT source_uri
         VARCHAR version_label
         VARCHAR source_hash
         TEXT jurisdiction
@@ -876,6 +938,145 @@ erDiagram
         TIMESTAMPTZ effective_until
         VARCHAR approval_status
         UUID approved_by FK
+        TIMESTAMPTZ created_at
+    }
+
+    application_command_receipts {
+        UUID id PK
+        UUID actor_user_id FK
+        UUID organization_id FK
+        VARCHAR operation_name
+        VARCHAR idempotency_key
+        VARCHAR input_hash
+        VARCHAR result_status
+        JSONB result_payload
+        TIMESTAMPTZ created_at
+    }
+
+    organization_notifications {
+        UUID id PK
+        UUID organization_id FK
+        UUID recipient_user_id FK
+        UUID building_id FK
+        UUID entitlement_id FK
+        VARCHAR notification_type
+        TEXT title
+        TEXT body
+        TIMESTAMPTZ reference_ends_at
+        VARCHAR idempotency_key UK
+        TIMESTAMPTZ read_at
+        TIMESTAMPTZ created_at
+    }
+
+    notification_deliveries {
+        UUID id PK
+        UUID notification_id FK
+        VARCHAR channel
+        VARCHAR status
+        INT attempts
+        TEXT provider_message_id
+        TEXT last_error
+        TIMESTAMPTZ sent_at
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
+
+    auth_refresh_tokens {
+        UUID id PK
+        UUID user_id FK
+        UUID family_id
+        TEXT token_hash UK
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ expires_at
+        TIMESTAMPTZ consumed_at
+        TIMESTAMPTZ revoked_at
+    }
+
+    password_reset_tokens {
+        UUID id PK
+        UUID user_id FK
+        TEXT token_hash UK
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ expires_at
+        TIMESTAMPTZ used_at
+    }
+
+    learn_situations {
+        UUID id PK
+        VARCHAR slug UK
+        VARCHAR name
+        TEXT description
+        BOOLEAN is_active
+        UUID created_by FK
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
+
+    service_package_discount_rules {
+        UUID id PK
+        UUID service_package_id FK
+        VARCHAR code UK
+        VARCHAR discount_kind
+        DECIMAL discount_value
+        VARCHAR discount_currency
+        INT minimum_buildings
+        INT minimum_duration_months
+        TIMESTAMPTZ valid_from
+        TIMESTAMPTZ valid_until
+        BOOLEAN is_active
+        UUID created_by FK
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
+
+    learn_posts {
+        UUID id PK
+        VARCHAR slug UK
+        VARCHAR publication_status -- Unpublished | Published | Hidden | Deleted
+        UUID published_version_id FK
+        UUID created_by FK
+        BIGINT revision_no
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
+
+    learn_post_versions {
+        UUID id PK
+        UUID post_id FK
+        INT version_number
+        VARCHAR content_schema_version
+        VARCHAR content_kind
+        VARCHAR title
+        TEXT summary
+        TEXT cover_image_url
+        JSONB content_blocks
+        VARCHAR content_hash
+        VARCHAR status
+        UUID created_by FK
+        UUID published_by FK
+        TIMESTAMPTZ published_at
+        BIGINT revision_no
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
+
+    learn_post_version_situations {
+        UUID post_version_id FK
+        UUID situation_id FK
+        TIMESTAMPTZ created_at
+    }
+
+    learn_post_version_sources {
+        UUID post_version_id FK
+        UUID source_id FK
+        VARCHAR source_role
+        JSONB locator
+        TIMESTAMPTZ created_at
+    }
+
+    learn_bookmarks {
+        UUID trainee_user_id FK
+        UUID post_id FK
         TIMESTAMPTZ created_at
     }
 
@@ -923,11 +1124,15 @@ erDiagram
     }
 
     organizations o|--o{ users : scopes
+    users o|--o{ auth_google_onboarding_sessions : completes
     users ||--o{ user_devices : registers
+    users ||--o{ auth_refresh_tokens : owns
+    users ||--o{ password_reset_tokens : resets
+    users ||--o{ application_command_receipts : executes
+    organizations o|--o{ application_command_receipts : scopes
 
     organizations ||--o{ buildings : owns
     users ||--o{ buildings : creates
-    buildings ||--o| building_locations : has
     buildings ||--o{ building_floors : contains
     organizations ||--o{ building_floors : scopes
     buildings ||--o{ building_contacts : has
@@ -1007,8 +1212,12 @@ erDiagram
 
     users ||--o{ service_packages : creates
     organizations ||--o{ quotations : receives
-    buildings o|--o{ quotations : bills
-    service_packages ||--o{ quotations : prices
+    service_package_discount_rules o|--o{ quotations : applies
+    quotations ||--o{ quotation_building_items : contains
+    buildings ||--o{ quotation_building_items : selected
+    service_packages ||--o{ quotation_building_items : prices
+    organizations ||--o{ enterprise_quote_requests : requests
+    quotations o|--o{ enterprise_quote_requests : answers
     ai_billing_periods o|--o| quotations : settles
     users ||--o{ quotations : requests
     users o|--o{ quotations : issues
@@ -1018,16 +1227,23 @@ erDiagram
     payos_payment_requests ||--o{ payment_transactions : receives
     payment_transactions o|--o| payos_payment_requests : confirms
     payment_transactions ||--o| invoice_metadata : invoices
-    payment_transactions ||--o| payment_provisioning_records : reconciles
+    payment_transactions ||--o{ payment_provisioning_records : reconciles
     quotations ||--o{ invoice_metadata : documents
     organizations ||--o{ invoice_metadata : owns
     organizations ||--o{ service_entitlements : owns
     buildings ||--o{ service_entitlements : activates
     service_packages ||--o{ service_entitlements : grants
     quotations o|--o{ service_entitlements : funds
-    payment_transactions o|--o| service_entitlements : provisions
+    quotation_building_items o|--o{ service_entitlements : provisions
+    payment_transactions o|--o{ service_entitlements : provisions
     quotations ||--o{ payment_provisioning_records : provisions
+    quotation_building_items ||--o{ payment_provisioning_records : reconciles
     users ||--o{ service_entitlements : grants
+    organizations ||--o{ organization_notifications : receives
+    users ||--o{ organization_notifications : notified
+    buildings o|--o{ organization_notifications : concerns
+    service_entitlements o|--o{ organization_notifications : expires
+    organization_notifications ||--o{ notification_deliveries : delivers
     organizations ||--o{ ai_billing_periods : settles
     ai_billing_periods ||--o{ ai_billing_period_items : includes
     ai_billing_periods ||--o{ ai_billing_adjustments : adjusts
@@ -1059,6 +1275,19 @@ erDiagram
     organizations o|--o{ knowledge_sources : owns
     knowledge_sources ||--o{ knowledge_chunks : chunks
     users o|--o{ knowledge_sources : approves
+    users ||--o{ learn_situations : creates
+    users ||--o{ learn_posts : creates
+    users ||--o{ learn_post_versions : authors
+    users o|--o{ learn_post_versions : publishes
+    learn_posts ||--o{ learn_post_versions : versions
+    learn_posts o|--o| learn_post_versions : publishes
+    learn_post_versions ||--o{ learn_post_version_situations : classifies
+    learn_situations ||--o{ learn_post_version_situations : groups
+    learn_post_versions ||--o{ learn_post_version_sources : cites
+    knowledge_sources ||--o{ learn_post_version_sources : supports
+    users ||--o{ learn_bookmarks : saves
+    learn_posts ||--o{ learn_bookmarks : bookmarked
+
 
     runtime_compatibility_catalog o|--o{ sessions : pins
     runtime_compatibility_catalog o|--o{ playtest_sessions : pins
@@ -1078,3 +1307,7 @@ erDiagram
     feedback o|--o{ support_tickets : originates
     users o|--o{ support_tickets : handles
 ```
+
+`application_command_receipts` also has the composite unique constraint
+`(actor_user_id, operation_name, idempotency_key)` in SQL. It is documented
+here as a relationship invariant rather than as a synthetic Mermaid field.

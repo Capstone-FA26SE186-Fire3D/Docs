@@ -20,6 +20,10 @@ Thư mục này chứa tài liệu sản phẩm và kiến trúc cho **Fire Evac
 
 `fire-evacuation-training-technology.md` (technology) là nguồn chính cho service boundary, transaction boundary và worker/AI contract; schema/ERD biểu diễn dữ liệu/invariant tương ứng, còn requirements/workflows/DOCX mô tả hành vi quan sát được. Schema/ERD hiện ghi target version 6.7; đây là thiết kế chưa chạy migration.
 
+Learn là blog công khai theo tình huống, gồm bài viết, tip & trick và video. `PlatformAdmin` quản trị draft, có thể phát hành ngay, ẩn/hiện hoặc xóa mềm/khôi phục bài; Learn không có bước duyệt riêng. `learn_posts`/`learn_post_versions` cùng các bảng liên quan trong SQL/ERD là thiết kế mục tiêu. Learn không phải khóa học có lesson bắt buộc, quiz, chứng chỉ hoặc tiến độ. Published là nội dung công khai; Hidden không công khai nhưng vẫn có thể làm nguồn RAG; Deleted giữ lịch sử nhưng bị loại khỏi public/RAG. Video provider embed và CMS production chưa được triển khai.
+
+FET3D hỗ trợ một Organization quản lý nhiều Building. Mỗi Building phải có tên và địa chỉ trước khi đưa vào quotation. Gói chuẩn mua theo số Building/thời hạn; quotation BuildingService có dòng riêng cho từng Building, discount do PlatformAdmin cấu hình và snapshot tại thời điểm phát hành. Header quotation không lặp Building scope; `quotation_building_items` là nguồn chính. Số lượng lớn hoặc công trình ngoài phạm vi chuẩn dùng yêu cầu báo giá Liên hệ. Entitlement vẫn độc lập theo Building; trước hạn 5 ngày có thông báo web/email theo kỳ. Các API onboarding Google, profile/avatar, quotation nhiều dòng, discount, enterprise quote và nhắc hạn là thiết kế mục tiêu, chưa phải tính năng đã triển khai.
+
 ## Tổng quan công nghệ
 
 | Khối | Công nghệ/nhà cung cấp | Trạng thái quyết định |
@@ -33,13 +37,13 @@ Thư mục này chứa tài liệu sản phẩm và kiến trúc cho **Fire Evac
 | Database | Supabase Database, dùng PostgreSQL | Đã chốt |
 | Vector database | `pgvector` trong PostgreSQL/Supabase | Đã chốt; thay cho hướng ChromaDB trong prototype cũ |
 | Cache/event transport | Redis cache-aside và Redis Streams | Kiến trúc đích, chưa triển khai; client không kết nối trực tiếp, PostgreSQL vẫn là nguồn sự thật |
-| Authentication và push | Firebase Authentication với Google Sign-In; Firebase Cloud Messaging (FCM) | Đã chốt |
+| Authentication và push | BE email/password; Firebase Authentication cho Google Sign-In; Firebase Cloud Messaging (FCM) | Đã chốt; Mailgun dùng cho reset password |
 | LLM | OpenAI API hoặc Google Gemini API (khóa/cấu hình qua Google AI Studio) | Chưa chọn nhà cung cấp cuối; chỉ triển khai một adapter production sau đánh giá |
 | Object storage | Amazon S3 (AWS S3) | Đã chốt |
 | AI compute | Azure (AI/RAG); Container Apps là phương án triển khai đề xuất | Đã chốt provider Azure cho AI/RAG; SKU, region và chi phí còn cần spike |
 | BE/worker compute | Chưa chọn | Không suy ra BE, IFC/Blender hoặc Unity worker chạy Azure chỉ vì AI đã chọn Azure |
 
-Supabase chỉ cung cấp PostgreSQL/`pgvector` trong kiến trúc này, không thay Firebase Authentication. Redis chỉ phục vụ cache-aside và vận chuyển event/job qua backend; FE/Mobile không kết nối Redis và cache không cấp quyền. PostgreSQL outbox là nguồn event/replay, dispatcher có lease riêng, còn worker claim attempt/lease sau khi nhận message; consumer ACK chỉ sau transaction ghi tác động và receipt thành công. Firebase xác thực danh tính và gửi push; backend vẫn là nơi ánh xạ Firebase UID sang ba vai trò FET3D, kiểm tra `organizationId` và thực thi authorization. Azure đã được chọn cho AI/RAG service; LLM, BE/worker compute và các thông số production khác vẫn qua decision gate.
+Supabase chỉ cung cấp PostgreSQL/`pgvector` trong kiến trúc này, không thay Firebase Authentication. BE quản lý email/password và FET3D session; Firebase chỉ xác minh Google Sign-In, FCM chỉ gửi push, Mailgun gửi reset password. Redis chỉ phục vụ cache-aside và vận chuyển event/job qua backend; FE/Mobile không kết nối Redis và cache không cấp quyền. PostgreSQL outbox là nguồn event/replay, dispatcher có lease riêng, còn worker claim attempt/lease sau khi nhận message; consumer ACK chỉ sau transaction ghi tác động và receipt thành công. Backend vẫn là nơi ánh xạ Firebase UID sang ba vai trò FET3D, kiểm tra `organizationId` và thực thi authorization. Azure đã được chọn cho AI/RAG service; LLM, BE/worker compute và các thông số production khác vẫn qua decision gate.
 
 Đây là kiến trúc đích. Prototype AI hiện còn ChromaDB/OpenAI và backend đã có phần xác thực mật khẩu/JWT; các phần đó chưa tự động trở thành Firebase/`pgvector` chỉ vì tài liệu được cập nhật. Việc chuyển code, dữ liệu và migration phải là task triển khai riêng có kiểm thử.
 
