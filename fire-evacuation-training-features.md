@@ -155,4 +155,4 @@ Mô hình hazard dùng surrogate nhẹ, deterministic theo scenario và có gi�
 - Tenant enqueue hiện chỉ nhận `ProcessingJobRequested` schema `1`; system event dùng allowlist riêng; `ProcessingJobRequeue` chỉ được tạo qua gate requeue. Event cùng key và envelope được xử lý idempotent; envelope khác bị từ chối.
 - Redis cache-aside chỉ tối ưu catalog, package metadata, danh sách bài và dashboard. Quyền start/publish, entitlement, revoke QR, quota, billing và learner result vẫn kiểm tra PostgreSQL/backend.
 - Redis mất dữ liệu, message lặp, dispatcher mất ACK hoặc worker crash phải replay/retry từ outbox và job attempt mà không tạo tác động nghiệp vụ trùng. Cache lỗi hoặc cũ không được cấp quyền sai tenant.
-- FE/Mobile chỉ gọi API qua Nginx/.NET; không kết nối Redis trực tiếp. Session đã bắt đầu vẫn giữ event/result local khi mất mạng và đồng bộ lại sau khi backend xác nhận.
+- FE/Mobile chỉ gọi API qua OneShield/OnePortal → Nginx/.NET; không kết nối Redis trực tiếp. Session đã bắt đầu vẫn giữ event/result local khi mất mạng và đồng bộ lại sau khi backend xác nhận.

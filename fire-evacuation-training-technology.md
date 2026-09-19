@@ -471,6 +471,7 @@ Các ca sau là tiêu chí cho đầu việc code tiếp theo, chưa phải kế
 | Thành phần | Quyền sở hữu/trách nhiệm | Trạng thái |
 | :--- | :--- | :--- |
 | `.NET core` | Identity, tenant, Building, scenario, session, payment, entitlement, quota, usage ledger và dashboard | Đã chốt |
+| `OneShield` / `OnePortal` của iNET | Lớp edge/bảo vệ phía trước Nginx theo cấu hình của iNET; không quyết định identity, tenant, quota, billing hoặc authorization nghiệp vụ | Đã chọn nền tảng; capability/gói và cấu hình production chưa xác minh |
 | `Nginx` | Reverse proxy tại điểm vào HTTP(S), chuyển request API tới .NET | Đã chốt công nghệ; chưa triển khai |
 | `AI/RAG FastAPI` | Retrieval, generation, citations, safety và usage kỹ thuật; không tự tính tiền, sửa editor hoặc publish | Đã chốt chạy riêng trên Azure |
 | `IFC/Blender worker` | Job xử lý nặng, facts, geometry, artifact và QA; retry theo logical job/attempt/lease/hash | Thiết kế đề xuất |
@@ -482,7 +483,7 @@ Azure là provider đã chốt cho AI/RAG service. Azure Container Apps là phư
 Luồng production mục tiêu là:
 
 ```text
-Web/Mobile -> Nginx -> .NET API -> AI/RAG FastAPI on Azure
+Web/Mobile -> OneShield / OnePortal (iNET) -> Nginx -> .NET API -> AI/RAG FastAPI on Azure
                              -> transactional outbox -> IFC/Blender or Unity worker
 ```
 
@@ -490,7 +491,7 @@ Prototype web/mobile còn gọi FastAPI trực tiếp; đây là hiện trạng 
 
 ### 14.2. Contract liên service
 
-Nginx là reverse proxy đã chốt cho điểm vào API. Backend tiếp tục kiểm tra identity, tenant, quota và scope trước khi gọi AI; không mở tuyến proxy cho client bỏ qua backend để gọi FastAPI. Vị trí chạy Nginx, domain, điểm kết thúc TLS và cấu hình upstream sẽ được xác định khi chốt triển khai BE. Quyết định này không thay đổi Azure cho AI hoặc biến Container Apps thành lựa chọn đã chốt. Cấu hình forwarded headers phải chỉ tin proxy được chỉ định; timeout, giới hạn request và retry cần phù hợp contract idempotency, không tự phát lại thao tác tính phí khi chưa biết kết quả.
+OneShield thuộc hệ thống OnePortal của iNET là lớp edge/bảo vệ đã được chọn cho ingress phía trước Nginx. Nginx là reverse proxy nội bộ trước API. Backend tiếp tục kiểm tra identity, tenant, quota và scope trước khi gọi AI; không mở tuyến proxy cho client bỏ qua backend để gọi FastAPI. OneShield không được coi là nguồn xác thực hoặc authorization nghiệp vụ. Capability thực tế, gói/SKU, DNS ownership, TLS termination, WAF/rate limits, health check, logging, SLA, region, chi phí và failover phải được xác minh với iNET trước production. Vị trí chạy Nginx, domain và cấu hình upstream cũng là phần triển khai còn lại. Quyết định này không thay đổi Azure cho AI hoặc biến Container Apps thành lựa chọn đã chốt. Cấu hình forwarded headers chỉ tin proxy được chỉ định; timeout, giới hạn request và retry cần phù hợp contract idempotency, không tự phát lại thao tác tính phí khi chưa biết kết quả.
 
 - Request `.NET → AI` có `request_id`, idempotency key, audience, organization/building scope được phép, source/revision version, canonical input hash và timeout policy. Không gửi credential dài hạn hoặc raw IFC thừa.
 - Response `AI → .NET` có `response_type`, status, citations/source version, BIM anchors khi sử dụng facts, model/provider version và usage kỹ thuật. AI không trả quyết định giá, overage hay quyền dịch vụ.
@@ -530,7 +531,7 @@ Ma trận quyền tối thiểu cho outbox/requeue là: `fet3d_backend_executor`
 
 ### 14.4. Quyết định còn mở về vận hành
 
-Region Azure/Supabase/S3/Redis, connection pool, timeout, RPO/RTO, backup/PITR, ngân sách AI, benchmark độ trễ liên cloud, catalog capability Unity, LLM/embedding model, Redis version/managed provider, stream retention, cache TTL/eviction, outbox recovery window và môi trường Unity build phải được chốt trước production. Tài liệu này không tuyên bố các ngưỡng đó đã benchmark hoặc hạ tầng đã tạo.
+Region Azure/Supabase/S3/Redis, OneShield/OnePortal plan/SKU, DNS ownership, TLS termination, WAF/rate limits, logging, SLA, failover, connection pool, timeout, RPO/RTO, backup/PITR, ngân sách AI, benchmark độ trễ liên cloud, catalog capability Unity, LLM/embedding model, Redis version/managed provider, stream retention, cache TTL/eviction, outbox recovery window và môi trường Unity build phải được chốt trước production. Tài liệu này không tuyên bố các ngưỡng đó đã benchmark hoặc hạ tầng đã tạo.
 
 ### 14.5. Các invariant đã sửa trong thiết kế đích
 

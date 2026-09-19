@@ -64,11 +64,11 @@ IFC private storage on AWS S3
 
 - Web Next.js quản lý Building/IFC/scenario/editor, trạng thái xử lý, publish, QR, billing, AI usage và analytics; Three.js phục vụ landing và editor/preview.
 - Backend C#/ASP.NET Core trên .NET xác minh email/password hoặc Firebase Google ID token, ánh xạ role/tenant, quản lý hồ sơ, lifecycle revision/release/training, session, audit và URL S3 ngắn hạn. Mailgun chỉ gửi thư reset mật khẩu; FCM chỉ gửi push.
-- Nginx là reverse proxy đã chốt trước API; client gọi AI qua backend. Chi tiết triển khai theo mục 14.1–14.2 của [technology](fire-evacuation-training-technology.md); đây là kiến trúc đích chưa triển khai.
+- OneShield thuộc hệ thống OnePortal của iNET là lớp edge/bảo vệ phía trước Nginx; Nginx là reverse proxy đã chốt trước API và client gọi AI qua backend. OneShield không thay thế authorization của .NET/PostgreSQL. Chi tiết triển khai theo mục 14.1–14.2 của [technology](fire-evacuation-training-technology.md); cấu hình edge/reverse proxy là kiến trúc đích chưa triển khai.
 - BE quản lý đăng nhập email/password; Firebase Authentication chỉ xác minh Google Sign-In; FCM cung cấp push notification. Authorization nghiệp vụ vẫn thuộc backend và PostgreSQL, không thuộc client hoặc custom claim đơn lẻ.
 - Supabase cung cấp managed PostgreSQL; `pgvector` lưu embedding/index của RAG. Supabase Auth không nằm trong stack đã chọn.
 - AI/RAG là service Python/FastAPI riêng trên Azure; Container Apps là phương án triển khai đề xuất. IFC/Blender và Unity build là worker độc lập nhận job bền vững. Worker tạo facts/artifact/QA nhưng không ghi billing, entitlement hoặc publish.
-- Redis là kiến trúc đích cho cache-aside và Redis Streams sau transactional outbox. Dispatcher/consumer có retry và dedup qua PostgreSQL; Redis không là nguồn quyền, quota, billing, session hay kết quả học tập. FE/Mobile chỉ gọi API qua Nginx và không kết nối Redis trực tiếp.
+- Redis là kiến trúc đích cho cache-aside và Redis Streams sau transactional outbox. Dispatcher/consumer có retry và dedup qua PostgreSQL; Redis không là nguồn quyền, quota, billing, session hay kết quả học tập. FE/Mobile chỉ gọi API qua OneShield/OnePortal → Nginx và không kết nối Redis trực tiếp.
 - AI service thực hiện ingestion/retrieval RAG qua `pgvector`; backend .NET kiểm tra identity, tenant, quota, consent và ghi usage kỹ thuật thành ledger. Client production không gọi AI service trực tiếp.
 - AWS S3 lưu raw IFC riêng tư, manifest và content package bất biến.
 - React Native/Expo xử lý local email/password hoặc Google Sign-In, QR, danh sách bài, download/cache/verify, kiểm tra dịch vụ, FCM và handoff qua native Android bridge; Unity thực hiện scene, hazard surrogate, routing, hành vi tương tác và kết quả training.
@@ -101,6 +101,7 @@ Dashboard dùng các định nghĩa cố định: `Trainee unique` là số Trai
 |---|---|---|
 | Giá gói, hạn mức import/editor/playtest thử, quota AI, overage | UI billing, grant và consent | Payment/quota production |
 | Redis provider/version, region, cache TTL/eviction, Streams retention và outbox recovery window | Retry, replay, chi phí, tải database và khả năng phục hồi | Trước triển khai event/cache production |
+| OneShield/OnePortal plan/SKU, DNS ownership, TLS termination, WAF/rate limits, logging, SLA, region, cost và failover | Edge protection, ingress, observability và chi phí vận hành | Trước public production ingress |
 | Ngày chốt/reset/rollover kỳ AI, nợ phí, hoàn tiền, hủy và retention | Settlement, entitlement và dữ liệu sau hết hạn | Billing lifecycle |
 | Catalog hành vi Unity và kiểm tra nội dung PCCC | Editor, scoring và acceptance | Runtime authoring |
 | Bộ IFC, Android mục tiêu và benchmark | QA support matrix, package budget | IFC/Mobile release |

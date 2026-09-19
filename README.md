@@ -31,6 +31,7 @@ FET3D hỗ trợ một Organization quản lý nhiều Building. Mỗi Building 
 | Web frontend | Next.js, React, TypeScript; Three.js cho landing và editor/preview 3D | Đã chốt |
 | Mobile shell | React Native + Expo; native Android bridge để gọi Unity | Đã chốt |
 | 3D training runtime | Unity | Đã chốt |
+| Edge/security protection | OneShield thuộc hệ thống OnePortal của iNET | Đã chọn nền tảng; cấu hình gói/SKU, DNS, TLS, WAF, rate limit, log và SLA còn cần xác minh; chưa triển khai |
 | Backend | C# và ASP.NET Core trên .NET | Đã chốt |
 | Reverse proxy | Nginx | Đã chốt; chi tiết tại mục 14.1 của technology, chưa triển khai |
 | AI, RAG và IFC processing | Python + FastAPI; IfcOpenShell cho IFC khi phù hợp | Đã chốt |
@@ -42,6 +43,8 @@ FET3D hỗ trợ một Organization quản lý nhiều Building. Mỗi Building 
 | Object storage | Amazon S3 (AWS S3) | Đã chốt |
 | AI compute | Azure (AI/RAG); Container Apps là phương án triển khai đề xuất | Đã chốt provider Azure cho AI/RAG; SKU, region và chi phí còn cần spike |
 | BE/worker compute | Chưa chọn | Không suy ra BE, IFC/Blender hoặc Unity worker chạy Azure chỉ vì AI đã chọn Azure |
+
+OneShield thuộc hệ thống OnePortal của iNET là lớp edge/bảo vệ phía trước Nginx theo kiến trúc đích; capability, gói/SKU, DNS, TLS termination, WAF/rate limit, logging, SLA, region và chi phí phải xác minh trước production. OneShield không cấp quyền nghiệp vụ và không thay thế kiểm tra identity, tenant hoặc authorization của .NET/PostgreSQL.
 
 Supabase chỉ cung cấp PostgreSQL/`pgvector` trong kiến trúc này, không thay Firebase Authentication. BE quản lý email/password và FET3D session; Firebase chỉ xác minh Google Sign-In, FCM chỉ gửi push, Mailgun gửi reset password. Redis chỉ phục vụ cache-aside và vận chuyển event/job qua backend; FE/Mobile không kết nối Redis và cache không cấp quyền. PostgreSQL outbox là nguồn event/replay, dispatcher có lease riêng, còn worker claim attempt/lease sau khi nhận message; consumer ACK chỉ sau transaction ghi tác động và receipt thành công. Backend vẫn là nơi ánh xạ Firebase UID sang ba vai trò FET3D, kiểm tra `organizationId` và thực thi authorization. Azure đã được chọn cho AI/RAG service; LLM, BE/worker compute và các thông số production khác vẫn qua decision gate.
 

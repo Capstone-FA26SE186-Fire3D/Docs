@@ -163,7 +163,7 @@ Sau IFC/connectivity QA, revision ở `ReadyForScenario`. `OrganizationUser` có
 ## 4. Non-Functional Requirements
 
 - **Performance:** mục tiêu tối thiểu 30 FPS trên Android tầm trung cho content package; benchmark frame time, RAM, tải/mở package, nhiệt máy, kích thước package, nhiều lần mở/đóng Unity và thời lượng 15 phút trên thiết bị thật. Chưa gọi đạt trước khi có thiết bị và số liệu.
-- **Security:** raw IFC nằm trong AWS S3 private hoặc workstation được kiểm soát; mobile nhận package runtime qua manifest và signed URL có TTL. API xác minh Firebase ID token; mọi query tenant-scoped, gồm retrieval `pgvector`, phải lọc `organizationId`. Không đưa Firebase Admin, Supabase service-role, AWS hoặc LLM key vào client.
+- **Security:** public ingress đi qua OneShield/OnePortal của iNET theo cấu hình edge đã chọn rồi tới Nginx/.NET; edge không thay thế authorization backend. Raw IFC nằm trong AWS S3 private hoặc workstation được kiểm soát; mobile nhận package runtime qua manifest và signed URL có TTL. API xác minh Firebase ID token; mọi query tenant-scoped, gồm retrieval `pgvector`, phải lọc `organizationId`. Không đưa Firebase Admin, Supabase service-role, AWS hoặc LLM key vào client.
 - **Integrity:** package, manifest, event batch và webhook thanh toán phải có hash, schema/version hoặc idempotency key phù hợp.
 - **Privacy:** chỉ thu thập dữ liệu cần cho tập huấn, analytics và vận hành; `Trainee` không xem dữ liệu của người khác.
 - **Availability:** backend stateless, worker retry có kiểm soát; lỗi processing hoặc hash mismatch không được publish im lặng. AI/RAG chạy thành service riêng trên Azure; IFC/Blender và Unity build retry theo job/attempt/hash.
