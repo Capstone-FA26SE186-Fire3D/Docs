@@ -135,3 +135,11 @@ Mô hình hazard dùng surrogate nhẹ, deterministic theo scenario và có gi�
 - Package/artifact đã publish hoặc đã được phiên pin không được thay tại chỗ; thay nội dung tạo release/package mới.
 - Đóng kỳ AI tạo snapshot item bất biến; điều chỉnh late/uncertain usage dùng adjustment riêng và không tính lại theo policy mới.
 - Worker/AI retry dùng idempotency và provenance; retry stale hoặc khác input không được tạo charge, artifact, publication hay analytics trùng.
+
+### 9.2. Event, cache và phục hồi
+
+- Thay đổi nghiệp vụ được commit cùng `integration_outbox_events` trong PostgreSQL. Dispatcher giao event/job qua Redis Streams; consumer hoặc worker ghi tác động bền vững về PostgreSQL rồi mới ACK.
+- Tenant enqueue hiện chỉ nhận `ProcessingJobRequested` schema `1`; system event dùng allowlist riêng; `ProcessingJobRequeue` chỉ được tạo qua gate requeue. Event cùng key và envelope được xử lý idempotent; envelope khác bị từ chối.
+- Redis cache-aside chỉ tối ưu catalog, package metadata, danh sách bài và dashboard. Quyền start/publish, entitlement, revoke QR, quota, billing và learner result vẫn kiểm tra PostgreSQL/backend.
+- Redis mất dữ liệu, message lặp, dispatcher mất ACK hoặc worker crash phải replay/retry từ outbox và job attempt mà không tạo tác động nghiệp vụ trùng. Cache lỗi hoặc cũ không được cấp quyền sai tenant.
+- FE/Mobile chỉ gọi API qua Nginx/.NET; không kết nối Redis trực tiếp. Session đã bắt đầu vẫn giữ event/result local khi mất mạng và đồng bộ lại sau khi backend xác nhận.
