@@ -228,8 +228,17 @@ IFC/Blender và Unity build không chạy trong request chat. Backend ghi proces
 ### 13.3. Event, heartbeat và learner analytics
 
 - Mobile gửi event bằng `event_id` ổn định do client tạo, `sequence_number`, `schema_version` và thời gian trên thiết bị; backend ghi thêm `received_at`. Retry cùng session/ID hoặc sequence không nhân đôi dữ liệu.
-- Heartbeat ghi `last_heartbeat_received_at` và sequence phía server; `Active sessions` chỉ là ước tính trong cửa sổ cấu hình, không phải trạng thái chắc chắn người học còn thao tác.
+- Heartbeat ghi `last_heartbeat_received_at` và sequence phía server; `Active sessions` chỉ là ước tính trong cửa sổ cấu hình, không phải trạng thái chắc chắn người học còn thao tác. `p_sequence` null bị từ chối trước khi cập nhật.
 - Completion chỉ được tính sau khi backend xác nhận result hợp lệ. Preparation, playtest và result chưa sync không vào learner analytics.
+
+### 13.4. Redis Streams, outbox và cache
+
+1. Backend ghi thay đổi nghiệp vụ và integration_outbox_events trong cùng transaction PostgreSQL. Payload có event key, schema, scope, aggregate ID và canonical hash; commit thành công trước khi dispatcher được phép giao việc.
+2. `enqueue_integration_outbox_event` chỉ xử lý allowlist tenant `ProcessingJobRequested` + schema `1`; payload phải có `job_id` trùng aggregate và không mang worker lease/token. `enqueue_system_outbox_event` xử lý allowlist `SystemNotification`/`PlatformCacheInvalidation` + schema `1` bằng executor riêng. Event lạ, sai schema, sai payload hoặc sai scope bị từ chối. `ProcessingJobRequeue` chỉ đi qua `requeue_processing_job`; helper nội bộ không cấp cho runtime. Scope được suy từ aggregate, không nhận tin cậy từ client. Cùng event key cùng envelope trả bản ghi cũ, khác payload/scope/aggregate/schema trả conflict.
+3. Dispatcher claim chỉ chọn Pending/Failed đến hạn hoặc Leased đã hết hạn, dùng lease riêng và `SKIP LOCKED` chỉ cho outbox. Redis Stream ID là delivery ID; Redis Pub/Sub chỉ dùng cho tiến độ có thể mất, không dùng cho job bắt buộc.
+4. Consumer bắt đầu transaction, khóa/đối chiếu outbox, kiểm tra receipt trước tác động; nếu chưa xử lý thì ghi tác động và receipt cùng transaction, commit rồi mới ACK. Worker claim attempt/lease qua backend, không nhận sẵn lease worker từ message.
+5. Redis mất message hoặc dispatcher mất phản hồi được khôi phục bằng replay outbox. `Published` chỉ nghĩa là đã gửi tới stream, không nghĩa consumer hoàn tất; message sai metadata được giữ để chẩn đoán kèm event key/stream ID, không ACK giả hoặc retry nóng vô hạn.
+6. API dùng cache-aside cho catalog, package metadata, danh sách bài và dashboard. Cache phải có TTL/key version/invalidation sau commit và kiểm tra quyền nguồn trước khi trả; Redis lỗi thì đọc PostgreSQL có giới hạn tải. FE/Mobile không kết nối Redis.
 
 ## 14. Invariant xử lý, billing và retry
 
@@ -237,7 +246,7 @@ Ba cổng runtime của release/publish, Trainee start và OrganizationUser play
 
 Kỳ AI được xử lý theo thứ tự `Open → Closed → Invoiced → Paid`. `Closed` chỉ đóng băng snapshot; quotation `AIUsage` được gắn ở bước `Closed → Invoiced`, payment `Applied` tương ứng được gắn ở bước `Invoiced → Paid`. Retry cùng chứng từ là no-op, chứng từ khác là conflict; adjustment là bản ghi mới, không sửa kỳ đã chốt.
 
-Processing ghi `processing_jobs` và outbox trong một transaction. Job giữ input hash bất biến; worker claim khóa job rồi attempt. Lease còn hạn trả `Busy`, attempt thành công trả `AlreadyCompleted`, chỉ job `Failed` mới được requeue có chủ đích; `Cancelled` là terminal và muốn chạy lại phải tạo job mới. Attempt hết lease bị đánh dấu `Expired`, attempt mới có lease token mới. Renew và accept chỉ dành cho current attempt; artifact, validation và scenario/revision phải cùng provenance. Kết quả cũ hoặc khác hash trả `StaleAttempt`/`Conflict`.
+Processing ghi `processing_jobs` và outbox trong một transaction. Job giữ input hash bất biến; worker claim khóa job rồi attempt. Lease còn hạn trả `Busy`, attempt thành công trả `AlreadyCompleted`, chỉ job `Failed` mới được requeue có chủ đích bằng key mới; replay key cũ sau Running/Succeeded/Cancelled/Failed lại trả `AlreadyRequeued`, còn key khác envelope trả `Conflict`. `Cancelled` là terminal và muốn chạy lại phải tạo job mới. Attempt hết lease bị đánh dấu `Expired`, attempt mới có lease token mới. Renew và accept chỉ dành cho current attempt; artifact, validation và scenario/revision phải cùng provenance. Kết quả cũ hoặc khác hash trả `StaleAttempt`/`Conflict`.
 
 Các tiêu chí này là yêu cầu kiểm thử triển khai, chưa phải kết quả kiểm thử database. Việc đọc SQL và kiểm tra Markdown không chứng minh concurrency, quyền gọi function hoặc recovery đã pass.
 

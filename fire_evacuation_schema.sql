@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- Project : Fire Evacuation Training 3D
--- Version : 6.6 (Canonical field ownership, immutable provenance, fenced attempts and settlement recovery)
+-- Version : 6.7 (Redis outbox/consumer contract, canonical event hashing and dispatcher fencing)
 -- Engine  : PostgreSQL 14+
 -- Scope   : IFC authoring pipeline; Building-level service entitlement;
 --           canonical Building QR -> published training list -> pinned session;
@@ -779,8 +779,7 @@ CREATE TABLE session_events (
     event_data  JSONB DEFAULT '{}',                         -- Dữ liệu chi tiết dạng JSON
     recorded_at TIMESTAMPTZ NOT NULL,                       -- Mốc thời gian trên thiết bị
     received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),         -- Mốc backend nhận event
-    UNIQUE (session_id, sequence_number),
-    UNIQUE (session_id, id)
+    UNIQUE (session_id, sequence_number)
 );
 
 -- ------------------------------------------------------------------------------
@@ -2948,7 +2947,7 @@ GRANT EXECUTE ON FUNCTION apply_verified_payos_webhook(
 ) TO fet3d_payos_webhook_executor;
 
 -- ============================================================================
--- VERSION 6.6 TARGET DESIGN AMENDMENTS
+-- VERSION 6.7 TARGET DESIGN AMENDMENTS
 -- Runtime compatibility, actor-bound start, atomic AI quota reservation,
 -- durable dispatch and payment/settlement recovery. This is design DDL only;
 -- it is not a migration for an existing database.
@@ -3729,22 +3728,81 @@ $$;
 
 
 -- Durable DB-to-queue handoff and worker attempt provenance.
+-- JSONB is PostgreSQL's canonical representation here; every producer and
+-- consumer uses this helper instead of re-serializing payloads outside DB.
+CREATE OR REPLACE FUNCTION fet3d_jsonb_payload_hash(p_payload JSONB)
+RETURNS VARCHAR(64)
+LANGUAGE sql
+IMMUTABLE STRICT
+SET search_path = pg_catalog, public
+AS $$
+    SELECT pg_catalog.encode(
+        public.digest(pg_catalog.convert_to(p_payload::TEXT, 'UTF8'), 'sha256'),
+        'hex'
+    )
+$$;
+
 CREATE TABLE integration_outbox_events (
     idempotency_key VARCHAR(255) PRIMARY KEY,
     aggregate_type VARCHAR(80) NOT NULL,
     aggregate_id UUID NOT NULL,
     event_type VARCHAR(100) NOT NULL,
+    schema_version VARCHAR(50) NOT NULL,
+    organization_id UUID REFERENCES organizations(id) ON DELETE RESTRICT,
     payload JSONB NOT NULL,
+    payload_hash VARCHAR(64) NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'Pending', -- Pending | Leased | Published | Failed
     attempts INT NOT NULL DEFAULT 0,
     available_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     lease_owner VARCHAR(255),
+    lease_token UUID UNIQUE,
     lease_until TIMESTAMPTZ,
+    published_lease_token UUID,
     last_error TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     published_at TIMESTAMPTZ,
     CONSTRAINT check_outbox_status CHECK (status IN ('Pending','Leased','Published','Failed')),
-    CONSTRAINT check_outbox_attempts CHECK (attempts >= 0)
+    CONSTRAINT check_outbox_attempts CHECK (attempts >= 0),
+    CONSTRAINT check_outbox_schema_version CHECK (NULLIF(pg_catalog.btrim(schema_version), '') IS NOT NULL),
+    CONSTRAINT check_outbox_payload_hash CHECK (
+        payload_hash ~ '^[0-9a-fA-F]{64}$'
+        AND lower(payload_hash) = public.fet3d_jsonb_payload_hash(payload)
+    ),
+    CONSTRAINT check_outbox_lease_shape CHECK (
+        (
+            status = 'Leased'
+            AND
+            NULLIF(pg_catalog.btrim(lease_owner), '') IS NOT NULL
+            AND lease_token IS NOT NULL
+            AND lease_until IS NOT NULL
+        )
+        OR (
+            status <> 'Leased'
+            AND lease_owner IS NULL
+            AND lease_token IS NULL
+            AND lease_until IS NULL
+        )
+    ),
+    CONSTRAINT check_outbox_published_shape CHECK (
+        (status = 'Published' AND published_at IS NOT NULL AND published_lease_token IS NOT NULL)
+        OR (status <> 'Published' AND published_at IS NULL)
+    ),
+    CONSTRAINT check_outbox_scope CHECK (
+        organization_id IS NOT NULL OR aggregate_type IN ('System','Platform')
+    )
+);
+
+-- Durable consumer deduplication. The row is inserted in the same PostgreSQL
+-- transaction as the business effect; Redis ACK happens only after commit.
+CREATE TABLE integration_event_consumptions (
+    consumer_name VARCHAR(120) NOT NULL,
+    event_key VARCHAR(255) REFERENCES integration_outbox_events(idempotency_key) ON DELETE RESTRICT NOT NULL,
+    payload_hash VARCHAR(64) NOT NULL,
+    result_reference TEXT,
+    processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (consumer_name, event_key),
+    CONSTRAINT check_event_consumer_name CHECK (NULLIF(pg_catalog.btrim(consumer_name), '') IS NOT NULL),
+    CONSTRAINT check_event_consumption_hash CHECK (payload_hash ~ '^[0-9a-fA-F]{64}$')
 );
 
 CREATE TABLE processing_job_attempts (
@@ -3769,7 +3827,68 @@ CREATE TABLE processing_job_attempts (
 );
 
 CREATE INDEX idx_outbox_dispatch ON integration_outbox_events(status, available_at, lease_until);
+CREATE INDEX idx_outbox_scope_dispatch ON integration_outbox_events(organization_id, status, available_at);
+CREATE INDEX idx_event_consumptions_hash ON integration_event_consumptions(event_key, payload_hash);
 CREATE INDEX idx_job_attempt_lease ON processing_job_attempts(status, lease_until);
+
+CREATE OR REPLACE FUNCTION validate_integration_outbox_event_mutation()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        IF NEW.idempotency_key IS NULL
+           OR NULLIF(pg_catalog.btrim(NEW.idempotency_key), '') IS NULL
+           OR NEW.aggregate_type IS NULL
+           OR NULLIF(pg_catalog.btrim(NEW.aggregate_type), '') IS NULL
+           OR NEW.aggregate_id IS NULL
+           OR NEW.event_type IS NULL
+           OR NULLIF(pg_catalog.btrim(NEW.event_type), '') IS NULL
+           OR NEW.schema_version IS NULL
+           OR NULLIF(pg_catalog.btrim(NEW.schema_version), '') IS NULL
+           OR NEW.payload IS NULL
+           OR NEW.payload_hash IS NULL
+           OR NEW.status IS DISTINCT FROM 'Pending'
+           OR NEW.attempts IS DISTINCT FROM 0
+           OR NEW.lease_owner IS NOT NULL
+           OR NEW.lease_token IS NOT NULL
+           OR NEW.lease_until IS NOT NULL
+           OR NEW.published_at IS NOT NULL
+           OR NEW.published_lease_token IS NOT NULL THEN
+            RAISE EXCEPTION 'outbox events must be enqueued as Pending without a lease or publication';
+        END IF;
+        IF lower(NEW.payload_hash) IS DISTINCT FROM fet3d_jsonb_payload_hash(NEW.payload) THEN
+            RAISE EXCEPTION 'outbox payload hash does not match canonical payload';
+        END IF;
+    END IF;
+    IF TG_OP = 'UPDATE' THEN
+        IF OLD.idempotency_key IS DISTINCT FROM NEW.idempotency_key
+           OR OLD.aggregate_type IS DISTINCT FROM NEW.aggregate_type
+           OR OLD.aggregate_id IS DISTINCT FROM NEW.aggregate_id
+           OR OLD.event_type IS DISTINCT FROM NEW.event_type
+           OR OLD.schema_version IS DISTINCT FROM NEW.schema_version
+           OR OLD.organization_id IS DISTINCT FROM NEW.organization_id
+           OR OLD.payload IS DISTINCT FROM NEW.payload
+           OR OLD.payload_hash IS DISTINCT FROM NEW.payload_hash
+           OR OLD.created_at IS DISTINCT FROM NEW.created_at THEN
+            RAISE EXCEPTION 'outbox event identity and payload are immutable after enqueue';
+        END IF;
+        IF NEW.status = 'Published'
+           AND (NEW.published_at IS NULL OR NEW.published_lease_token IS NULL) THEN
+            RAISE EXCEPTION 'published outbox events require publication time and completed lease token';
+        END IF;
+        IF NEW.status <> 'Published' AND NEW.published_at IS NOT NULL THEN
+            RAISE EXCEPTION 'non-published outbox events cannot have publication time';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_integration_outbox_event_immutable
+BEFORE INSERT OR UPDATE ON integration_outbox_events
+FOR EACH ROW EXECUTE FUNCTION validate_integration_outbox_event_mutation();
 
 -- Verified webhook processing must not depend on the requester remaining
 -- active after checkout. Request identity and quotation snapshots are frozen.
@@ -3835,7 +3954,7 @@ GRANT EXECUTE ON FUNCTION start_training_session(UUID, UUID, TEXT, TEXT) TO fet3
 GRANT EXECUTE ON FUNCTION start_playtest_session(UUID, UUID, TEXT, TEXT) TO fet3d_backend_executor;
 
 -- ============================================================================
--- VERSION 6.6 TARGET DESIGN AMENDMENTS (continuation)
+-- VERSION 6.7 TARGET DESIGN AMENDMENTS (continuation)
 -- Canonical field ownership, durable AI requests, fenced processing attempts,
 -- immutable billing snapshots and server-owned runtime/session gates.
 -- This section is target DDL only; it is not an executable migration.
@@ -4544,7 +4663,7 @@ AS $$
 DECLARE
     v_session public.sessions%ROWTYPE;
 BEGIN
-    IF p_sequence < 0 THEN RAISE EXCEPTION 'heartbeat sequence must be non-negative'; END IF;
+    IF p_sequence IS NULL OR p_sequence < 0 THEN RAISE EXCEPTION 'heartbeat sequence must be a non-negative value'; END IF;
     SELECT * INTO v_session
       FROM public.sessions AS session
      WHERE session.id = p_session_id
@@ -5422,6 +5541,159 @@ BEGIN
 END;
 $$;
 
+-- Shared implementation for the two public backend entry points and the
+-- requeue gate. It is intentionally not granted to any runtime executor.
+-- The event key is serialized with a transaction-scoped advisory lock before
+-- the idempotency row is inspected or created.
+CREATE OR REPLACE FUNCTION enqueue_integration_outbox_event_internal(
+    p_idempotency_key TEXT,
+    p_aggregate_type TEXT,
+    p_aggregate_id UUID,
+    p_event_type TEXT,
+    p_schema_version TEXT,
+    p_payload JSONB,
+    p_allow_system BOOLEAN,
+    p_allow_requeue BOOLEAN
+)
+RETURNS TEXT
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public
+AS $$
+DECLARE
+    v_key TEXT := NULLIF(pg_catalog.btrim(p_idempotency_key), '');
+    v_aggregate_type TEXT := NULLIF(pg_catalog.btrim(p_aggregate_type), '');
+    v_event_type TEXT := NULLIF(pg_catalog.btrim(p_event_type), '');
+    v_schema_version TEXT := NULLIF(pg_catalog.btrim(p_schema_version), '');
+    v_organization_id UUID;
+    v_payload_hash VARCHAR(64);
+    v_existing public.integration_outbox_events%ROWTYPE;
+    v_inserted BOOLEAN := false;
+    v_inserted_key TEXT;
+BEGIN
+    IF v_key IS NULL OR v_aggregate_type IS NULL OR p_aggregate_id IS NULL
+       OR v_event_type IS NULL OR v_schema_version IS NULL OR p_payload IS NULL
+       OR p_allow_system IS NULL OR p_allow_requeue IS NULL
+       OR p_allow_system AND p_allow_requeue THEN
+        RAISE EXCEPTION 'outbox event identity, schema and payload are required';
+    END IF;
+
+    PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_key, 0));
+
+    IF p_allow_requeue
+       AND v_aggregate_type = 'ProcessingJob'
+       AND v_event_type = 'ProcessingJobRequeue'
+       AND v_schema_version = '1' THEN
+        IF NOT p_payload @> pg_catalog.jsonb_build_object('job_id', p_aggregate_id)
+           OR NULLIF(pg_catalog.btrim(p_payload ->> 'reason'), '') IS NULL THEN
+            RAISE EXCEPTION 'processing requeue payload does not match aggregate';
+        END IF;
+        SELECT b.organization_id INTO v_organization_id
+          FROM public.processing_jobs AS job
+          JOIN public.revisions AS revision ON revision.id = job.revision_id
+          JOIN public.buildings AS b ON b.id = revision.building_id
+         WHERE job.id = p_aggregate_id;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'processing job aggregate does not exist';
+        END IF;
+    ELSIF p_allow_system
+       AND v_aggregate_type IN ('System', 'Platform')
+       AND v_event_type IN ('SystemNotification', 'PlatformCacheInvalidation')
+       AND v_schema_version = '1' THEN
+        v_organization_id := NULL;
+    ELSIF NOT p_allow_system
+       AND NOT p_allow_requeue
+       AND v_aggregate_type = 'ProcessingJob'
+       AND v_event_type = 'ProcessingJobRequested'
+       AND v_schema_version = '1' THEN
+        IF NOT p_payload @> pg_catalog.jsonb_build_object('job_id', p_aggregate_id) THEN
+            RAISE EXCEPTION 'processing request payload does not match aggregate';
+        END IF;
+        SELECT b.organization_id INTO v_organization_id
+          FROM public.processing_jobs AS job
+          JOIN public.revisions AS revision ON revision.id = job.revision_id
+          JOIN public.buildings AS b ON b.id = revision.building_id
+         WHERE job.id = p_aggregate_id;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'processing job aggregate does not exist';
+        END IF;
+    ELSE
+        RAISE EXCEPTION 'unsupported outbox event type, schema or enqueue authority';
+    END IF;
+
+    v_payload_hash := public.fet3d_jsonb_payload_hash(p_payload);
+    INSERT INTO public.integration_outbox_events(
+        idempotency_key, aggregate_type, aggregate_id, event_type, schema_version,
+        organization_id, payload, payload_hash, status, attempts,
+        lease_owner, lease_token, lease_until, published_at, published_lease_token
+    ) VALUES (
+        v_key, v_aggregate_type, p_aggregate_id, v_event_type, v_schema_version,
+        v_organization_id, p_payload, v_payload_hash, 'Pending', 0,
+        NULL, NULL, NULL, NULL, NULL
+    ) ON CONFLICT (idempotency_key) DO NOTHING
+    RETURNING idempotency_key INTO v_inserted_key;
+    v_inserted := v_inserted_key IS NOT NULL;
+
+    SELECT * INTO v_existing
+      FROM public.integration_outbox_events
+     WHERE idempotency_key = v_key
+     FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'outbox enqueue could not resolve idempotency record';
+    END IF;
+    IF v_existing.aggregate_type IS DISTINCT FROM v_aggregate_type
+       OR v_existing.aggregate_id IS DISTINCT FROM p_aggregate_id
+       OR v_existing.event_type IS DISTINCT FROM v_event_type
+       OR v_existing.schema_version IS DISTINCT FROM v_schema_version
+       OR v_existing.organization_id IS DISTINCT FROM v_organization_id
+       OR v_existing.payload IS DISTINCT FROM p_payload
+       OR lower(v_existing.payload_hash) IS DISTINCT FROM lower(v_payload_hash) THEN
+        RAISE EXCEPTION 'outbox idempotency key conflicts with a different envelope';
+    END IF;
+    RETURN CASE WHEN v_inserted THEN 'Enqueued' ELSE 'AlreadyEnqueued' END;
+END;
+$$;
+
+-- Tenant-scoped backend entry point. System/platform events and requeue events
+-- are deliberately rejected here and must use their dedicated gates.
+CREATE OR REPLACE FUNCTION enqueue_integration_outbox_event(
+    p_idempotency_key TEXT,
+    p_aggregate_type TEXT,
+    p_aggregate_id UUID,
+    p_event_type TEXT,
+    p_schema_version TEXT,
+    p_payload JSONB
+)
+RETURNS TEXT
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public
+AS $$
+BEGIN
+    RETURN public.enqueue_integration_outbox_event_internal(
+        p_idempotency_key, p_aggregate_type, p_aggregate_id,
+        p_event_type, p_schema_version, p_payload, false, false
+    );
+END;
+$$;
+
+-- System/platform events have no tenant scope and require a dedicated
+-- executor. The function itself still enforces the server-owned allowlist.
+CREATE OR REPLACE FUNCTION enqueue_system_outbox_event(
+    p_idempotency_key TEXT,
+    p_aggregate_type TEXT,
+    p_aggregate_id UUID,
+    p_event_type TEXT,
+    p_schema_version TEXT,
+    p_payload JSONB
+)
+RETURNS TEXT
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public
+AS $$
+BEGIN
+    RETURN public.enqueue_integration_outbox_event_internal(
+        p_idempotency_key, p_aggregate_type, p_aggregate_id,
+        p_event_type, p_schema_version, p_payload, true, false
+    );
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION requeue_processing_job(
     p_job_id UUID, p_idempotency_key TEXT, p_reason TEXT
 )
@@ -5430,23 +5702,48 @@ AS $$
 DECLARE
     v_job public.processing_jobs%ROWTYPE;
     v_existing public.integration_outbox_events%ROWTYPE;
-    v_key TEXT := pg_catalog.btrim(p_idempotency_key);
+    v_key TEXT := NULLIF(pg_catalog.btrim(p_idempotency_key), '');
+    v_reason TEXT := NULLIF(pg_catalog.btrim(p_reason), '');
+    v_payload JSONB;
+    v_payload_hash VARCHAR(64);
+    v_organization_id UUID;
+    v_enqueue_result TEXT;
 BEGIN
-    IF p_job_id IS NULL OR NULLIF(v_key, '') IS NULL OR NULLIF(pg_catalog.btrim(p_reason), '') IS NULL THEN
+    IF p_job_id IS NULL OR v_key IS NULL OR v_reason IS NULL THEN
         RAISE EXCEPTION 'requeue job, idempotency key and reason are required';
     END IF;
-    SELECT * INTO v_job FROM public.processing_jobs WHERE id = p_job_id FOR UPDATE;
-    IF NOT FOUND THEN RAISE EXCEPTION 'processing job does not exist'; END IF;
-    SELECT * INTO v_existing FROM public.integration_outbox_events
-     WHERE idempotency_key = v_key FOR UPDATE;
+
+    v_payload := pg_catalog.jsonb_build_object('job_id', p_job_id, 'reason', v_reason);
+    v_payload_hash := public.fet3d_jsonb_payload_hash(v_payload);
+    PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_key, 0));
+
+    SELECT * INTO v_existing
+      FROM public.integration_outbox_events
+     WHERE idempotency_key = v_key
+     FOR UPDATE;
     IF FOUND THEN
-        IF v_existing.aggregate_id IS DISTINCT FROM p_job_id
-           OR v_existing.event_type <> 'ProcessingJobRequeue'
-           OR v_existing.payload ->> 'reason' IS DISTINCT FROM p_reason THEN
-            RAISE EXCEPTION 'requeue idempotency key conflicts with another job';
+        SELECT b.organization_id INTO v_organization_id
+          FROM public.processing_jobs AS job
+          JOIN public.revisions AS revision ON revision.id = job.revision_id
+          JOIN public.buildings AS b ON b.id = revision.building_id
+         WHERE job.id = p_job_id;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'processing job does not exist';
+        END IF;
+        IF v_existing.aggregate_type IS DISTINCT FROM 'ProcessingJob'
+           OR v_existing.aggregate_id IS DISTINCT FROM p_job_id
+           OR v_existing.event_type IS DISTINCT FROM 'ProcessingJobRequeue'
+           OR v_existing.schema_version IS DISTINCT FROM '1'
+           OR v_existing.organization_id IS DISTINCT FROM v_organization_id
+           OR v_existing.payload IS DISTINCT FROM v_payload
+           OR lower(v_existing.payload_hash) IS DISTINCT FROM lower(v_payload_hash) THEN
+            RAISE EXCEPTION 'requeue idempotency key conflicts with a different envelope';
         END IF;
         RETURN 'AlreadyRequeued';
     END IF;
+
+    SELECT * INTO v_job FROM public.processing_jobs WHERE id = p_job_id FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'processing job does not exist'; END IF;
     IF v_job.status = 'Cancelled' OR v_job.status = 'Succeeded' THEN
         RETURN 'NotClaimable';
     END IF;
@@ -5454,12 +5751,12 @@ BEGIN
         RETURN 'Conflict';
     END IF;
     UPDATE public.processing_jobs SET status = 'Queued', current_attempt_id = NULL WHERE id = p_job_id;
-    INSERT INTO public.integration_outbox_events(
-        idempotency_key, aggregate_type, aggregate_id, event_type, payload
-    ) VALUES (
-        v_key, 'ProcessingJob', p_job_id, 'ProcessingJobRequeue',
-        pg_catalog.jsonb_build_object('job_id', p_job_id, 'reason', p_reason)
+    v_enqueue_result := public.enqueue_integration_outbox_event_internal(
+        v_key, 'ProcessingJob', p_job_id, 'ProcessingJobRequeue', '1', v_payload, false, true
     );
+    IF v_enqueue_result <> 'Enqueued' THEN
+        RAISE EXCEPTION 'requeue event was not created for a new idempotency key';
+    END IF;
     RETURN 'Requeued';
 END;
 $$;
@@ -5480,6 +5777,9 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'fet3d_ai_request_owner') THEN
         CREATE ROLE fet3d_ai_request_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'fet3d_requeue_owner') THEN
+        CREATE ROLE fet3d_requeue_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+    END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'fet3d_accounting_executor') THEN
         CREATE ROLE fet3d_accounting_executor NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS;
     END IF;
@@ -5498,7 +5798,7 @@ ALTER FUNCTION claim_processing_attempt(UUID, TEXT, TEXT, TEXT, INT) OWNER TO fe
 ALTER FUNCTION renew_processing_attempt(UUID, UUID, INT) OWNER TO fet3d_processing_owner;
 ALTER FUNCTION accept_processing_attempt(UUID, UUID, TEXT, UUID, UUID) OWNER TO fet3d_processing_owner;
 ALTER FUNCTION fail_processing_attempt(UUID, UUID, TEXT) OWNER TO fet3d_processing_owner;
-ALTER FUNCTION requeue_processing_job(UUID, TEXT, TEXT) OWNER TO fet3d_processing_owner;
+ALTER FUNCTION requeue_processing_job(UUID, TEXT, TEXT) OWNER TO fet3d_requeue_owner;
 
 REVOKE ALL ON FUNCTION record_session_heartbeat(UUID, UUID, BIGINT, TIMESTAMPTZ) FROM PUBLIC;
 REVOKE ALL ON FUNCTION close_ai_billing_period(UUID) FROM PUBLIC;
@@ -5553,7 +5853,6 @@ GRANT INSERT, UPDATE ON TABLE ai_requests, ai_usage_ledger, ai_usage_reservation
     ai_usage_reservation_allocations, ai_quota_grants, ai_billing_periods,
     ai_billing_period_items, ai_billing_adjustments
     TO fet3d_ai_accounting_owner;
-GRANT SELECT, INSERT ON TABLE integration_outbox_events TO fet3d_processing_owner;
 GRANT SELECT, UPDATE ON TABLE processing_jobs, processing_job_attempts
     TO fet3d_processing_owner;
 
@@ -5561,6 +5860,9 @@ GRANT SELECT ON TABLE users, buildings, ai_policy_versions TO fet3d_ai_request_o
 GRANT INSERT ON TABLE ai_requests TO fet3d_ai_request_owner;
 GRANT SELECT ON TABLE revision_artifacts, validation_runs, validation_issues
     TO fet3d_processing_owner;
+GRANT SELECT, UPDATE ON TABLE processing_jobs TO fet3d_requeue_owner;
+GRANT SELECT, UPDATE ON TABLE integration_outbox_events TO fet3d_requeue_owner;
+GRANT SELECT ON TABLE revisions, buildings TO fet3d_requeue_owner;
 
 -- Controlled AI request input boundary. The backend supplies the verified
 -- actor/scope and only this contract can create an Accepted request.
@@ -5743,3 +6045,363 @@ GRANT EXECUTE ON FUNCTION record_ai_request_result(
 ) TO fet3d_backend_executor;
 GRANT SELECT, UPDATE ON TABLE ai_requests TO fet3d_ai_request_owner;
 GRANT SELECT ON TABLE users, buildings, ai_policy_versions TO fet3d_ai_request_owner;
+
+-- Redis Streams transport gates. PostgreSQL remains authoritative for the
+-- envelope, lease fencing and durable consumer deduplication.
+DO $integration_roles$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'fet3d_integration_owner') THEN
+        CREATE ROLE fet3d_integration_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'fet3d_dispatcher_executor') THEN
+        CREATE ROLE fet3d_dispatcher_executor NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'fet3d_system_event_executor') THEN
+        CREATE ROLE fet3d_system_event_executor NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS;
+    END IF;
+END;
+$integration_roles$;
+
+ALTER FUNCTION fet3d_jsonb_payload_hash(JSONB) OWNER TO fet3d_integration_owner;
+ALTER FUNCTION validate_integration_outbox_event_mutation() OWNER TO fet3d_integration_owner;
+ALTER FUNCTION enqueue_integration_outbox_event_internal(TEXT, TEXT, UUID, TEXT, TEXT, JSONB, BOOLEAN, BOOLEAN) OWNER TO fet3d_integration_owner;
+ALTER FUNCTION enqueue_integration_outbox_event(TEXT, TEXT, UUID, TEXT, TEXT, JSONB) OWNER TO fet3d_integration_owner;
+ALTER FUNCTION enqueue_system_outbox_event(TEXT, TEXT, UUID, TEXT, TEXT, JSONB) OWNER TO fet3d_integration_owner;
+REVOKE ALL ON FUNCTION validate_integration_outbox_event_mutation() FROM PUBLIC;
+
+CREATE OR REPLACE FUNCTION claim_integration_outbox_event(
+    p_dispatcher_id TEXT, p_lease_seconds INT DEFAULT 60
+)
+RETURNS TABLE(
+    result_code TEXT,
+    event_key VARCHAR,
+    schema_version VARCHAR,
+    organization_id UUID,
+    aggregate_type VARCHAR,
+    aggregate_id UUID,
+    event_type VARCHAR,
+    payload JSONB,
+    payload_hash VARCHAR,
+    lease_token UUID,
+    lease_until TIMESTAMPTZ
+)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public
+AS $$
+DECLARE
+    v_event public.integration_outbox_events%ROWTYPE;
+    v_now TIMESTAMPTZ;
+    v_locked_now TIMESTAMPTZ;
+BEGIN
+    IF NULLIF(pg_catalog.btrim(p_dispatcher_id), '') IS NULL OR p_lease_seconds IS NULL OR p_lease_seconds <= 0 THEN
+        RAISE EXCEPTION 'dispatcher and positive lease duration are required';
+    END IF;
+
+    v_now := pg_catalog.clock_timestamp();
+    SELECT * INTO v_event
+      FROM public.integration_outbox_events AS outbox
+     WHERE (
+            outbox.status IN ('Pending','Failed')
+            AND outbox.available_at <= v_now
+           )
+        OR (
+            outbox.status = 'Leased'
+            AND outbox.lease_until IS NOT NULL
+            AND outbox.lease_until <= v_now
+           )
+     ORDER BY outbox.available_at, outbox.created_at, outbox.idempotency_key
+     LIMIT 1
+     FOR UPDATE SKIP LOCKED;
+
+    IF NOT FOUND THEN
+        RETURN QUERY SELECT 'NoWork'::TEXT, NULL::VARCHAR, NULL::VARCHAR, NULL::UUID,
+            NULL::VARCHAR, NULL::UUID, NULL::VARCHAR, NULL::JSONB, NULL::VARCHAR,
+            NULL::UUID, NULL::TIMESTAMPTZ;
+        RETURN;
+    END IF;
+
+    v_locked_now := pg_catalog.clock_timestamp();
+    IF (v_event.status IN ('Pending','Failed') AND v_event.available_at > v_locked_now)
+       OR (v_event.status = 'Leased'
+           AND (v_event.lease_until IS NULL OR v_event.lease_until > v_locked_now)) THEN
+        RETURN QUERY SELECT 'NoWork'::TEXT, NULL::VARCHAR, NULL::VARCHAR, NULL::UUID,
+            NULL::VARCHAR, NULL::UUID, NULL::VARCHAR, NULL::JSONB, NULL::VARCHAR,
+            NULL::UUID, NULL::TIMESTAMPTZ;
+        RETURN;
+    END IF;
+
+    UPDATE public.integration_outbox_events AS outbox
+       SET status = 'Leased',
+           attempts = outbox.attempts + 1,
+           lease_owner = pg_catalog.btrim(p_dispatcher_id),
+           lease_token = pg_catalog.gen_random_uuid(),
+           lease_until = v_locked_now + pg_catalog.make_interval(secs => p_lease_seconds),
+           last_error = NULL
+     WHERE outbox.idempotency_key = v_event.idempotency_key
+    RETURNING outbox.* INTO v_event;
+
+    RETURN QUERY SELECT 'Claimed'::TEXT, v_event.idempotency_key, v_event.schema_version,
+        v_event.organization_id, v_event.aggregate_type, v_event.aggregate_id,
+        v_event.event_type, v_event.payload, v_event.payload_hash,
+        v_event.lease_token, v_event.lease_until;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION renew_integration_outbox_event(
+    p_event_key VARCHAR, p_lease_token UUID, p_lease_seconds INT DEFAULT 60
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public
+AS $$
+DECLARE
+    v_event public.integration_outbox_events%ROWTYPE;
+    v_now TIMESTAMPTZ;
+    v_new_until TIMESTAMPTZ;
+BEGIN
+    IF NULLIF(pg_catalog.btrim(p_event_key), '') IS NULL
+       OR p_lease_token IS NULL OR p_lease_seconds IS NULL OR p_lease_seconds <= 0 THEN
+        RAISE EXCEPTION 'event key, lease token and positive duration are required';
+    END IF;
+    SELECT * INTO v_event FROM public.integration_outbox_events
+     WHERE idempotency_key = p_event_key FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'outbox event does not exist'; END IF;
+    v_now := pg_catalog.clock_timestamp();
+    IF v_event.status <> 'Leased' OR v_event.lease_token IS DISTINCT FROM p_lease_token
+       OR v_event.lease_until IS NULL OR v_event.lease_until <= v_now THEN
+        RAISE EXCEPTION 'outbox lease is stale';
+    END IF;
+    v_new_until := v_now + pg_catalog.make_interval(secs => p_lease_seconds);
+    IF v_new_until < v_event.lease_until THEN
+        v_new_until := v_event.lease_until;
+    END IF;
+    UPDATE public.integration_outbox_events
+       SET lease_until = v_new_until
+     WHERE idempotency_key = p_event_key
+       AND lease_token = p_lease_token;
+    RETURN true;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION mark_integration_outbox_published(
+    p_event_key VARCHAR, p_lease_token UUID
+)
+RETURNS TEXT
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public
+AS $$
+DECLARE
+    v_event public.integration_outbox_events%ROWTYPE;
+BEGIN
+    IF NULLIF(pg_catalog.btrim(p_event_key), '') IS NULL OR p_lease_token IS NULL THEN
+        RAISE EXCEPTION 'event key and lease token are required';
+    END IF;
+    SELECT * INTO v_event FROM public.integration_outbox_events
+     WHERE idempotency_key = p_event_key FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'outbox event does not exist'; END IF;
+    IF v_event.status = 'Published' THEN
+        IF v_event.published_lease_token IS DISTINCT FROM p_lease_token THEN
+            RAISE EXCEPTION 'published event token conflicts with completed delivery';
+        END IF;
+        RETURN 'AlreadyPublished';
+    END IF;
+    IF v_event.status <> 'Leased' OR v_event.lease_token IS DISTINCT FROM p_lease_token
+       OR v_event.lease_until IS NULL OR v_event.lease_until <= pg_catalog.clock_timestamp() THEN
+        RAISE EXCEPTION 'outbox lease is stale';
+    END IF;
+    UPDATE public.integration_outbox_events
+       SET status = 'Published', lease_owner = NULL, lease_token = NULL,
+           lease_until = NULL, published_at = pg_catalog.clock_timestamp(),
+           published_lease_token = p_lease_token, last_error = NULL
+     WHERE idempotency_key = p_event_key AND lease_token = p_lease_token;
+    RETURN 'Published';
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION fail_integration_outbox_event(
+    p_event_key VARCHAR, p_lease_token UUID, p_error TEXT, p_retry_at TIMESTAMPTZ DEFAULT NULL
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public
+AS $$
+DECLARE
+    v_event public.integration_outbox_events%ROWTYPE;
+BEGIN
+    IF NULLIF(pg_catalog.btrim(p_event_key), '') IS NULL OR p_lease_token IS NULL
+       OR NULLIF(pg_catalog.btrim(p_error), '') IS NULL THEN
+        RAISE EXCEPTION 'event key, lease token and error are required';
+    END IF;
+    SELECT * INTO v_event FROM public.integration_outbox_events
+     WHERE idempotency_key = p_event_key FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'outbox event does not exist'; END IF;
+    IF v_event.status <> 'Leased' OR v_event.lease_token IS DISTINCT FROM p_lease_token
+       OR v_event.lease_until IS NULL OR v_event.lease_until <= pg_catalog.clock_timestamp() THEN
+        RAISE EXCEPTION 'outbox lease is stale';
+    END IF;
+    UPDATE public.integration_outbox_events
+       SET status = 'Failed', lease_owner = NULL, lease_token = NULL, lease_until = NULL,
+           last_error = pg_catalog.btrim(p_error),
+           available_at = COALESCE(p_retry_at, pg_catalog.clock_timestamp())
+     WHERE idempotency_key = p_event_key AND lease_token = p_lease_token;
+    RETURN true;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION replay_integration_outbox_event(p_event_key VARCHAR)
+RETURNS TEXT
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public
+AS $$
+DECLARE
+    v_event public.integration_outbox_events%ROWTYPE;
+BEGIN
+    IF NULLIF(pg_catalog.btrim(p_event_key), '') IS NULL THEN
+        RAISE EXCEPTION 'event key is required';
+    END IF;
+    SELECT * INTO v_event FROM public.integration_outbox_events
+     WHERE idempotency_key = p_event_key FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'outbox event does not exist'; END IF;
+    IF v_event.status = 'Leased' THEN RAISE EXCEPTION 'leased event cannot be replayed'; END IF;
+    IF v_event.status = 'Pending' THEN RETURN 'AlreadyPending'; END IF;
+    UPDATE public.integration_outbox_events
+       SET status = 'Pending', available_at = pg_catalog.clock_timestamp(),
+           lease_owner = NULL, lease_token = NULL, lease_until = NULL,
+           last_error = NULL, published_at = NULL
+     WHERE idempotency_key = p_event_key;
+    RETURN 'Replayed';
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION check_integration_event_consumption(
+    p_consumer_name VARCHAR,
+    p_event_key VARCHAR,
+    p_schema_version VARCHAR,
+    p_organization_id UUID,
+    p_aggregate_type VARCHAR,
+    p_aggregate_id UUID,
+    p_event_type VARCHAR,
+    p_payload JSONB,
+    p_payload_hash VARCHAR
+)
+RETURNS TABLE(result_code TEXT, result_reference TEXT)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public
+AS $$
+DECLARE
+    v_event public.integration_outbox_events%ROWTYPE;
+    v_existing public.integration_event_consumptions%ROWTYPE;
+    v_consumer VARCHAR := NULLIF(pg_catalog.btrim(p_consumer_name), '');
+    v_key VARCHAR := NULLIF(pg_catalog.btrim(p_event_key), '');
+    v_schema VARCHAR := NULLIF(pg_catalog.btrim(p_schema_version), '');
+    v_hash VARCHAR := pg_catalog.lower(NULLIF(pg_catalog.btrim(p_payload_hash), ''));
+BEGIN
+    IF v_consumer IS NULL OR v_key IS NULL OR v_schema IS NULL OR p_aggregate_id IS NULL
+       OR p_payload IS NULL OR v_hash IS NULL OR v_hash !~ '^[0-9a-fA-F]{64}$'
+       OR v_hash <> public.fet3d_jsonb_payload_hash(p_payload) THEN
+        RAISE EXCEPTION 'consumer envelope and valid canonical payload hash are required';
+    END IF;
+    SELECT * INTO v_event FROM public.integration_outbox_events
+     WHERE idempotency_key = v_key FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'outbox event does not exist'; END IF;
+    IF v_event.schema_version IS DISTINCT FROM v_schema
+       OR v_event.organization_id IS DISTINCT FROM p_organization_id
+       OR v_event.aggregate_type IS DISTINCT FROM NULLIF(pg_catalog.btrim(p_aggregate_type), '')
+       OR v_event.aggregate_id IS DISTINCT FROM p_aggregate_id
+       OR v_event.event_type IS DISTINCT FROM NULLIF(pg_catalog.btrim(p_event_type), '')
+       OR v_event.payload IS DISTINCT FROM p_payload
+       OR lower(v_event.payload_hash) <> v_hash THEN
+        RAISE EXCEPTION 'consumer envelope does not match the outbox record';
+    END IF;
+    SELECT * INTO v_existing FROM public.integration_event_consumptions
+     WHERE consumer_name = v_consumer AND event_key = v_key FOR UPDATE;
+    IF FOUND THEN
+        IF lower(v_existing.payload_hash) = v_hash THEN
+            RETURN QUERY SELECT 'AlreadyProcessed'::TEXT, v_existing.result_reference;
+            RETURN;
+        END IF;
+        RAISE EXCEPTION 'consumer event key conflicts with another payload';
+    END IF;
+    RETURN QUERY SELECT 'NotProcessed'::TEXT, NULL::TEXT;
+END;
+$$;
+
+-- The handler calls check_* before its business effect and this function after
+-- that effect, in the same transaction, before acknowledging Redis.
+CREATE OR REPLACE FUNCTION record_integration_event_consumption(
+    p_consumer_name VARCHAR,
+    p_event_key VARCHAR,
+    p_schema_version VARCHAR,
+    p_organization_id UUID,
+    p_aggregate_type VARCHAR,
+    p_aggregate_id UUID,
+    p_event_type VARCHAR,
+    p_payload JSONB,
+    p_payload_hash VARCHAR,
+    p_result_reference TEXT DEFAULT NULL
+)
+RETURNS TEXT
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public
+AS $$
+DECLARE
+    v_check RECORD;
+    v_consumer VARCHAR := NULLIF(pg_catalog.btrim(p_consumer_name), '');
+    v_key VARCHAR := NULLIF(pg_catalog.btrim(p_event_key), '');
+    v_hash VARCHAR := pg_catalog.lower(NULLIF(pg_catalog.btrim(p_payload_hash), ''));
+BEGIN
+    SELECT * INTO v_check FROM public.check_integration_event_consumption(
+        v_consumer, v_key, p_schema_version, p_organization_id, p_aggregate_type,
+        p_aggregate_id, p_event_type, p_payload, v_hash
+    );
+    IF v_check.result_code = 'AlreadyProcessed' THEN
+        RETURN 'AlreadyProcessed';
+    END IF;
+    INSERT INTO public.integration_event_consumptions(
+        consumer_name, event_key, payload_hash, result_reference
+    ) VALUES (v_consumer, v_key, v_hash, p_result_reference);
+    RETURN 'Recorded';
+END;
+$$;
+
+ALTER FUNCTION claim_integration_outbox_event(TEXT, INT) OWNER TO fet3d_integration_owner;
+ALTER FUNCTION renew_integration_outbox_event(VARCHAR, UUID, INT) OWNER TO fet3d_integration_owner;
+ALTER FUNCTION mark_integration_outbox_published(VARCHAR, UUID) OWNER TO fet3d_integration_owner;
+ALTER FUNCTION fail_integration_outbox_event(VARCHAR, UUID, TEXT, TIMESTAMPTZ) OWNER TO fet3d_integration_owner;
+ALTER FUNCTION replay_integration_outbox_event(VARCHAR) OWNER TO fet3d_integration_owner;
+ALTER FUNCTION check_integration_event_consumption(VARCHAR, VARCHAR, VARCHAR, UUID, VARCHAR, UUID, VARCHAR, JSONB, VARCHAR) OWNER TO fet3d_integration_owner;
+ALTER FUNCTION record_integration_event_consumption(VARCHAR, VARCHAR, VARCHAR, UUID, VARCHAR, UUID, VARCHAR, JSONB, VARCHAR, TEXT) OWNER TO fet3d_integration_owner;
+
+REVOKE ALL ON FUNCTION claim_integration_outbox_event(TEXT, INT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION renew_integration_outbox_event(VARCHAR, UUID, INT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION mark_integration_outbox_published(VARCHAR, UUID) FROM PUBLIC;
+REVOKE ALL ON FUNCTION fail_integration_outbox_event(VARCHAR, UUID, TEXT, TIMESTAMPTZ) FROM PUBLIC;
+REVOKE ALL ON FUNCTION replay_integration_outbox_event(VARCHAR) FROM PUBLIC;
+REVOKE ALL ON FUNCTION check_integration_event_consumption(VARCHAR, VARCHAR, VARCHAR, UUID, VARCHAR, UUID, VARCHAR, JSONB, VARCHAR) FROM PUBLIC;
+REVOKE ALL ON FUNCTION record_integration_event_consumption(VARCHAR, VARCHAR, VARCHAR, UUID, VARCHAR, UUID, VARCHAR, JSONB, VARCHAR, TEXT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION enqueue_integration_outbox_event_internal(TEXT, TEXT, UUID, TEXT, TEXT, JSONB, BOOLEAN, BOOLEAN) FROM PUBLIC;
+REVOKE ALL ON FUNCTION enqueue_integration_outbox_event(TEXT, TEXT, UUID, TEXT, TEXT, JSONB) FROM PUBLIC;
+REVOKE ALL ON FUNCTION enqueue_system_outbox_event(TEXT, TEXT, UUID, TEXT, TEXT, JSONB) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION claim_integration_outbox_event(TEXT, INT),
+    renew_integration_outbox_event(VARCHAR, UUID, INT),
+    mark_integration_outbox_published(VARCHAR, UUID),
+    fail_integration_outbox_event(VARCHAR, UUID, TEXT, TIMESTAMPTZ)
+    TO fet3d_dispatcher_executor;
+GRANT EXECUTE ON FUNCTION enqueue_integration_outbox_event(TEXT, TEXT, UUID, TEXT, TEXT, JSONB),
+    replay_integration_outbox_event(VARCHAR),
+    check_integration_event_consumption(VARCHAR, VARCHAR, VARCHAR, UUID, VARCHAR, UUID, VARCHAR, JSONB, VARCHAR),
+    record_integration_event_consumption(VARCHAR, VARCHAR, VARCHAR, UUID, VARCHAR, UUID, VARCHAR, JSONB, VARCHAR, TEXT)
+    TO fet3d_backend_executor;
+GRANT EXECUTE ON FUNCTION enqueue_system_outbox_event(TEXT, TEXT, UUID, TEXT, TEXT, JSONB)
+TO fet3d_system_event_executor;
+-- The NOLOGIN requeue owner calls the integration-owned helper inside its
+-- SECURITY DEFINER gate. Runtime executors receive no helper EXECUTE grant.
+GRANT EXECUTE ON FUNCTION enqueue_integration_outbox_event_internal(TEXT, TEXT, UUID, TEXT, TEXT, JSONB, BOOLEAN, BOOLEAN)
+    TO fet3d_requeue_owner;
+REVOKE ALL ON FUNCTION enqueue_integration_outbox_event(TEXT, TEXT, UUID, TEXT, TEXT, JSONB)
+FROM fet3d_processing_owner;
+REVOKE ALL ON FUNCTION enqueue_system_outbox_event(TEXT, TEXT, UUID, TEXT, TEXT, JSONB)
+    FROM fet3d_processing_owner, fet3d_dispatcher_executor, fet3d_processing_worker_executor,
+        fet3d_ai_service_executor;
+
+GRANT USAGE ON SCHEMA public TO fet3d_integration_owner;
+GRANT USAGE ON SCHEMA public TO fet3d_dispatcher_executor, fet3d_backend_executor,
+    fet3d_system_event_executor, fet3d_requeue_owner;
+GRANT SELECT, INSERT, UPDATE ON TABLE integration_outbox_events TO fet3d_integration_owner;
+GRANT SELECT, INSERT ON TABLE integration_event_consumptions TO fet3d_integration_owner;
+GRANT SELECT ON TABLE processing_jobs, revisions, buildings TO fet3d_integration_owner;
+GRANT SELECT, REFERENCES ON TABLE organizations TO fet3d_integration_owner;
+REVOKE ALL ON TABLE integration_outbox_events FROM fet3d_processing_owner;

@@ -7,7 +7,7 @@ Thư mục này chứa tài liệu sản phẩm và kiến trúc cho **Fire Evac
 | Tệp | Nội dung |
 | :--- | :--- |
 | `fire_evacuation_requirements.md` | Yêu cầu chức năng/phi chức năng của bản cuối và thứ tự phase triển khai. |
-| `fire-evacuation-training-features.md` | Giá trị sản phẩm, ba loại tài khoản, tính năng và giới hạn sử dụng. |
+| Tính năng/phase | Đã hợp nhất vào [requirements](fire_evacuation_requirements.md) và [project overview](fire_evacuation_project_overview.md); không tạo nguồn quyết định song song. |
 | `fire-evacuation-training-workflows.md` | Luồng từ mô hình IFC đến package, QR, buổi tập huấn và dữ liệu kết quả. |
 | `fire-evacuation-training-technology.md` | Kiến trúc, pipeline IFC, runtime Android và các quyết định kỹ thuật. |
 | `fire_evacuation_schema.sql` | Thiết kế cơ sở dữ liệu. |
@@ -18,7 +18,7 @@ Thư mục này chứa tài liệu sản phẩm và kiến trúc cho **Fire Evac
 | `fire3d-web-ux-design.md` | Đặc tả UX web, landing POV 3D, hai hướng nhu cầu, Learn, Góc học tập và ranh giới Android/Unity. |
 | `fire3d-web-implementation.md` | Prototype đã triển khai, khác biệt so với thiết kế đầu, lỗi, giải pháp và giới hạn kiểm chứng. |
 
-`fire-evacuation-training-technology.md` (technology) là nguồn chính cho service boundary, transaction boundary và worker/AI contract; schema/ERD biểu diễn dữ liệu/invariant tương ứng, còn requirements/workflows/DOCX mô tả hành vi quan sát được. Schema/ERD hiện ghi target version 6.6; đây là thiết kế chưa chạy migration.
+`fire-evacuation-training-technology.md` (technology) là nguồn chính cho service boundary, transaction boundary và worker/AI contract; schema/ERD biểu diễn dữ liệu/invariant tương ứng, còn requirements/workflows/DOCX mô tả hành vi quan sát được. Schema/ERD hiện ghi target version 6.7; đây là thiết kế chưa chạy migration.
 
 ## Tổng quan công nghệ
 
@@ -32,13 +32,14 @@ Thư mục này chứa tài liệu sản phẩm và kiến trúc cho **Fire Evac
 | AI, RAG và IFC processing | Python + FastAPI; IfcOpenShell cho IFC khi phù hợp | Đã chốt |
 | Database | Supabase Database, dùng PostgreSQL | Đã chốt |
 | Vector database | `pgvector` trong PostgreSQL/Supabase | Đã chốt; thay cho hướng ChromaDB trong prototype cũ |
+| Cache/event transport | Redis cache-aside và Redis Streams | Kiến trúc đích, chưa triển khai; client không kết nối trực tiếp, PostgreSQL vẫn là nguồn sự thật |
 | Authentication và push | Firebase Authentication với Google Sign-In; Firebase Cloud Messaging (FCM) | Đã chốt |
 | LLM | OpenAI API hoặc Google Gemini API (khóa/cấu hình qua Google AI Studio) | Chưa chọn nhà cung cấp cuối; chỉ triển khai một adapter production sau đánh giá |
 | Object storage | Amazon S3 (AWS S3) | Đã chốt |
 | AI compute | Azure (AI/RAG); Container Apps là phương án triển khai đề xuất | Đã chốt provider Azure cho AI/RAG; SKU, region và chi phí còn cần spike |
 | BE/worker compute | Chưa chọn | Không suy ra BE, IFC/Blender hoặc Unity worker chạy Azure chỉ vì AI đã chọn Azure |
 
-Supabase chỉ cung cấp PostgreSQL/`pgvector` trong kiến trúc này, không thay Firebase Authentication. Firebase xác thực danh tính và gửi push; backend vẫn là nơi ánh xạ Firebase UID sang ba vai trò FET3D, kiểm tra `organizationId` và thực thi authorization. Azure đã được chọn cho AI/RAG service; LLM, BE/worker compute và các thông số production khác vẫn qua decision gate.
+Supabase chỉ cung cấp PostgreSQL/`pgvector` trong kiến trúc này, không thay Firebase Authentication. Redis chỉ phục vụ cache-aside và vận chuyển event/job qua backend; FE/Mobile không kết nối Redis và cache không cấp quyền. PostgreSQL outbox là nguồn event/replay, dispatcher có lease riêng, còn worker claim attempt/lease sau khi nhận message; consumer ACK chỉ sau transaction ghi tác động và receipt thành công. Firebase xác thực danh tính và gửi push; backend vẫn là nơi ánh xạ Firebase UID sang ba vai trò FET3D, kiểm tra `organizationId` và thực thi authorization. Azure đã được chọn cho AI/RAG service; LLM, BE/worker compute và các thông số production khác vẫn qua decision gate.
 
 Đây là kiến trúc đích. Prototype AI hiện còn ChromaDB/OpenAI và backend đã có phần xác thực mật khẩu/JWT; các phần đó chưa tự động trở thành Firebase/`pgvector` chỉ vì tài liệu được cập nhật. Việc chuyển code, dữ liệu và migration phải là task triển khai riêng có kiểm thử.
 
@@ -92,7 +93,7 @@ Bảng nguồn chính về quyết định còn mở, tác động và mốc ph�
 - Checkpoint sau mốc đáng kể và trước bàn giao; ghi phần đã xong/còn dở, branch/commit, kiểm tra thực tế và bước tiếp theo. Không hứa ghi kịp trước khi hết quota hoặc phiên ngắt đột ngột; không lưu secrets/transcript.
 - Giữ nguyên thư mục `Mẫu report/` đang untracked, không stage, xóa hoặc tự chỉnh file mẫu. Kiểm tra danh sách stage cụ thể, không dùng `git add -A` mù quáng.
 - Task chỉ sửa tài liệu: kiểm tra liên kết, tính nhất quán và `git diff --check`, không chạy toàn bộ build/test ứng dụng. Không có test chạy không đồng nghĩa đã kiểm thử nghiệp vụ.
-- Stack đã chốt cho nhóm nằm ở bảng Tổng quan công nghệ: web Next.js, Mobile React Native/Expo với native Android bridge gọi Unity, backend C#/.NET, AI/IFC Python/FastAPI, AI/RAG trên Azure, Supabase PostgreSQL + `pgvector`, Firebase Auth/FCM và AWS S3. Không triển khai Flutter. LLM và compute cho BE/worker vẫn phải qua bước chọn/benchmark trước khi gọi là production stack.
+- Stack đã chốt cho nhóm nằm ở bảng Tổng quan công nghệ: web Next.js, Mobile React Native/Expo với native Android bridge gọi Unity, backend C#/.NET, AI/IFC Python/FastAPI, AI/RAG trên Azure, Supabase PostgreSQL + `pgvector`, Redis cache/Streams ở kiến trúc đích, Firebase Auth/FCM và AWS S3. Không triển khai Flutter. Redis chưa triển khai; LLM và compute cho BE/worker vẫn phải qua bước chọn/benchmark trước khi gọi là production stack.
 
 ### Giới hạn sản phẩm
 

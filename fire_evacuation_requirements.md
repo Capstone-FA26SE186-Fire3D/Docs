@@ -165,11 +165,21 @@ Hoạt động đánh giá chuyên môn và user study là hoạt động thu th
 
 ## 8. Tiêu chí bổ sung cho compatibility, billing và recovery
 
+### Redis/event/cache acceptance
+
+- PostgreSQL outbox được ghi cùng transaction nghiệp vụ rồi dispatcher giao qua Redis Streams; commit database mà Redis chưa nhận phải replay được từ outbox.
+- Entry point tenant chỉ nhận allowlist hiện tại `ProcessingJobRequested` + schema `1` và suy scope từ aggregate; payload phải có `job_id` trùng `aggregate_id`, không mang worker lease/token. Event `System`/`Platform` dùng `enqueue_system_outbox_event` với allowlist `SystemNotification`/`PlatformCacheInvalidation` + schema `1` và executor riêng. Event lạ, sai schema, sai payload hoặc sai scope bị từ chối. `ProcessingJobRequeue` chỉ được tạo qua gate requeue. Event bắt đầu `Pending` với attempts bằng 0; cùng key khác envelope trả conflict. Dispatcher chỉ claim event đến hạn hoặc lease đã hết hạn, không để event đang leased chặn hàng khác.
+- Consumer/worker xử lý event có thể lặp bằng event key và payload hash; tác động nghiệp vụ cùng integration_event_consumptions phải commit trước ACK. Cùng key khác hash trả conflict.
+- Handler phải đối chiếu đầy đủ schema/scope/aggregate/payload với outbox; kiểm tra receipt trước tác động và ghi receipt sau tác động trong cùng transaction. Message sai metadata được giữ để chẩn đoán kèm event key/stream ID, không ACK giả hoặc retry nóng vô hạn.
+- Dispatcher/worker hết lease, crash hoặc mất ACK phải giao lại mà không tạo charge, entitlement, artifact, publication hay analytics trùng. Redis Pub/Sub chỉ là thông báo tiến độ có thể mất.
+- Cache-aside chỉ tối ưu đọc catalog, package metadata, danh sách bài và dashboard. Cache cũ không vượt revoke, entitlement, quota hoặc tenant scope; Redis lỗi thì API fallback PostgreSQL và trả trạng thái chờ/chậm.
+- Heartbeat PostgreSQL và event/result gameplay là nguồn hiện hành; Redis chỉ cache thống kê online. Preparation/playtest vẫn bị loại khỏi learner analytics.
+
 - **FR-COMPAT-01:** Publish, Trainee start và OrganizationUser playtest phải dùng chung runtime catalog và manifest contract. Runtime version phải đúng `major.minor.patch`; thiếu minimum runtime, protocol, manifest schema, manifest hash, build target hoặc capability array thì từ chối. Capability phải là các chuỗi không rỗng; array rỗng chỉ hợp lệ khi được khai báo rõ. Release package, session và playtest phải pin đúng artifact ID, validation-run ID, hash và build target; provenance sai hoặc package đã pin bị sửa tại chỗ thì từ chối.
 - **FR-BILLING-RECOVERY-01:** Kỳ AI chuyển `Open → Closed → Invoiced → Paid`; snapshot và membership item không đổi sau `Closed`, nhưng quotation `AIUsage` và payment `Applied` được gắn đúng ở từng bước. Retry chứng từ cùng định danh không tạo bản ghi mới; chứng từ khác trả conflict. Lock order là period nếu có → request → ledger/reservation → grant theo ID tăng dần. Late/uncertain usage đi qua adjustment riêng có tenant, actor, lý do và idempotency.
 - **FR-AI-RECOVERY-01:** AI request phải được authorize tại thời điểm tạo theo audience, user, tenant, Building và policy version. Request mới bắt đầu `Accepted` không có kết quả; policy/input identity và terminal result bất biến sau tiếp nhận, request đã nhận vẫn được reconcile nếu user bị khóa. FastAPI chỉ trả usage kỹ thuật/evidence; backend ghi result và accounting qua executor/contract riêng.
 - **FR-PROCESS-02:** Logical job giữ input hash. Worker chỉ claim job queued hoặc attempt đã hết lease; lease hiện hành không bị thay thế, job thành công không chạy lại do message trùng, và kết quả phải khớp attempt/artifact/validation hiện hành.
-- **FR-PROCESS-03:** Requeue job `Failed` là thao tác backend có quyền, có idempotency key và outbox; job `Cancelled` không tự chạy lại. Hai worker claim đồng thời chỉ một worker nhận lease mới.
+- **FR-PROCESS-03:** Requeue job `Failed` là thao tác backend có quyền, có idempotency key và outbox; cùng key/envelope replay trả `AlreadyRequeued` dù job đã tiến trạng thái, khác envelope trả `Conflict`, key mới chỉ requeue `Failed`; job `Cancelled` không tự chạy lại. Hai worker claim đồng thời chỉ một worker nhận lease mới.
 - **NFR-RECOVERY-02:** Retry, timeout và duplicate delivery phải trả trạng thái xác định (`Claimed`, `Busy`, `AlreadyCompleted`, `NotClaimable`, `StaleAttempt`, `Conflict`) và không tạo charge, entitlement, artifact hoặc publication trùng.
 
 Các tiêu chí trên là contract thiết kế và acceptance criteria cho đợt triển khai; chưa được gọi là đạt nếu chưa có test database/concurrency/recovery tương ứng.

@@ -207,7 +207,7 @@ FE hiện tại dùng Next.js App Router, TypeScript strict, Tailwind 4, Radix/s
 ## 10. Tài liệu liên quan
 
 - [Yêu cầu dự án](fire_evacuation_requirements.md)
-- [Tính năng và phase](fire-evacuation-training-features.md)
+- [Yêu cầu và phase](fire_evacuation_requirements.md)
 - [Workflow](fire-evacuation-training-workflows.md)
 - [Kiến trúc công nghệ](fire-evacuation-training-technology.md)
 - [Tổng quan dự án](fire_evacuation_project_overview.md)

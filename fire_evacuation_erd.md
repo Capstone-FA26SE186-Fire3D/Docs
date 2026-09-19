@@ -1,6 +1,6 @@
 # Fire Evacuation Training 3D — PostgreSQL ERD
 
-This ERD mirrors the design target in `fire_evacuation_schema.sql` version 6.6. SQL is authoritative for defaults and check-constraint expressions; every table, column, enum-backed field, foreign key, and relationship is represented below. This is a design document, not a database migration.
+This ERD mirrors the design target in `fire_evacuation_schema.sql` version 6.7. SQL is authoritative for defaults and check-constraint expressions; every table, column, enum-backed field, foreign key, and relationship is represented below. This is a design document, not a database migration.
 
 ## Contract notes
 
@@ -8,6 +8,7 @@ This ERD mirrors the design target in `fire_evacuation_schema.sql` version 6.6. 
 - Firebase Authentication owns login credentials. `users.firebase_uid` maps the verified Firebase identity to FET3D roles/tenant data; the database does not store password hashes or Google refresh tokens. FCM registration tokens belong to device installations and are not authentication credentials.
 - Supabase hosts PostgreSQL and the `pgvector` extension for RAG storage; Supabase Auth is not used. Raw IFC and immutable runtime packages are stored in private AWS S3 buckets.
 - `file_type_enum` is exactly `IFC`.
+- Redis is a target cache/Streams transport behind the backend; PostgreSQL remains authoritative and Redis is not modeled as a source table. Outbox and consumer dedup are represented by `integration_outbox_events` and `integration_event_consumptions`.
 - `ConfirmForTraining` is the persisted `revision_reviews.action` for one revision/ScenarioVersion pair; it may transition the revision from `ReadyForScenario` to `ConfirmedForTraining` but does not prevent authoring other compatible Scenarios. It is readiness-only. The executable order is confirmed revision/scenario → `Built` release + package + matching Active `Training` → Active Building service entitlement → `Published` release → stable Building QR → published training list → selected session pin.
 - `release_qr_codes` is canonical at Building scope and has no release/training FK. Preparation directly pins `trainee_user_id`, selected `training_id`, `scenario_version_id`, `release_id`, and `qr_code_id`; only the explicit online session start requires an Active Building entitlement. QR participation never compares the Trainee to an organization or allowlist.
 - The design keeps at most one active canonical row per Building; physical copies may reuse the same opaque QR value. A management revoke deactivates the QR separately from service expiry.
@@ -820,15 +821,28 @@ erDiagram
         VARCHAR aggregate_type
         UUID aggregate_id
         VARCHAR event_type
+        VARCHAR schema_version
+        UUID organization_id FK
         JSONB payload
+        VARCHAR payload_hash
         VARCHAR status
         INT attempts
         TIMESTAMPTZ available_at
         VARCHAR lease_owner
+        UUID lease_token
         TIMESTAMPTZ lease_until
+        UUID published_lease_token
         TEXT last_error
         TIMESTAMPTZ created_at
         TIMESTAMPTZ published_at
+    }
+
+    integration_event_consumptions {
+        VARCHAR consumer_name PK
+        VARCHAR event_key PK, FK
+        VARCHAR payload_hash
+        TEXT result_reference
+        TIMESTAMPTZ processed_at
     }
 
     processing_job_attempts {
@@ -988,6 +1002,8 @@ erDiagram
     sessions ||--o{ session_checkpoints : saves
     sessions ||--o| debrief_artifacts : summarizes
     sessions ||--o{ session_events : records
+    organizations ||--o{ integration_outbox_events : scopes
+    integration_outbox_events ||--o{ integration_event_consumptions : delivers
 
     users ||--o{ service_packages : creates
     organizations ||--o{ quotations : receives

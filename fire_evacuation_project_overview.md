@@ -66,6 +66,7 @@ IFC private storage on AWS S3
 - Firebase Authentication cung cấp đăng nhập Google; FCM cung cấp push notification. Authorization nghiệp vụ vẫn thuộc backend và PostgreSQL, không thuộc client hoặc custom claim đơn lẻ.
 - Supabase cung cấp managed PostgreSQL; `pgvector` lưu embedding/index của RAG. Supabase Auth không nằm trong stack đã chọn.
 - AI/RAG là service Python/FastAPI riêng trên Azure; Container Apps là phương án triển khai đề xuất. IFC/Blender và Unity build là worker độc lập nhận job bền vững. Worker tạo facts/artifact/QA nhưng không ghi billing, entitlement hoặc publish.
+- Redis là kiến trúc đích cho cache-aside và Redis Streams sau transactional outbox. Dispatcher/consumer có retry và dedup qua PostgreSQL; Redis không là nguồn quyền, quota, billing, session hay kết quả học tập. FE/Mobile chỉ gọi API qua Nginx và không kết nối Redis trực tiếp.
 - AI service thực hiện ingestion/retrieval RAG qua `pgvector`; backend .NET kiểm tra identity, tenant, quota, consent và ghi usage kỹ thuật thành ledger. Client production không gọi AI service trực tiếp.
 - AWS S3 lưu raw IFC riêng tư, manifest và content package bất biến.
 - React Native/Expo xử lý Google Sign-In, QR, danh sách bài, download/cache/verify, kiểm tra dịch vụ, FCM và handoff qua native Android bridge; Unity thực hiện scene, hazard surrogate, routing, hành vi tương tác và kết quả training.
@@ -97,6 +98,7 @@ Dashboard dùng các định nghĩa cố định: `Trainee unique` là số Trai
 | Quyết định | Tác động | Chốt trước |
 |---|---|---|
 | Giá gói, hạn mức import/editor/playtest thử, quota AI, overage | UI billing, grant và consent | Payment/quota production |
+| Redis provider/version, region, cache TTL/eviction, Streams retention và outbox recovery window | Retry, replay, chi phí, tải database và khả năng phục hồi | Trước triển khai event/cache production |
 | Ngày chốt/reset/rollover kỳ AI, nợ phí, hoàn tiền, hủy và retention | Settlement, entitlement và dữ liệu sau hết hạn | Billing lifecycle |
 | Catalog hành vi Unity và kiểm tra nội dung PCCC | Editor, scoring và acceptance | Runtime authoring |
 | Bộ IFC, Android mục tiêu và benchmark | QA support matrix, package budget | IFC/Mobile release |
@@ -108,7 +110,7 @@ Dashboard dùng các định nghĩa cố định: `Trainee unique` là số Trai
 
 `.NET core` là API nghiệp vụ duy nhất cho client và sở hữu identity, tenant, payment, Building entitlement, quota/usage, scenario, session và dashboard. AI/RAG FastAPI chạy riêng trên Azure; Container Apps chỉ là phương án triển khai đề xuất. IFC/Blender và Unity Editor là worker riêng nhận job. Notification và reconcile vẫn là background task của BE cho tới khi có nhu cầu scale độc lập được đo bằng benchmark.
 
-Database dùng một Supabase PostgreSQL + `pgvector`; S3 giữ IFC, manifest và package lớn. `ai_requests` là nguồn trạng thái/kết quả kỹ thuật; reservation allocations là nguồn giữ quota; usage ledger và period items/adjustments là nguồn đối soát. ACID chỉ áp dụng trong transaction PostgreSQL: quota reserve, payment provenance, provisioning và idempotency phải được cập nhật nguyên tử trong transaction ngắn. Không giữ transaction khi chờ LLM, PayOS, S3 hoặc worker. Transactional outbox, lease/attempt và reconcile xử lý phần giao tiếp phân tán; không tuyên bố transaction ACID xuyên Azure, S3 và PayOS.
+Database dùng một Supabase PostgreSQL + `pgvector`; S3 giữ IFC, manifest và package lớn. `ai_requests` là nguồn trạng thái/kết quả kỹ thuật; reservation allocations là nguồn giữ quota; usage ledger và period items/adjustments là nguồn đối soát; `integration_outbox_events` và `integration_event_consumptions` là nguồn giao/replay/dedup event. Tenant enqueue chỉ nhận `ProcessingJobRequested` schema `1` qua entry point backend và suy tenant từ aggregate; system event chỉ nhận allowlist `SystemNotification`/`PlatformCacheInvalidation` schema `1` qua entry point/executor riêng; `ProcessingJobRequeue` chỉ do requeue gate tạo. Outbox bắt đầu `Pending`, khóa identity/payload/hash sau enqueue và dùng dispatcher lease riêng; worker claim attempt/lease riêng qua backend, không nhận lease worker từ Redis message. Consumer kiểm tra envelope/receipt trước tác động, ghi receipt cùng transaction với tác động rồi mới ACK. ACID chỉ áp dụng trong transaction PostgreSQL: quota reserve, payment provenance, provisioning, outbox và idempotency phải được cập nhật nguyên tử trong transaction ngắn. Không giữ transaction khi chờ LLM, PayOS, S3, Redis hoặc worker. Redis mất thì outbox/cache fallback xử lý theo contract; không tuyên bố transaction ACID xuyên Azure, S3, Redis và PayOS.
 
 Khi nguồn có thẩm quyền không khả dụng, payment/quota/publish/start mới bị từ chối hoặc chờ reconcile; phiên đã bắt đầu được tiếp tục offline và sync sau. Đây là chính sách nhất quán theo capability, không gắn toàn hệ thống bằng nhãn CAP “CP” hoặc “AP”.
 
@@ -119,7 +121,7 @@ Trong SQL thiết kế hiện hành, compatibility của publish/start/playtest 
 ## Tài liệu liên quan
 
 - [Yêu cầu dự án](fire_evacuation_requirements.md)
-- [Tính năng và phase](fire-evacuation-training-features.md)
+- [Yêu cầu và phase](fire_evacuation_requirements.md)
 - [Workflow](fire-evacuation-training-workflows.md)
 - [Kiến trúc công nghệ](fire-evacuation-training-technology.md)
 - [Thiết kế RAG BIM hỗ trợ gợi ý PCCC](fire_evacuation_bim_rag_pccc.md)

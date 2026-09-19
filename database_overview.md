@@ -1,7 +1,7 @@
 # FET3D v6 — Database Overview (Họp nhóm)
 
 > **Dự án:** Fire Evacuation Training 3D | **DB:** PostgreSQL | **Schema version:** v6
-> **Tổng:** 36 bảng · 18 enum · 4 stored function chính
+> **Đối chiếu:** SQL thiết kế hiện có 56 bảng và 18 enum; tài liệu này mô tả 36 bảng nghiệp vụ chính. Stored function/gate được mô tả tại technology và schema, không dùng con số cũ làm tổng.
 > **Phase 1 cần thiết:** ~25 bảng · **Dự phòng / Phase 2:** 11 bảng
 
 ---
@@ -167,11 +167,22 @@ Draft ──[Source Accepted]──► Uploaded ──► Processing ──► R
 | Thuộc tính | Giá trị |
 |---|---|
 | **Mục đích** | Một lần worker chạy pipeline (Geometry hoặc Scenario) |
-| **Cột quan trọng** | `kind` (Geometry/Scenario), `status` (Queued/Running/Succeeded/Failed), `job_key` (UUID duy nhất), `attempt_number`, `toolchain_version`, `lease_owner`, `heartbeat_at` |
-| **Quan hệ** | N jobs → 1 revision; 1 job → N logs, N artifacts, 1 validation_run |
+| **Cột quan trọng** | `revision_id`, `source_document_id`, `scenario_version_id`, `kind` (Geometry/PlaytestPackage/ReleasePackage/QA), `job_key` (UUID duy nhất), `input_hash`, `status` (Queued/Running/Succeeded/Failed/Cancelled) |
+| **Quan hệ** | N logical jobs → 1 revision; 1 job → N `processing_job_attempts`, N logs, N artifacts, N validation runs |
 | **Ràng buộc** | Chỉ một job Queued/Running / revision tại một thời điểm (partial unique index) |
-| **Lưu ý** | Retry = tạo job mới với `attempt_number` tăng, không sửa job cũ |
+| **Lưu ý** | `processing_jobs` là job logic; retry/requeue giữ cùng job và tạo `processing_job_attempts` mới, không mất lịch sử attempt. `Cancelled` không tự chạy lại |
 | **Trạng thái** | ✅ Phase 1 cần thiết |
+
+### 10.1. `integration_outbox_events` và `integration_event_consumptions`
+
+| Thuộc tính | Giá trị |
+|---|---|
+| **Mục đích** | Giao event/job bền vững từ transaction PostgreSQL tới dispatcher/Redis Streams và dedup tác động của consumer |
+| **Cột chính** | `idempotency_key`, `event_type`, `schema_version`, `organization_id`, `aggregate_id`, `payload_hash`, `status`, `lease_token`, `lease_until`, `published_lease_token` |
+| **Consumer dedup** | Khóa chính `(consumer_name, event_key)`, giữ `payload_hash`, `processed_at` và `result_reference`; cùng key/hash là replay no-op trước tác động, khác hash/envelope là conflict |
+| **Nguồn sự thật** | PostgreSQL outbox/consumption record; Redis Stream ID chỉ là delivery ID. ACK chỉ sau commit kết quả hoặc bàn giao bền vững |
+| **Ràng buộc** | Trigger kiểm tra INSERT/UPDATE; tenant enqueue chỉ nhận `ProcessingJobRequested` schema `1`, system enqueue chỉ nhận `SystemNotification`/`PlatformCacheInvalidation` schema `1` bằng executor riêng, còn `ProcessingJobRequeue` chỉ do requeue gate tạo. Event lạ, sai scope hoặc sai schema bị từ chối. Identity/scope/type/schema/payload bất biến sau enqueue; scope null chỉ cho event hệ thống được backend xác minh. Dispatcher claim chỉ lấy Pending/Failed đến hạn hoặc Leased hết hạn; không dùng Redis cache để cấp quyền |
+| **Trạng thái** | Kiến trúc đích, chưa migration/triển khai |
 
 ### 11. `revision_processing_logs`
 | Thuộc tính | Giá trị |
