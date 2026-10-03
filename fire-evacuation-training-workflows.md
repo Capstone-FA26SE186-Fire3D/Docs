@@ -55,10 +55,40 @@ PlatformAdmin tạo Draft
 
 ### 2.1. Đăng ký, username và hồ sơ
 
-1. `POST /api/auth/register/trainee` nhận email/username/password/confirm password; `POST /api/auth/register/organization` nhận email/password/confirm password cùng tên, địa chỉ và số điện thoại tổ chức. BE tự gán role/tenant và retry không tạo bản ghi trùng.
+1. FE cho nhập form trước, giữ form trong bộ nhớ rồi chuyển sang bước **xác thực email bằng OTP**, không phải xác minh mật khẩu. `POST /api/auth/registration/request-otp` chỉ nhận email, gửi mã sáu số và chưa tạo tài khoản/tổ chức. Email đã đăng ký trả `409 EMAIL_EXISTS` với `errors.email`, kể cả account bị khóa/xóa mềm và email khác chữ hoa/thường. Quyết định này chủ động thông báo email trùng; không áp dụng response 202 che trạng thái account của forgot-password sang đăng ký.
+   Nút “Xác thực và đăng ký” gọi `POST /api/auth/registration/verify-otp`; khi nhận `registrationToken`, FE gửi **toàn bộ form cùng token** đến `/api/auth/register/trainee` (email/username/password/confirm password và hồ sơ cá nhân) hoặc `/api/auth/register/organization` (email/password/confirm password, hồ sơ cá nhân và tên/địa chỉ/điện thoại tổ chức). Đây là hai request nối tiếp dưới một thao tác UI. BE tự gán role/tenant, consume proof, tạo identity và audit trong cùng transaction. `201` trả account đã xác minh, chưa cấp JWT; chuyển sang login.
 2. Google exchange xác minh Firebase ID token. Tài khoản Google đã liên kết đăng nhập theo role/tenant hiện có; Google mới nhận onboarding token ngắn hạn, chọn Trainee hoặc OrganizationUser rồi hoàn tất thông tin tương ứng. Không có lựa chọn PlatformAdmin hoặc organization có sẵn.
 3. Username Trainee phải unique, lowercase và đúng pattern ngay trong đăng ký local hoặc bước Google onboarding. OrganizationUser có thể bổ sung username sau. Game start không còn `ProfileIncomplete`; tài khoản Trainee cũ thiếu username phải hoàn thiện trong profile/onboarding trước khi dùng chức năng phụ thuộc username.
 4. `GET/PATCH /api/me/profile`, change/set password, link Google và `GET/PATCH /api/me/organization` kiểm tra ETag/actor; không cập nhật role, tenant, email hoặc account status. Avatar upload dùng S3 intent/complete/delete, không nhận URL tùy ý.
+
+### 2.1.1. Contract OTP và bàn giao FE
+
+- `request-otp` gửi lần đầu, `/api/auth/resend-verification` gửi lại **OTP**, không gửi link. `202` xác nhận nhận yêu cầu, không chứng minh Mailgun đã delivered. Cooldown 60 giây; mã có hạn 10 phút; proof có hạn 15 phút và chỉ consume một lần. Resend qua cooldown vô hiệu mã/proof cũ; giới hạn 5/email/giờ, 20/IP/giờ, vượt quota trả 429/Retry-After.
+- FE không lưu password trong URL/localStorage/sessionStorage; đổi email phải bỏ proof và xác minh lại. Khi reload mất form thì quay lại form. Khóa nút lúc verify/register; validation form thất bại không consume proof, có thể sửa rồi gửi lại với proof còn hạn. Account được tạo thành công mới chuyển sang login. Retry với proof đã consume không tạo account thứ hai.
+- Email chuẩn hóa trim/lowercase, unique toàn bộ account bằng database; không tự gộp Gmail dấu chấm hoặc alias `+`. DOB là `YYYY-MM-DD`; password 6–128 ký tự, không trim, không toàn khoảng trắng; confirm khớp chính xác và không lưu. Không có account pending mới để job xóa sau 2 giờ trong luồng này.
+- `/api/auth/verify-email` chỉ dành cho link pending legacy, deprecated. Google onboarding/link giữ contract riêng; OTP đăng ký không thay thế forgot/reset-password.
+
+```mermaid
+sequenceDiagram
+    participant FE
+    participant BE
+    participant Mailgun
+    FE->>FE: Nhập form và giữ trong bộ nhớ
+    FE->>BE: request-otp(email)
+    alt Email đã đăng ký
+        BE-->>FE: 409 EMAIL_EXISTS + errors.email
+    else Email mới
+        BE-->>FE: 202
+        BE->>Mailgun: Worker gửi OTP
+        FE->>BE: verify-otp(email, otp)
+        BE-->>FE: registrationToken + expiresAt
+        FE->>BE: register loại account(form đầy đủ + token)
+        BE-->>FE: 201 account đã xác minh
+        FE->>FE: Chuyển sang login
+    end
+```
+
+Đây là contract sản phẩm; migration, worker/provider và tích hợp FE phải có bằng chứng riêng. Hướng dẫn test BE trong repo BE không chứng minh FE đã tích hợp.
 
 ## 3. Workflow Building và IFC
 

@@ -140,6 +140,7 @@ Phân biệt rõ Learn web (blog kiến thức cộng đồng) với mode Learn 
 ### Tài khoản và hồ sơ
 
 - Đăng ký Trainee dùng email/username/password/confirm password; username được chuẩn hóa lowercase và kiểm tra không trùng ngay trong form/backend. OrganizationUser đăng ký email/password/confirm password cùng tên, địa chỉ và số điện thoại tổ chức; username cá nhân có thể bổ sung sau.
+- Local registration: nhập đầy đủ form → chuyển sang màn hình OTP email → một nút “Xác thực và đăng ký” gọi verify-otp rồi register với toàn bộ JSON/form và registrationToken. Form/password chỉ giữ trong bộ nhớ; đổi email/reload yêu cầu xác minh lại khi mất form/proof. 409 EMAIL_EXISTS hiển thị dưới email và dẫn tới login/forgot-password; 400 hiển thị errors theo field. Khóa nút khi đang gửi; chỉ chuyển sang login sau 201. Send/resend gửi mã sáu số (cooldown 60 giây), không phải link; challenge 10 phút, proof 15 phút, một lần sử dụng. Xem workflow §2.1.1; đây là contract, không phải bằng chứng prototype đã tích hợp API.
 - Google mới sau xác minh Firebase hiển thị bước chọn `Trainee` hoặc `OrganizationUser`; Trainee nhập username, OrganizationUser nhập thông tin tổ chức. Google đã liên kết không chọn lại role. Hồ sơ cho phép đổi username, tên hiển thị, avatar và mật khẩu; game start không còn username gate.
 - Avatar dùng upload intent tới S3 private và signed URL ngắn hạn; không nhận URL ảnh tùy ý. Google Sign-In dùng Firebase, FCM chỉ là push, Mailgun gửi reset password.
 
