@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- Project : Fire Evacuation Training 3D
--- Version : 6.7 (Redis outbox/consumer contract, canonical event hashing and dispatcher fencing)
+-- Version : 7.0 (OTP auth, content approval, private access, rubric, seats and prepaid AI)
 -- Engine  : PostgreSQL 14+
 -- Scope   : IFC authoring pipeline; Building-level service entitlement;
 --           canonical Building QR -> published training list -> pinned session;
@@ -220,7 +220,7 @@ CREATE TABLE users (
     firebase_uid    VARCHAR(128) UNIQUE,                         -- UID Firebase của Google Sign-In, nếu có
     email           VARCHAR(255) UNIQUE NOT NULL,                 -- Email đăng nhập đã chuẩn hóa
     password_hash   TEXT,                                        -- Hash mật khẩu local; NULL với Google-only
-    username        VARCHAR(30),                                 -- Tên đăng nhập duy nhất; bắt buộc với Trainee mới
+    username        VARCHAR(30),                                 -- Định danh Trainee; login dùng email/password
     full_name       VARCHAR(255),                                -- Họ tên hiển thị, được phép trùng
     avatar_storage_key TEXT,                                     -- S3 object key private; không lưu signed URL
     profile_revision_no BIGINT NOT NULL DEFAULT 1,               -- ETag/revision cho cập nhật hồ sơ
@@ -710,12 +710,10 @@ CREATE TABLE trainings (
     status              training_status_enum NOT NULL DEFAULT 'Draft', -- Trạng thái vận hành
     mode                session_mode_enum NOT NULL DEFAULT 'Guided', -- Chế độ mặc định
     allowed_modes       TEXT[] DEFAULT ARRAY['Learn','Guided','Assessment'], -- Các chế độ Trainee được chọn
-    max_attempts        INT DEFAULT 1,                              -- Số lần diễn tập tối đa cho mỗi học viên
     created_by          UUID REFERENCES users(id) NOT NULL,         -- OrganizationUser tạo hoạt động
     created_at          TIMESTAMPTZ DEFAULT NOW(),                  -- Ngày tạo
     updated_at          TIMESTAMPTZ DEFAULT NOW(),                  -- Ngày cập nhật gần nhất
     CONSTRAINT check_training_dates CHECK (end_date IS NULL OR end_date > start_date),
-    CONSTRAINT check_training_attempts CHECK (max_attempts > 0),
     CONSTRAINT check_training_modes CHECK (
         allowed_modes <@ ARRAY['Learn','Guided','Assessment']::TEXT[]
         AND mode::TEXT = ANY(allowed_modes)
@@ -921,7 +919,7 @@ CREATE TABLE service_packages (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT check_service_package_price CHECK (unit_price >= 0),
     CONSTRAINT check_service_package_currency CHECK (currency ~ '^[A-Z]{3}$'),
-    CONSTRAINT check_service_package_duration CHECK (duration_months IS NULL OR duration_months > 0)
+    CONSTRAINT check_service_package_duration CHECK (duration_months IN (6,12))
 );
 
 -- Discount rules are catalog data. The applied rule and amount are copied into
@@ -957,7 +955,7 @@ CREATE TABLE service_package_discount_rules (
 CREATE TABLE quotations (
     id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id    UUID REFERENCES organizations(id) ON DELETE RESTRICT NOT NULL,
-    billing_purpose    VARCHAR(30) NOT NULL DEFAULT 'BuildingService', -- BuildingService | AIUsage
+    billing_purpose    VARCHAR(30) NOT NULL DEFAULT 'BuildingService', -- BuildingService | AIQuotaTopUp
     requested_by       UUID REFERENCES users(id) ON DELETE RESTRICT NOT NULL, -- OrganizationUser yêu cầu
     issued_by          UUID REFERENCES users(id) ON DELETE RESTRICT,          -- PlatformAdmin phát hành
     quotation_number   VARCHAR(50) UNIQUE NOT NULL,
@@ -979,7 +977,7 @@ CREATE TABLE quotations (
     created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT check_quotation_quantity CHECK (quantity > 0),
-    CONSTRAINT check_quotation_billing_purpose CHECK (billing_purpose IN ('BuildingService','AIUsage')),
+    CONSTRAINT check_quotation_billing_purpose CHECK (billing_purpose IN ('BuildingService','AIQuotaTopUp')),
     CONSTRAINT check_quotation_amounts CHECK (
         unit_price >= 0
         AND subtotal_amount >= 0
@@ -1199,27 +1197,6 @@ CREATE TABLE payment_provisioning_records (
     UNIQUE (payment_transaction_id, quotation_item_id)
 );
 
--- Kỳ đối soát AI của tổ chức; không suy ra từ kỳ service của Building.
-CREATE TABLE ai_billing_periods (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    organization_id     UUID REFERENCES organizations(id) ON DELETE RESTRICT NOT NULL,
-    period_start        TIMESTAMPTZ NOT NULL,
-    period_end          TIMESTAMPTZ NOT NULL,
-    status              VARCHAR(30) NOT NULL DEFAULT 'Open', -- Open | Closed | Invoiced | Paid
-    settlement_quotation_id UUID REFERENCES quotations(id) ON DELETE RESTRICT UNIQUE,
-    settlement_payment_transaction_id UUID REFERENCES payment_transactions(id) ON DELETE RESTRICT UNIQUE,
-    unit_price_snapshot JSONB NOT NULL DEFAULT '{}',
-    overage_units       INT NOT NULL DEFAULT 0,
-    overage_amount      DECIMAL(14, 2) NOT NULL DEFAULT 0,
-    currency            VARCHAR(3) NOT NULL DEFAULT 'VND',
-    closed_at           TIMESTAMPTZ,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT check_ai_period_dates CHECK (period_end > period_start),
-    CONSTRAINT check_ai_period_status CHECK (status IN ('Open','Closed','Invoiced','Paid')),
-    CONSTRAINT check_ai_period_amounts CHECK (overage_units >= 0 AND overage_amount >= 0 AND currency ~ '^[A-Z]{3}$'),
-    UNIQUE (organization_id, period_start, period_end)
-);
-
 CREATE TABLE ai_quota_grants (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id     UUID REFERENCES organizations(id) ON DELETE RESTRICT,
@@ -1262,16 +1239,6 @@ CREATE TABLE ai_policy_versions (
     UNIQUE (organization_id, audience, policy_kind, version_label)
 );
 
-CREATE TABLE ai_overage_consents (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    organization_id     UUID REFERENCES organizations(id) ON DELETE RESTRICT NOT NULL,
-    accepted_by         UUID REFERENCES users(id) ON DELETE RESTRICT NOT NULL,
-    accepted_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    terms_snapshot      JSONB NOT NULL,
-    scope               JSONB NOT NULL DEFAULT '{}',
-    UNIQUE (organization_id, accepted_by, accepted_at)
-);
-
 -- Bản ghi bền vững của một yêu cầu AI; ledger/reservation chỉ là các lớp tài chính
 -- tham chiếu request này, không thay thế trạng thái xử lý và kết quả kỹ thuật.
 CREATE TABLE ai_requests (
@@ -1310,6 +1277,8 @@ CREATE TABLE ai_requests (
     )
 );
 
+-- One service line identifies one concrete Building. Header quantity/unit_price
+-- are summary snapshots only; lines are the source for BuildingService scope.
 CREATE TABLE ai_usage_ledger (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     request_id          UUID REFERENCES ai_requests(id) ON DELETE RESTRICT UNIQUE NOT NULL, -- chống tính lượt/charge trùng khi retry
@@ -1322,10 +1291,7 @@ CREATE TABLE ai_usage_ledger (
     request_type        VARCHAR(80) NOT NULL, -- qa | scenario_draft | learn | debrief
     policy_version_id   UUID,
     units               INT NOT NULL DEFAULT 1,
-    overage_consent_id  UUID REFERENCES ai_overage_consents(id) ON DELETE RESTRICT,
-    billable            BOOLEAN NOT NULL DEFAULT false,
     unit_price_snapshot JSONB NOT NULL DEFAULT '{}',
-    billing_period_id   UUID REFERENCES ai_billing_periods(id) ON DELETE RESTRICT,
     status              VARCHAR(30) NOT NULL DEFAULT 'Reserved', -- Reserved | Recorded | Failed | Reversed | NeedsReconcile
     source_scope        JSONB NOT NULL DEFAULT '{}',
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -1334,43 +1300,10 @@ CREATE TABLE ai_usage_ledger (
         (audience = 'organization' AND organization_id IS NOT NULL)
         OR (audience = 'trainee' AND organization_id IS NULL AND building_id IS NULL)
     ),
-    CONSTRAINT check_ai_usage_overage_consent CHECK (billable = false OR overage_consent_id IS NOT NULL),
-    CONSTRAINT check_ai_usage_trainee_not_billable CHECK (audience = 'organization' OR billable = false),
     CONSTRAINT check_ai_usage_units CHECK (units > 0),
     CONSTRAINT check_ai_usage_status CHECK (status IN ('Reserved','Recorded','Failed','Reversed','NeedsReconcile'))
 );
 
-CREATE TABLE ai_billing_period_items (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    billing_period_id   UUID REFERENCES ai_billing_periods(id) ON DELETE RESTRICT NOT NULL,
-    usage_ledger_id     UUID REFERENCES ai_usage_ledger(id) ON DELETE RESTRICT NOT NULL,
-    units               INT NOT NULL,
-    unit_price_snapshot JSONB NOT NULL,
-    amount              DECIMAL(14,2) NOT NULL,
-    status              VARCHAR(20) NOT NULL DEFAULT 'Included', -- Included | Removed | Adjusted
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT check_ai_period_item_units CHECK (units > 0),
-    CONSTRAINT check_ai_period_item_amount CHECK (amount >= 0),
-    UNIQUE (billing_period_id, usage_ledger_id)
-);
-
-CREATE TABLE ai_billing_adjustments (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    billing_period_id   UUID REFERENCES ai_billing_periods(id) ON DELETE RESTRICT NOT NULL,
-    usage_ledger_id     UUID REFERENCES ai_usage_ledger(id) ON DELETE RESTRICT,
-    original_item_id    UUID REFERENCES ai_billing_period_items(id) ON DELETE RESTRICT,
-    adjustment_type     VARCHAR(30) NOT NULL, -- Credit | Debit | LateUsage | Correction
-    units               INT NOT NULL DEFAULT 0,
-    amount              DECIMAL(14,2) NOT NULL,
-    reason              TEXT NOT NULL,
-    created_by          UUID REFERENCES users(id) ON DELETE RESTRICT NOT NULL,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT check_ai_adjustment_type CHECK (adjustment_type IN ('Credit','Debit','LateUsage','Correction')),
-    CONSTRAINT check_ai_adjustment_amount CHECK (amount <> 0 OR units <> 0)
-);
-
--- One service line identifies one concrete Building. Header quantity/unit_price
--- are summary snapshots only; lines are the source for BuildingService scope.
 CREATE TABLE quotation_building_items (
     id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     quotation_id          UUID REFERENCES quotations(id) ON DELETE RESTRICT NOT NULL,
@@ -1391,8 +1324,8 @@ CREATE TABLE quotation_building_items (
     updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (quotation_id, building_id),
     UNIQUE (id, quotation_id),
-    CONSTRAINT check_quotation_item_action CHECK (purchase_action IN ('New','Renewal')),
-    CONSTRAINT check_quotation_item_duration CHECK (service_duration_months > 0),
+    CONSTRAINT check_quotation_item_action CHECK (purchase_action IN ('New','Renewal','Upgrade')),
+    CONSTRAINT check_quotation_item_duration CHECK (service_duration_months IN (6,12)),
     CONSTRAINT check_quotation_item_amounts CHECK (
         unit_price >= 0 AND discount_amount >= 0 AND subtotal_amount >= 0
         AND total_amount = subtotal_amount - discount_amount
@@ -1612,7 +1545,7 @@ COMMENT ON TABLE service_entitlements IS
 COMMENT ON TABLE payment_provisioning_records IS
 'Per-quotation-line reconcile record for an Applied PayOS transaction whose Building entitlement provisioning has not completed; one payment can have many records and retries reuse each line provisioning_key.';
 COMMENT ON TABLE ai_usage_ledger IS
-'Append-oriented AI usage facts by organization, building, user, audience and request type. Backend owns quota/overage calculation and request idempotency.';
+'Append-oriented AI usage facts by organization, building, user, audience and request type. Backend owns prepaid quota accounting and request idempotency.';
 COMMENT ON TABLE learn_posts IS
 'Stable Learn blog identity. PlatformAdmin publishes, hides, shows, soft-deletes or restores a pointer to an immutable learn_post_versions snapshot; Hidden retains the pointer for show and RAG, while Deleted is excluded from public reads and retrieval. It is unrelated to Unity trainings or sessions.';
 COMMENT ON TABLE learn_post_versions IS
@@ -1743,7 +1676,6 @@ CREATE INDEX idx_invoice_metadata_organization ON invoice_metadata(organization_
 CREATE INDEX idx_service_entitlements_building ON service_entitlements(building_id, starts_at DESC);
 CREATE INDEX idx_service_entitlements_active ON service_entitlements(building_id, ends_at)
 WHERE status IN ('Trial','Active');
-CREATE INDEX idx_ai_billing_periods_organization ON ai_billing_periods(organization_id, period_start DESC);
 CREATE INDEX idx_ai_quota_grants_scope ON ai_quota_grants(organization_id, building_id, audience, starts_at, ends_at);
 CREATE INDEX idx_ai_quota_grants_trainee ON ai_quota_grants(trainee_user_id, quota_kind, starts_at, ends_at);
 CREATE INDEX idx_ai_usage_ledger_organization ON ai_usage_ledger(organization_id, created_at DESC);
@@ -2435,7 +2367,7 @@ BEGIN
               AND entitlement.organization_id = NEW.organization_id
               AND entitlement.status = 'Active'
               AND entitlement.starts_at <= pg_catalog.now()
-              AND entitlement.ends_at > pg_catalog.now()
+              AND public.effective_entitlement_end_v7(entitlement.id,entitlement.ends_at) > pg_catalog.now()
         ) THEN
             RAISE EXCEPTION 'publish requires an online active Building service entitlement';
         END IF;
@@ -3763,7 +3695,7 @@ BEGIN
          WHERE entitlement.building_id = v_building_id
            AND entitlement.organization_id = v_session.organization_id
            AND entitlement.status = 'Active'
-           AND entitlement.starts_at <= pg_catalog.now() AND entitlement.ends_at > pg_catalog.now()
+           AND entitlement.starts_at <= pg_catalog.now() AND public.effective_entitlement_end_v7(entitlement.id,entitlement.ends_at) > pg_catalog.now()
     ) THEN RAISE EXCEPTION 'online start requires an active Building service entitlement'; END IF;
 
     PERFORM pg_catalog.set_config('fet3d.session_start_id', v_session.id::TEXT, true);
@@ -3827,7 +3759,7 @@ BEGIN
        AND entitlement.organization_id = v_playtest.organization_id
        AND entitlement.building_id = v_playtest.building_id
        AND entitlement.status IN ('Trial','Active')
-       AND entitlement.starts_at <= pg_catalog.now() AND entitlement.ends_at > pg_catalog.now()
+       AND entitlement.starts_at <= pg_catalog.now() AND public.effective_entitlement_end_v7(entitlement.id,entitlement.ends_at) > pg_catalog.now()
      FOR UPDATE;
     IF NOT FOUND THEN RAISE EXCEPTION 'playtest requires a current Trial or Active Building entitlement'; END IF;
     IF v_entitlement.status = 'Trial' THEN
@@ -3910,253 +3842,101 @@ CREATE TABLE ai_usage_reservations (
 CREATE OR REPLACE FUNCTION reserve_ai_usage(
     p_request_id UUID, p_idempotency_key TEXT, p_user_id UUID, p_audience TEXT,
     p_organization_id UUID, p_building_id UUID, p_request_type TEXT, p_units INT,
-    p_billable BOOLEAN, p_overage_consent_id UUID, p_billing_period_id UUID,
-    p_unit_price_snapshot JSONB, p_source_scope JSONB DEFAULT '{}'
+    p_source_scope JSONB DEFAULT '{}'
 )
 RETURNS UUID LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public
 AS $$
-DECLARE
-    v_usage_id UUID;
-    v_reservation_id UUID;
-    v_request public.ai_requests%ROWTYPE;
-    v_existing public.ai_usage_ledger%ROWTYPE;
-    v_remaining INT := p_units;
-    v_policy_version_id UUID;
-    v_period public.ai_billing_periods%ROWTYPE;
-    v_grant RECORD;
-    v_take INT;
+DECLARE r public.ai_requests%ROWTYPE; u public.ai_usage_ledger%ROWTYPE;
+    usage_id UUID; reservation_id UUID; remaining INT := p_units; g RECORD; take INT;
 BEGIN
-    IF p_request_id IS NULL
-       OR NULLIF(pg_catalog.btrim(p_idempotency_key), '') IS NULL
-       OR p_user_id IS NULL
-       OR NULLIF(pg_catalog.btrim(p_audience), '') IS NULL
-       OR p_units IS NULL OR p_units <= 0 THEN
-        RAISE EXCEPTION 'AI request key and positive units are required';
+    IF p_units IS NULL OR p_units <= 0 OR NULLIF(btrim(p_idempotency_key),'') IS NULL THEN
+        RAISE EXCEPTION 'positive quota units and idempotency key required';
     END IF;
-
-    PERFORM pg_catalog.pg_advisory_xact_lock(
-        pg_catalog.hashtextextended(pg_catalog.btrim(p_idempotency_key), 0)
-    );
-
-    -- Accounting lock order is period (when present) -> request -> ledger /
-    -- reservation -> grants in ascending id order. Do not hold this transaction
-    -- while waiting for the AI provider.
-    IF p_billing_period_id IS NOT NULL THEN
-        SELECT * INTO v_period
-          FROM public.ai_billing_periods
-         WHERE id = p_billing_period_id
-         FOR UPDATE;
-        IF NOT FOUND OR v_period.organization_id IS DISTINCT FROM p_organization_id THEN
-            RAISE EXCEPTION 'AI billing period does not belong to the request organization';
-        END IF;
-    END IF;
-
-    SELECT * INTO v_request
-      FROM public.ai_requests
-     WHERE id = p_request_id
-     FOR UPDATE;
-    IF NOT FOUND THEN RAISE EXCEPTION 'AI request does not exist'; END IF;
-
-    SELECT * INTO v_existing
-      FROM public.ai_usage_ledger
-     WHERE request_id = p_request_id OR idempotency_key = pg_catalog.btrim(p_idempotency_key)
-     FOR UPDATE;
+    -- Serialize one audience pool, then request -> ledger/reservation -> grants by id.
+    PERFORM pg_advisory_xact_lock(hashtextextended('ai-pool:'||p_audience||':'||
+        COALESCE(p_organization_id,p_user_id)::TEXT,0));
+    SELECT * INTO r FROM public.ai_requests WHERE id=p_request_id FOR UPDATE;
+    IF NOT FOUND OR r.user_id IS DISTINCT FROM p_user_id OR r.audience IS DISTINCT FROM p_audience
+       OR r.organization_id IS DISTINCT FROM p_organization_id OR r.building_id IS DISTINCT FROM p_building_id
+       OR r.request_type IS DISTINCT FROM p_request_type OR r.idempotency_key IS DISTINCT FROM btrim(p_idempotency_key)
+       OR r.source_scope IS DISTINCT FROM p_source_scope THEN RAISE EXCEPTION 'request identity/scope mismatch'; END IF;
+    SELECT * INTO u FROM public.ai_usage_ledger WHERE request_id=r.id FOR UPDATE;
     IF FOUND THEN
-        IF v_existing.request_id IS DISTINCT FROM p_request_id
-           OR v_existing.idempotency_key IS DISTINCT FROM pg_catalog.btrim(p_idempotency_key)
-           OR v_existing.user_id IS DISTINCT FROM p_user_id
-           OR v_existing.audience IS DISTINCT FROM p_audience
-           OR v_existing.organization_id IS DISTINCT FROM p_organization_id
-           OR v_existing.building_id IS DISTINCT FROM p_building_id
-           OR v_existing.request_type IS DISTINCT FROM p_request_type
-           OR v_existing.units IS DISTINCT FROM p_units
-           OR v_existing.billable IS DISTINCT FROM p_billable
-           OR v_existing.overage_consent_id IS DISTINCT FROM p_overage_consent_id
-           OR v_existing.billing_period_id IS DISTINCT FROM p_billing_period_id
-           OR v_existing.unit_price_snapshot IS DISTINCT FROM COALESCE(p_unit_price_snapshot, '{}'::JSONB)
-           OR v_existing.source_scope IS DISTINCT FROM COALESCE(p_source_scope, '{}'::JSONB)
-        THEN
-            RAISE EXCEPTION 'AI idempotency key/request_id was reused with different input';
+        IF u.units IS DISTINCT FROM p_units THEN RAISE EXCEPTION 'reservation replay units conflict'; END IF;
+        RETURN u.id;
+    END IF;
+    IF r.status <> 'Accepted' THEN RAISE EXCEPTION 'request must be Accepted'; END IF;
+    -- Authorize again immediately before provider work; accepted results can still reconcile later.
+    PERFORM public.authorize_ai_scope_v7(r.user_id,r.audience,r.organization_id,r.building_id,r.source_scope);
+    INSERT INTO public.ai_usage_ledger(request_id,idempotency_key,user_id,audience,organization_id,
+        building_id,request_type,policy_version_id,units,source_scope)
+    VALUES(r.id,r.idempotency_key,r.user_id,r.audience,r.organization_id,r.building_id,
+        r.request_type,r.policy_version_id,p_units,r.source_scope) RETURNING id INTO usage_id;
+    INSERT INTO public.ai_usage_reservations(request_id,units) VALUES(r.id,p_units) RETURNING id INTO reservation_id;
+    FOR g IN SELECT * FROM public.ai_quota_grants
+        WHERE audience=p_audience AND ((p_audience='organization' AND organization_id=p_organization_id)
+          OR (p_audience='trainee' AND trainee_user_id=p_user_id))
+          AND starts_at<=now() AND ends_at>now()
+          AND quota_unit=(SELECT policy_snapshot->>'quota_unit' FROM public.ai_policy_versions WHERE id=r.policy_version_id)
+          ORDER BY id FOR UPDATE
+    LOOP
+        take:=LEAST(remaining,g.units_granted-g.units_used-g.units_reserved);
+        IF take>0 THEN
+            UPDATE public.ai_quota_grants SET units_reserved=units_reserved+take WHERE id=g.id;
+            INSERT INTO public.ai_usage_reservation_allocations(reservation_id,quota_grant_id,units)
+                VALUES(reservation_id,g.id,take);
+            remaining:=remaining-take;
         END IF;
-        RETURN v_existing.id;
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1 FROM public.ai_requests AS request
-         WHERE request.id = p_request_id
-           AND request.idempotency_key = pg_catalog.btrim(p_idempotency_key)
-           AND request.user_id = p_user_id
-           AND request.audience = p_audience
-           AND request.request_type = p_request_type
-           AND request.organization_id IS NOT DISTINCT FROM p_organization_id
-           AND request.building_id IS NOT DISTINCT FROM p_building_id
-    ) THEN
-        RAISE EXCEPTION 'AI usage must reference the matching durable AI request';
-    END IF;
-
-    SELECT request.policy_version_id
-      INTO v_policy_version_id
-      FROM public.ai_requests AS request
-     WHERE request.id = p_request_id;
-
-    INSERT INTO public.ai_usage_ledger(
-        request_id, idempotency_key, organization_id, building_id, user_id,
-        audience, request_type, policy_version_id, units, overage_consent_id,
-        billable, unit_price_snapshot, billing_period_id, status, source_scope
-    ) VALUES (
-        p_request_id, pg_catalog.btrim(p_idempotency_key), p_organization_id, p_building_id, p_user_id,
-        p_audience, p_request_type, v_policy_version_id, p_units, p_overage_consent_id,
-        p_billable, COALESCE(p_unit_price_snapshot, '{}'::JSONB), p_billing_period_id, 'Reserved',
-        COALESCE(p_source_scope, '{}'::JSONB)
-    ) RETURNING id INTO v_usage_id;
-
-    INSERT INTO public.ai_usage_reservations(request_id, units)
-    VALUES (p_request_id, p_units)
-    RETURNING id INTO v_reservation_id;
-
-    IF p_billable = false THEN
-        FOR v_grant IN
-            SELECT grant_row.*
-              FROM public.ai_quota_grants AS grant_row
-             WHERE grant_row.audience = p_audience
-               AND (
-                   (p_audience = 'organization' AND grant_row.organization_id = p_organization_id)
-                   OR (p_audience = 'trainee' AND grant_row.trainee_user_id = p_user_id)
-               )
-               AND grant_row.starts_at <= pg_catalog.now()
-               AND grant_row.ends_at > pg_catalog.now()
-               AND grant_row.units_used + grant_row.units_reserved < grant_row.units_granted
-             ORDER BY grant_row.id
-             FOR UPDATE
-        LOOP
-            v_take := LEAST(
-                v_remaining,
-                v_grant.units_granted - v_grant.units_used - v_grant.units_reserved
-            );
-            IF v_take > 0 THEN
-                UPDATE public.ai_quota_grants
-                   SET units_reserved = units_reserved + v_take
-                 WHERE id = v_grant.id;
-                INSERT INTO public.ai_usage_reservation_allocations(
-                    reservation_id, quota_grant_id, units
-                ) VALUES (v_reservation_id, v_grant.id, v_take);
-                v_remaining := v_remaining - v_take;
-            END IF;
-            EXIT WHEN v_remaining = 0;
-        END LOOP;
-        IF v_remaining > 0 THEN
-            RAISE EXCEPTION 'no available AI quota';
-        END IF;
-    END IF;
-
-    UPDATE public.ai_requests
-       SET status = 'Processing'
-     WHERE id = p_request_id
-       AND status = 'Accepted';
-
-    RETURN v_usage_id;
+        EXIT WHEN remaining=0;
+    END LOOP;
+    IF remaining>0 THEN RAISE EXCEPTION 'AI_QUOTA_EXHAUSTED: purchase paid quota before retry'; END IF;
+    UPDATE public.ai_requests SET status='Processing' WHERE id=r.id;
+    RETURN usage_id;
 END;
 $$;
 
 
-CREATE OR REPLACE FUNCTION settle_ai_usage(p_request_id UUID, p_status TEXT)
+CREATE OR REPLACE FUNCTION settle_ai_usage(p_request_id UUID,p_status TEXT)
 RETURNS UUID LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public
 AS $$
-DECLARE
-    v_request public.ai_requests%ROWTYPE;
-    v_reservation public.ai_usage_reservations%ROWTYPE;
-    v_usage public.ai_usage_ledger%ROWTYPE;
-    v_period_id UUID;
-    v_period public.ai_billing_periods%ROWTYPE;
-    v_allocation RECORD;
+DECLARE r public.ai_requests%ROWTYPE; u public.ai_usage_ledger%ROWTYPE;
+    res public.ai_usage_reservations%ROWTYPE; allocation RECORD;
 BEGIN
-    IF p_status NOT IN ('Recorded','Failed','Reversed','NeedsReconcile') THEN
-        RAISE EXCEPTION 'invalid AI usage settlement status';
+    IF p_status NOT IN ('Recorded','Failed','Reversed','NeedsReconcile') THEN RAISE EXCEPTION 'invalid settlement'; END IF;
+    SELECT * INTO r FROM public.ai_requests WHERE id=p_request_id;
+    IF NOT FOUND THEN RAISE EXCEPTION 'request missing'; END IF;
+    PERFORM pg_advisory_xact_lock(hashtextextended('ai-pool:'||r.audience||':'||COALESCE(r.organization_id,r.user_id)::TEXT,0));
+    SELECT * INTO r FROM public.ai_requests WHERE id=p_request_id FOR UPDATE;
+    SELECT * INTO u FROM public.ai_usage_ledger WHERE request_id=r.id FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'ledger missing'; END IF;
+    SELECT * INTO res FROM public.ai_usage_reservations WHERE request_id=r.id FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'reservation missing'; END IF;
+    IF u.status IN ('Recorded','Failed','Reversed') THEN
+        IF u.status=p_status THEN RETURN r.id; END IF;
+        RAISE EXCEPTION 'terminal settlement conflict';
     END IF;
-
-    -- Match reserve_ai_usage: period (when present) -> request -> ledger /
-    -- reservation -> grants in ascending id order.
-    SELECT billing_period_id INTO v_period_id
-      FROM public.ai_usage_ledger
-     WHERE request_id = p_request_id;
-    IF v_period_id IS NOT NULL THEN
-        SELECT * INTO v_period
-          FROM public.ai_billing_periods
-         WHERE id = v_period_id
-         FOR UPDATE;
-        IF NOT FOUND THEN RAISE EXCEPTION 'AI billing period does not exist'; END IF;
+    IF p_status='NeedsReconcile' THEN
+        UPDATE public.ai_usage_ledger SET status=p_status WHERE id=u.id;
+        UPDATE public.ai_requests SET status='NeedsReconcile' WHERE id=r.id AND status='Processing';
+        RETURN r.id;
     END IF;
-
-    SELECT * INTO v_request
-      FROM public.ai_requests
-     WHERE id = p_request_id
-     FOR UPDATE;
-    IF NOT FOUND THEN RAISE EXCEPTION 'AI request does not exist'; END IF;
-
-    SELECT * INTO v_usage
-      FROM public.ai_usage_ledger
-     WHERE request_id = p_request_id
-     FOR UPDATE;
-    IF NOT FOUND THEN RAISE EXCEPTION 'AI usage request does not exist'; END IF;
-
-    SELECT * INTO v_reservation
-      FROM public.ai_usage_reservations
-     WHERE request_id = p_request_id
-     FOR UPDATE;
-    IF NOT FOUND THEN RAISE EXCEPTION 'AI usage reservation does not exist'; END IF;
-
-    IF v_usage.status IN ('Recorded','Failed','Reversed') THEN
-        IF v_usage.status = p_status THEN RETURN p_request_id; END IF;
-        RAISE EXCEPTION 'AI usage is already settled with a different status';
+    IF (p_status='Recorded' AND r.status<>'Succeeded') OR
+       (p_status IN ('Failed','Reversed') AND r.status NOT IN ('Failed','Rejected')) THEN
+        RAISE EXCEPTION 'record durable provider result before settlement';
     END IF;
-
-    IF p_status = 'NeedsReconcile' THEN
-        UPDATE public.ai_usage_ledger
-           SET status = 'NeedsReconcile'
-         WHERE request_id = p_request_id;
-        UPDATE public.ai_requests
-           SET status = 'NeedsReconcile'
-         WHERE id = p_request_id
-           AND status IN ('Accepted','Processing');
-        RETURN p_request_id;
-    END IF;
-
-    IF v_reservation.status <> 'Reserved' THEN
-        RAISE EXCEPTION 'AI reservation is not available for settlement';
-    END IF;
-
-    FOR v_allocation IN
-        SELECT * FROM public.ai_usage_reservation_allocations
-         WHERE reservation_id = v_reservation.id
-         ORDER BY quota_grant_id
-         FOR UPDATE
+    IF res.status<>'Reserved' THEN RAISE EXCEPTION 'reservation already settled'; END IF;
+    FOR allocation IN SELECT * FROM public.ai_usage_reservation_allocations
+        WHERE reservation_id=res.id ORDER BY quota_grant_id FOR UPDATE
     LOOP
-        UPDATE public.ai_quota_grants
-           SET units_reserved = units_reserved - v_allocation.units,
-               units_used = units_used + CASE WHEN p_status = 'Recorded' THEN v_allocation.units ELSE 0 END
-         WHERE id = v_allocation.quota_grant_id
-           AND units_reserved >= v_allocation.units;
-        IF NOT FOUND THEN
-            RAISE EXCEPTION 'AI quota reservation integrity check failed';
-        END IF;
+        UPDATE public.ai_quota_grants SET units_reserved=units_reserved-allocation.units,
+            units_used=units_used+CASE WHEN p_status='Recorded' THEN allocation.units ELSE 0 END
+            WHERE id=allocation.quota_grant_id AND units_reserved>=allocation.units;
+        IF NOT FOUND THEN RAISE EXCEPTION 'quota reservation integrity failure'; END IF;
     END LOOP;
-
-    UPDATE public.ai_usage_reservations
-       SET status = CASE WHEN p_status = 'Recorded' THEN 'Consumed' ELSE 'Released' END,
-           settled_at = pg_catalog.clock_timestamp()
-     WHERE id = v_reservation.id;
-
-    UPDATE public.ai_usage_ledger
-       SET status = p_status
-     WHERE request_id = p_request_id;
-
-    UPDATE public.ai_requests
-       SET status = CASE WHEN p_status = 'Recorded' THEN 'Succeeded' ELSE 'Failed' END,
-           completed_at = pg_catalog.clock_timestamp()
-     WHERE id = p_request_id
-       AND status IN ('Accepted','Processing','NeedsReconcile');
-
-    RETURN p_request_id;
+    UPDATE public.ai_usage_reservations SET status=CASE WHEN p_status='Recorded' THEN 'Consumed' ELSE 'Released' END,
+        settled_at=clock_timestamp() WHERE id=res.id;
+    UPDATE public.ai_usage_ledger SET status=p_status WHERE id=u.id;
+    RETURN r.id;
 END;
 $$;
 
@@ -4606,10 +4386,6 @@ CREATE TABLE ai_usage_reservation_allocations (
     UNIQUE (reservation_id, quota_grant_id)
 );
 
-ALTER TABLE ai_overage_consents
-    ADD CONSTRAINT check_ai_consent_terms_snapshot
-        CHECK (jsonb_typeof(terms_snapshot) = 'object');
-
 ALTER TABLE revision_reviews
     ALTER COLUMN reviewed_at SET DEFAULT NOW(),
     ALTER COLUMN reviewed_at SET NOT NULL;
@@ -4623,17 +4399,6 @@ CREATE UNIQUE INDEX uq_knowledge_common_source_identity
 CREATE UNIQUE INDEX uq_knowledge_organization_source_identity
     ON knowledge_sources (organization_id, source_hash, version_label)
     WHERE visibility = 'Organization';
-
-ALTER TABLE ai_billing_periods
-    ADD COLUMN disputed_at TIMESTAMPTZ,
-    ADD COLUMN disputed_reason TEXT,
-    ADD COLUMN disputed_by UUID REFERENCES users(id) ON DELETE RESTRICT,
-    DROP CONSTRAINT IF EXISTS check_ai_period_status,
-    ADD CONSTRAINT check_ai_period_status_v2
-        CHECK (status IN ('Open','Closed','Invoiced','Paid')),
-    ADD CONSTRAINT check_ai_period_dispute_metadata
-        CHECK ((disputed_at IS NULL AND disputed_reason IS NULL AND disputed_by IS NULL)
-            OR (disputed_at IS NOT NULL AND NULLIF(pg_catalog.btrim(disputed_reason), '') IS NOT NULL AND disputed_by IS NOT NULL));
 
 ALTER TABLE ai_requests
     ADD CONSTRAINT check_ai_request_citations_array
@@ -4969,92 +4734,17 @@ BEFORE INSERT OR UPDATE ON ai_requests
 FOR EACH ROW EXECUTE FUNCTION enforce_ai_request_write_v2();
 
 CREATE OR REPLACE FUNCTION validate_ai_usage_provenance_v2()
-RETURNS TRIGGER LANGUAGE plpgsql SET search_path = pg_catalog
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path=pg_catalog,public
 AS $$
-DECLARE
-    v_period public.ai_billing_periods%ROWTYPE;
 BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM public.ai_requests AS request
-         WHERE request.id = NEW.request_id
-           AND request.user_id = NEW.user_id
-           AND request.audience = NEW.audience
-           AND request.request_type = NEW.request_type
-           AND request.organization_id IS NOT DISTINCT FROM NEW.organization_id
-           AND request.building_id IS NOT DISTINCT FROM NEW.building_id
-    ) THEN
-        RAISE EXCEPTION 'AI usage must match its durable request identity and tenant scope';
-    END IF;
-    IF NEW.policy_version_id IS NULL OR NOT EXISTS (
-        SELECT 1 FROM public.ai_policy_versions AS policy
-         WHERE policy.id = NEW.policy_version_id
-           AND (policy.audience = NEW.audience OR policy.audience = 'common')
-           AND (policy.organization_id IS NULL OR policy.organization_id = NEW.organization_id)
-    ) THEN
-        RAISE EXCEPTION 'AI usage requires the applied quota/pricing policy version';
-    END IF;
-
-    IF NEW.audience = 'organization' THEN
-        IF NEW.organization_id IS NULL OR (NEW.building_id IS NOT NULL AND NOT EXISTS (
-            SELECT 1 FROM public.buildings AS building
-             WHERE building.id = NEW.building_id AND building.organization_id = NEW.organization_id
-        )) THEN
-            RAISE EXCEPTION 'organization AI usage building must belong to the usage organization';
-        END IF;
-        IF NEW.billable AND (
-            NEW.overage_consent_id IS NULL OR NEW.billing_period_id IS NULL
-            OR pg_catalog.jsonb_typeof(NEW.unit_price_snapshot) <> 'object'
-            OR NOT (NEW.unit_price_snapshot ? 'unit_price')
-            OR NOT (NEW.unit_price_snapshot ? 'currency')
-            OR (NEW.unit_price_snapshot ->> 'currency') !~ '^[A-Z]{3}$'
-            OR (NEW.unit_price_snapshot ->> 'unit_price') !~ '^[0-9]+([.][0-9]+)?$'
-        ) THEN
-            RAISE EXCEPTION 'billable organization AI usage requires consent, period and price snapshot';
-        END IF;
-        IF NEW.overage_consent_id IS NOT NULL AND NOT EXISTS (
-            SELECT 1 FROM public.ai_overage_consents AS consent
-             WHERE consent.id = NEW.overage_consent_id
-               AND consent.organization_id = NEW.organization_id
-        ) THEN
-            RAISE EXCEPTION 'AI overage consent must belong to the usage organization';
-        END IF;
-        IF NEW.billing_period_id IS NOT NULL THEN
-            SELECT * INTO v_period
-              FROM public.ai_billing_periods AS period
-             WHERE period.id = NEW.billing_period_id
-             FOR UPDATE;
-            IF NOT FOUND
-               OR v_period.organization_id IS DISTINCT FROM NEW.organization_id
-               OR (TG_OP = 'INSERT' AND v_period.status <> 'Open') THEN
-                RAISE EXCEPTION 'AI usage billing period must belong to the same organization';
-            END IF;
-        END IF;
-    ELSE
-        IF NEW.organization_id IS NOT NULL OR NEW.building_id IS NOT NULL
-           OR NEW.billable OR NEW.overage_consent_id IS NOT NULL
-           OR NEW.billing_period_id IS NOT NULL THEN
-            RAISE EXCEPTION 'Trainee AI usage is user-scoped and non-billable';
-        END IF;
-    END IF;
-
-    IF TG_OP = 'UPDATE' AND (
-        OLD.request_id IS DISTINCT FROM NEW.request_id
-        OR OLD.idempotency_key IS DISTINCT FROM NEW.idempotency_key
-        OR OLD.organization_id IS DISTINCT FROM NEW.organization_id
-        OR OLD.building_id IS DISTINCT FROM NEW.building_id
-        OR OLD.user_id IS DISTINCT FROM NEW.user_id
-        OR OLD.audience IS DISTINCT FROM NEW.audience
-        OR OLD.request_type IS DISTINCT FROM NEW.request_type
-        OR OLD.policy_version_id IS DISTINCT FROM NEW.policy_version_id
-        OR OLD.units IS DISTINCT FROM NEW.units
-        OR OLD.overage_consent_id IS DISTINCT FROM NEW.overage_consent_id
-        OR OLD.billable IS DISTINCT FROM NEW.billable
-        OR OLD.unit_price_snapshot IS DISTINCT FROM NEW.unit_price_snapshot
-        OR OLD.billing_period_id IS DISTINCT FROM NEW.billing_period_id
-        OR OLD.source_scope IS DISTINCT FROM NEW.source_scope
-    ) THEN
-        RAISE EXCEPTION 'AI usage financial provenance is immutable';
-    END IF;
+    IF NOT EXISTS(SELECT 1 FROM public.ai_requests r WHERE r.id=NEW.request_id
+      AND r.user_id=NEW.user_id AND r.audience=NEW.audience AND r.request_type=NEW.request_type
+      AND r.organization_id IS NOT DISTINCT FROM NEW.organization_id
+      AND r.building_id IS NOT DISTINCT FROM NEW.building_id
+      AND r.policy_version_id=NEW.policy_version_id AND r.source_scope=NEW.source_scope) THEN
+        RAISE EXCEPTION 'ledger must match durable request provenance'; END IF;
+    IF TG_OP='UPDATE' AND (to_jsonb(OLD)-'status') IS DISTINCT FROM (to_jsonb(NEW)-'status') THEN
+        RAISE EXCEPTION 'usage identity and units immutable'; END IF;
     RETURN NEW;
 END;
 $$;
@@ -5286,8 +4976,8 @@ GRANT EXECUTE ON FUNCTION record_session_heartbeat(UUID, UUID, BIGINT, TIMESTAMP
     TO fet3d_session_sync_executor;
 
 REVOKE ALL PRIVILEGES ON TABLE ai_requests, ai_usage_ledger, ai_usage_reservations,
-    ai_usage_reservation_allocations, ai_billing_periods, ai_billing_period_items,
-    ai_billing_adjustments, ai_quota_grants, ai_overage_consents FROM PUBLIC;
+    ai_usage_reservation_allocations,
+     ai_quota_grants FROM PUBLIC;
 REVOKE ALL PRIVILEGES ON TABLE payment_transactions, service_entitlements,
     quotations, releases, release_packages FROM fet3d_ai_service_executor, fet3d_processing_worker_executor;
 
@@ -5377,17 +5067,6 @@ ALTER TABLE revision_artifacts
     ADD CONSTRAINT uq_revision_artifact_attempt_hash
         UNIQUE (attempt_id, artifact_type, sha256_hash);
 
-ALTER TABLE ai_billing_adjustments
-    ADD COLUMN organization_id UUID REFERENCES organizations(id) ON DELETE RESTRICT,
-    ADD COLUMN idempotency_key VARCHAR(255);
-
-ALTER TABLE ai_billing_adjustments
-    ALTER COLUMN organization_id SET NOT NULL,
-    ALTER COLUMN idempotency_key SET NOT NULL,
-    ADD CONSTRAINT uq_ai_billing_adjustment_idempotency UNIQUE (idempotency_key),
-    ADD CONSTRAINT check_ai_billing_adjustment_idempotency
-        CHECK (NULLIF(pg_catalog.btrim(idempotency_key), '') IS NOT NULL);
-
 CREATE OR REPLACE FUNCTION enforce_processing_job_identity()
 RETURNS TRIGGER LANGUAGE plpgsql SET search_path = pg_catalog
 AS $$
@@ -5470,304 +5149,6 @@ CREATE TRIGGER enforce_release_package_pin_immutability_before_write
 BEFORE UPDATE OR DELETE ON release_packages
 FOR EACH ROW EXECUTE FUNCTION enforce_release_package_pin_immutability();
 
--- A closed period is an immutable membership and price snapshot. Late or
--- disputed usage is represented by an adjustment, never by editing an item.
-CREATE OR REPLACE FUNCTION enforce_ai_billing_period_item_write()
-RETURNS TRIGGER LANGUAGE plpgsql SET search_path = pg_catalog
-AS $$
-DECLARE
-    v_period public.ai_billing_periods%ROWTYPE;
-    v_usage public.ai_usage_ledger%ROWTYPE;
-    v_period_id UUID;
-BEGIN
-    v_period_id := CASE WHEN TG_OP = 'DELETE' THEN OLD.billing_period_id ELSE NEW.billing_period_id END;
-    SELECT * INTO v_period
-      FROM public.ai_billing_periods
-     WHERE id = v_period_id
-     FOR UPDATE;
-    IF NOT FOUND THEN RAISE EXCEPTION 'AI billing period does not exist'; END IF;
-    IF v_period.status <> 'Open' THEN
-        RAISE EXCEPTION 'AI billing period items are immutable after close';
-    END IF;
-    IF TG_OP = 'UPDATE' AND (
-        OLD.billing_period_id IS DISTINCT FROM NEW.billing_period_id
-        OR OLD.usage_ledger_id IS DISTINCT FROM NEW.usage_ledger_id
-    ) THEN
-        RAISE EXCEPTION 'AI period item membership is immutable; use an adjustment or a new item';
-    END IF;
-    IF TG_OP IN ('INSERT', 'UPDATE') THEN
-        SELECT * INTO v_usage FROM public.ai_usage_ledger WHERE id = NEW.usage_ledger_id FOR SHARE;
-        IF NOT FOUND OR v_usage.organization_id IS DISTINCT FROM v_period.organization_id
-           OR v_usage.billing_period_id IS DISTINCT FROM NEW.billing_period_id
-           OR NOT v_usage.billable OR v_usage.status <> 'Recorded'
-           OR v_usage.units IS DISTINCT FROM NEW.units THEN
-            RAISE EXCEPTION 'AI period item usage is not a confirmed billable usage in the same period';
-        END IF;
-    END IF;
-    IF TG_OP = 'DELETE' THEN
-        RETURN OLD;
-    END IF;
-    RETURN NEW;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS enforce_ai_billing_period_item_write_before ON ai_billing_period_items;
-CREATE TRIGGER enforce_ai_billing_period_item_write_before
-BEFORE INSERT OR UPDATE OR DELETE ON ai_billing_period_items
-FOR EACH ROW EXECUTE FUNCTION enforce_ai_billing_period_item_write();
-
-CREATE OR REPLACE FUNCTION validate_ai_billing_period_write()
-RETURNS TRIGGER LANGUAGE plpgsql SET search_path = pg_catalog
-AS $$
-DECLARE
-    v_item_units INT;
-    v_item_amount NUMERIC(14,2);
-BEGIN
-    IF TG_OP = 'UPDATE' AND OLD.status IS DISTINCT FROM NEW.status AND NOT (
-        (OLD.status = 'Open' AND NEW.status = 'Closed')
-        OR (OLD.status = 'Closed' AND NEW.status = 'Invoiced')
-        OR (OLD.status = 'Invoiced' AND NEW.status = 'Paid')
-    ) THEN
-        RAISE EXCEPTION 'AI billing period cannot reopen or skip its settlement lifecycle';
-    END IF;
-    IF TG_OP = 'UPDATE' AND OLD.status = 'Closed' AND NEW.status = 'Invoiced'
-       AND (OLD.settlement_quotation_id IS NOT NULL
-            OR NEW.settlement_quotation_id IS NULL
-            OR NEW.settlement_payment_transaction_id IS NOT NULL) THEN
-        RAISE EXCEPTION 'Closed to Invoiced requires one new AIUsage quotation and no payment';
-    END IF;
-    IF TG_OP = 'UPDATE' AND OLD.status = 'Invoiced' AND NEW.status = 'Paid'
-       AND (OLD.settlement_quotation_id IS NULL
-            OR NEW.settlement_quotation_id IS DISTINCT FROM OLD.settlement_quotation_id
-            OR NEW.settlement_payment_transaction_id IS NULL) THEN
-        RAISE EXCEPTION 'Invoiced to Paid requires the existing quotation and one Applied payment';
-    END IF;
-    IF NEW.disputed_at IS NOT NULL AND NEW.status = 'Open' THEN
-        RAISE EXCEPTION 'an Open AI period cannot carry dispute metadata';
-    END IF;
-    IF TG_OP = 'UPDATE' AND OLD.disputed_at IS NOT NULL AND (
-        OLD.disputed_at IS DISTINCT FROM NEW.disputed_at
-        OR OLD.disputed_reason IS DISTINCT FROM NEW.disputed_reason
-        OR OLD.disputed_by IS DISTINCT FROM NEW.disputed_by
-    ) THEN
-        RAISE EXCEPTION 'AI dispute metadata is append-only';
-    END IF;
-    IF TG_OP = 'INSERT' AND (
-        NEW.status <> 'Open'
-        OR NEW.settlement_quotation_id IS NOT NULL
-        OR NEW.settlement_payment_transaction_id IS NOT NULL
-        OR NEW.closed_at IS NOT NULL
-        OR NEW.unit_price_snapshot IS DISTINCT FROM '{}'::JSONB
-        OR NEW.overage_units <> 0
-        OR NEW.overage_amount <> 0
-    ) THEN
-        RAISE EXCEPTION 'new AI billing periods must start Open without settlement documents';
-    END IF;
-
-    IF NEW.settlement_quotation_id IS NOT NULL AND NOT EXISTS (
-        SELECT 1 FROM public.quotations AS quotation
-         WHERE quotation.id = NEW.settlement_quotation_id
-            AND quotation.billing_purpose = 'AIUsage'
-            AND quotation.organization_id = NEW.organization_id
-            AND NOT EXISTS (
-                SELECT 1 FROM public.quotation_building_items AS service_item
-                WHERE service_item.quotation_id = quotation.id
-           )
-           AND quotation.currency = NEW.currency
-           AND quotation.total_amount = NEW.overage_amount
-    ) THEN
-        RAISE EXCEPTION 'AI period quotation must be an issued AIUsage quotation matching the frozen snapshot';
-    END IF;
-
-    -- A quotation must be Issued/Accepted when it is attached. Once attached,
-    -- a later expiry/cancellation does not erase a valid payment fact.
-    IF NEW.settlement_quotation_id IS NOT NULL
-       AND TG_OP = 'INSERT'
-       AND NOT EXISTS (
-           SELECT 1 FROM public.quotations AS quotation
-            WHERE quotation.id = NEW.settlement_quotation_id
-              AND quotation.status IN ('Issued','Accepted')
-       ) THEN
-        RAISE EXCEPTION 'AI period quotation must be Issued or Accepted when first attached';
-    END IF;
-    IF NEW.settlement_quotation_id IS NOT NULL
-       AND TG_OP = 'UPDATE'
-       AND OLD.settlement_quotation_id IS NULL
-       AND NOT EXISTS (
-           SELECT 1 FROM public.quotations AS quotation
-            WHERE quotation.id = NEW.settlement_quotation_id
-              AND quotation.status IN ('Issued','Accepted')
-       ) THEN
-        RAISE EXCEPTION 'AI period quotation must be Issued or Accepted when first attached';
-    END IF;
-
-    IF NEW.settlement_payment_transaction_id IS NOT NULL AND NOT EXISTS (
-        SELECT 1
-          FROM public.payment_transactions AS payment
-          JOIN public.payos_payment_requests AS request ON request.id = payment.payment_request_id
-         WHERE payment.id = NEW.settlement_payment_transaction_id
-           AND payment.status = 'Applied'
-           AND request.quotation_id = NEW.settlement_quotation_id
-           AND request.organization_id = NEW.organization_id
-    ) THEN
-        RAISE EXCEPTION 'AI period payment must be Applied for its AIUsage quotation';
-    END IF;
-
-    IF NEW.status = 'Closed' THEN
-        IF NEW.closed_at IS NULL OR NEW.settlement_quotation_id IS NOT NULL OR NEW.settlement_payment_transaction_id IS NOT NULL THEN
-            RAISE EXCEPTION 'Closed AI periods require a close timestamp and no settlement document yet';
-        END IF;
-        SELECT COALESCE(SUM(units),0), COALESCE(SUM(amount),0)
-          INTO v_item_units, v_item_amount
-          FROM public.ai_billing_period_items
-         WHERE billing_period_id = NEW.id AND status = 'Included';
-        IF NEW.overage_units <> v_item_units OR NEW.overage_amount <> v_item_amount THEN
-            RAISE EXCEPTION 'closed AI period totals must equal its included immutable items';
-        END IF;
-    END IF;
-    IF NEW.status IN ('Invoiced','Paid') AND NEW.settlement_quotation_id IS NULL THEN
-        RAISE EXCEPTION 'Invoiced or Paid AI periods require one AIUsage quotation';
-    END IF;
-    IF NEW.status = 'Invoiced' AND NEW.settlement_payment_transaction_id IS NOT NULL THEN
-        RAISE EXCEPTION 'Invoiced AI periods cannot attach payment before Paid';
-    END IF;
-    IF NEW.status = 'Paid' AND NEW.settlement_payment_transaction_id IS NULL THEN
-        RAISE EXCEPTION 'Paid AI periods require an Applied payment';
-    END IF;
-
-    IF TG_OP = 'UPDATE' AND OLD.status <> 'Open' AND (
-        OLD.organization_id IS DISTINCT FROM NEW.organization_id
-        OR OLD.period_start IS DISTINCT FROM NEW.period_start
-        OR OLD.period_end IS DISTINCT FROM NEW.period_end
-        OR OLD.unit_price_snapshot IS DISTINCT FROM NEW.unit_price_snapshot
-        OR OLD.overage_units IS DISTINCT FROM NEW.overage_units
-        OR OLD.overage_amount IS DISTINCT FROM NEW.overage_amount
-        OR OLD.currency IS DISTINCT FROM NEW.currency
-        OR OLD.closed_at IS DISTINCT FROM NEW.closed_at
-    ) THEN
-        RAISE EXCEPTION 'closed AI billing period snapshot and totals are immutable; use an adjustment';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION close_ai_billing_period(p_period_id UUID)
-RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
-AS $$
-DECLARE
-    v_period public.ai_billing_periods%ROWTYPE;
-    v_usage public.ai_usage_ledger%ROWTYPE;
-    v_price NUMERIC;
-    v_units INT;
-    v_amount NUMERIC(14,2);
-    v_price_snapshot JSONB;
-BEGIN
-    IF p_period_id IS NULL THEN
-        RAISE EXCEPTION 'AI billing period id is required';
-    END IF;
-    SELECT * INTO v_period FROM public.ai_billing_periods WHERE id = p_period_id FOR UPDATE;
-    IF NOT FOUND OR v_period.status <> 'Open' THEN
-        RAISE EXCEPTION 'AI billing period is not open';
-    END IF;
-
-    FOR v_usage IN
-        SELECT * FROM public.ai_usage_ledger
-         WHERE organization_id = v_period.organization_id
-           AND billing_period_id = v_period.id
-           AND billable
-           AND status = 'Recorded'
-         ORDER BY id
-         FOR UPDATE
-    LOOP
-        IF pg_catalog.jsonb_typeof(v_usage.unit_price_snapshot) <> 'object'
-           OR NOT (v_usage.unit_price_snapshot ? 'unit_price')
-           OR NOT (v_usage.unit_price_snapshot ? 'currency')
-           OR v_usage.unit_price_snapshot ->> 'currency' <> v_period.currency
-           OR (v_usage.unit_price_snapshot ->> 'unit_price') !~ '^[0-9]+([.][0-9]+)?$' THEN
-            RAISE EXCEPTION 'recorded AI usage is missing a valid historical price/currency snapshot';
-        END IF;
-        v_price := (v_usage.unit_price_snapshot ->> 'unit_price')::NUMERIC;
-        INSERT INTO public.ai_billing_period_items(
-            billing_period_id, usage_ledger_id, units, unit_price_snapshot, amount
-        ) VALUES (
-            v_period.id, v_usage.id, v_usage.units, v_usage.unit_price_snapshot,
-            ROUND(v_usage.units * v_price, 2)
-        ) ON CONFLICT (billing_period_id, usage_ledger_id) DO NOTHING;
-    END LOOP;
-
-    SELECT COALESCE(SUM(units),0), COALESCE(SUM(amount),0)
-      INTO v_units, v_amount
-      FROM public.ai_billing_period_items
-     WHERE billing_period_id = v_period.id AND status = 'Included';
-    SELECT COALESCE(
-        pg_catalog.jsonb_agg(DISTINCT item.unit_price_snapshot ORDER BY item.unit_price_snapshot),
-        '[]'::JSONB
-    ) INTO v_price_snapshot
-      FROM public.ai_billing_period_items AS item
-     WHERE item.billing_period_id = v_period.id AND item.status = 'Included';
-    UPDATE public.ai_billing_periods
-       SET unit_price_snapshot = v_price_snapshot,
-           overage_units = v_units,
-           overage_amount = v_amount,
-           status = 'Closed',
-           closed_at = pg_catalog.clock_timestamp()
-     WHERE id = v_period.id;
-    RETURN true;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION invoice_ai_billing_period(
-    p_period_id UUID,
-    p_quotation_id UUID
-)
-RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
-AS $$
-DECLARE
-    v_period public.ai_billing_periods%ROWTYPE;
-BEGIN
-    IF p_period_id IS NULL OR p_quotation_id IS NULL THEN
-        RAISE EXCEPTION 'AI invoice period and quotation are required';
-    END IF;
-    SELECT * INTO v_period FROM public.ai_billing_periods WHERE id = p_period_id FOR UPDATE;
-    IF NOT FOUND THEN RAISE EXCEPTION 'AI billing period does not exist'; END IF;
-    IF v_period.status IN ('Invoiced','Paid') THEN
-        IF v_period.settlement_quotation_id = p_quotation_id THEN RETURN true; END IF;
-        RAISE EXCEPTION 'AI billing period already has a different quotation';
-    END IF;
-    IF v_period.status <> 'Closed' THEN RAISE EXCEPTION 'only a Closed AI period can be invoiced'; END IF;
-    UPDATE public.ai_billing_periods
-       SET settlement_quotation_id = p_quotation_id, status = 'Invoiced'
-     WHERE id = p_period_id;
-    RETURN true;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION pay_ai_billing_period(
-    p_period_id UUID,
-    p_payment_transaction_id UUID
-)
-RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
-AS $$
-DECLARE
-    v_period public.ai_billing_periods%ROWTYPE;
-BEGIN
-    IF p_period_id IS NULL OR p_payment_transaction_id IS NULL THEN
-        RAISE EXCEPTION 'AI payment period and transaction are required';
-    END IF;
-    SELECT * INTO v_period FROM public.ai_billing_periods WHERE id = p_period_id FOR UPDATE;
-    IF NOT FOUND THEN RAISE EXCEPTION 'AI billing period does not exist'; END IF;
-    IF v_period.status = 'Paid' THEN
-        IF v_period.settlement_payment_transaction_id = p_payment_transaction_id THEN RETURN true; END IF;
-        RAISE EXCEPTION 'AI billing period already has a different payment';
-    END IF;
-    IF v_period.status <> 'Invoiced' THEN RAISE EXCEPTION 'only an Invoiced AI period can be paid'; END IF;
-    UPDATE public.ai_billing_periods
-       SET settlement_payment_transaction_id = p_payment_transaction_id, status = 'Paid'
-     WHERE id = p_period_id;
-    RETURN true;
-END;
-$$;
-
 CREATE OR REPLACE FUNCTION enforce_ai_policy_version_immutability()
 RETURNS TRIGGER LANGUAGE plpgsql SET search_path = pg_catalog
 AS $$
@@ -5780,132 +5161,6 @@ DROP TRIGGER IF EXISTS enforce_ai_policy_version_immutability_before_write ON ai
 CREATE TRIGGER enforce_ai_policy_version_immutability_before_write
 BEFORE UPDATE OR DELETE ON ai_policy_versions
 FOR EACH ROW EXECUTE FUNCTION enforce_ai_policy_version_immutability();
-
-CREATE OR REPLACE FUNCTION validate_ai_billing_adjustment_write()
-RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
-AS $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM public.ai_billing_periods AS period
-         WHERE period.id = NEW.billing_period_id
-           AND period.organization_id = NEW.organization_id
-            AND period.status IN ('Closed','Invoiced','Paid')
-    ) THEN
-        RAISE EXCEPTION 'AI adjustment must target a closed period in the same organization';
-    END IF;
-    IF NEW.usage_ledger_id IS NOT NULL AND NOT EXISTS (
-        SELECT 1
-          FROM public.ai_usage_ledger AS ledger
-         WHERE ledger.id = NEW.usage_ledger_id
-           AND ledger.organization_id = NEW.organization_id
-           AND ledger.billing_period_id = NEW.billing_period_id
-    ) THEN
-        RAISE EXCEPTION 'AI adjustment usage must belong to the same organization and billing period';
-    END IF;
-    IF NEW.original_item_id IS NOT NULL AND NOT EXISTS (
-        SELECT 1
-          FROM public.ai_billing_period_items AS item
-         WHERE item.id = NEW.original_item_id
-           AND item.billing_period_id = NEW.billing_period_id
-    ) THEN
-        RAISE EXCEPTION 'AI adjustment original item must belong to the target billing period';
-    END IF;
-    IF TG_OP = 'UPDATE' AND (
-        OLD.billing_period_id IS DISTINCT FROM NEW.billing_period_id
-        OR OLD.organization_id IS DISTINCT FROM NEW.organization_id
-        OR OLD.usage_ledger_id IS DISTINCT FROM NEW.usage_ledger_id
-        OR OLD.original_item_id IS DISTINCT FROM NEW.original_item_id
-        OR OLD.adjustment_type IS DISTINCT FROM NEW.adjustment_type
-        OR OLD.units IS DISTINCT FROM NEW.units
-        OR OLD.amount IS DISTINCT FROM NEW.amount
-        OR OLD.reason IS DISTINCT FROM NEW.reason
-        OR OLD.idempotency_key IS DISTINCT FROM NEW.idempotency_key
-    ) THEN
-        RAISE EXCEPTION 'AI billing adjustments are immutable';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS validate_ai_billing_adjustment_before_write ON ai_billing_adjustments;
-CREATE TRIGGER validate_ai_billing_adjustment_before_write
-BEFORE INSERT OR UPDATE ON ai_billing_adjustments
-FOR EACH ROW EXECUTE FUNCTION validate_ai_billing_adjustment_write();
-
--- Late usage and financial corrections use a controlled accounting contract;
--- callers do not receive direct INSERT permission on the adjustment table.
-CREATE OR REPLACE FUNCTION record_ai_billing_adjustment(
-    p_billing_period_id UUID,
-    p_organization_id UUID,
-    p_usage_ledger_id UUID,
-    p_original_item_id UUID,
-    p_adjustment_type TEXT,
-    p_units INT,
-    p_amount NUMERIC,
-    p_reason TEXT,
-    p_idempotency_key TEXT,
-    p_created_by UUID
-)
-RETURNS UUID
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
-AS $$
-DECLARE
-    v_id UUID;
-    v_existing public.ai_billing_adjustments%ROWTYPE;
-BEGIN
-    IF p_billing_period_id IS NULL OR p_organization_id IS NULL
-       OR p_adjustment_type IS NULL OR p_units IS NULL OR p_amount IS NULL
-       OR NULLIF(pg_catalog.btrim(p_reason), '') IS NULL
-       OR NULLIF(pg_catalog.btrim(p_idempotency_key), '') IS NULL
-       OR p_created_by IS NULL THEN
-        RAISE EXCEPTION 'AI adjustment identity and financial fields are required';
-    END IF;
-    IF NOT EXISTS (
-        SELECT 1 FROM public.users AS actor
-         WHERE actor.id = p_created_by
-           AND actor.is_active
-           AND actor.deleted_at IS NULL
-           AND (actor.role = 'PlatformAdmin'
-                OR (actor.role = 'OrganizationUser' AND actor.organization_id = p_organization_id))
-    ) THEN
-        RAISE EXCEPTION 'adjustment actor is not authorized for the organization';
-    END IF;
-
-    INSERT INTO public.ai_billing_adjustments(
-        billing_period_id, organization_id, usage_ledger_id, original_item_id,
-        adjustment_type, units, amount, reason, idempotency_key, created_by
-    ) VALUES (
-        p_billing_period_id, p_organization_id, p_usage_ledger_id, p_original_item_id,
-        p_adjustment_type, p_units, p_amount, pg_catalog.btrim(p_reason),
-        pg_catalog.btrim(p_idempotency_key), p_created_by
-    )
-    ON CONFLICT (idempotency_key) DO NOTHING
-    RETURNING id INTO v_id;
-
-    IF v_id IS NOT NULL THEN
-        RETURN v_id;
-    END IF;
-
-    SELECT * INTO v_existing
-      FROM public.ai_billing_adjustments
-     WHERE idempotency_key = pg_catalog.btrim(p_idempotency_key);
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'adjustment idempotency result is unavailable';
-    END IF;
-    IF v_existing.billing_period_id IS DISTINCT FROM p_billing_period_id
-       OR v_existing.organization_id IS DISTINCT FROM p_organization_id
-       OR v_existing.usage_ledger_id IS DISTINCT FROM p_usage_ledger_id
-       OR v_existing.original_item_id IS DISTINCT FROM p_original_item_id
-       OR v_existing.adjustment_type IS DISTINCT FROM p_adjustment_type
-       OR v_existing.units IS DISTINCT FROM p_units
-       OR v_existing.amount IS DISTINCT FROM p_amount
-       OR v_existing.reason IS DISTINCT FROM pg_catalog.btrim(p_reason)
-       OR v_existing.created_by IS DISTINCT FROM p_created_by THEN
-        RAISE EXCEPTION 'adjustment idempotency key conflicts with another payload';
-    END IF;
-    RETURN v_existing.id;
-END;
-$$;
 
 -- Rebind the early trigger names to the final functions after runtime columns
 -- and target-only amendments exist; each function signature now has one owner.
@@ -5928,11 +5183,6 @@ BEFORE UPDATE OF training_id, release_id, scenario_version_id, organization_id,
     start_idempotency_key, status,
     launch_granted_at, started_at, ended_at, runtime_version, runtime_catalog_id
 ON sessions FOR EACH ROW EXECUTE FUNCTION validate_training_session_lifecycle();
-
-DROP TRIGGER IF EXISTS validate_ai_billing_period_before_write ON ai_billing_periods;
-CREATE TRIGGER validate_ai_billing_period_before_write
-BEFORE INSERT OR UPDATE
-ON ai_billing_periods FOR EACH ROW EXECUTE FUNCTION validate_ai_billing_period_write();
 
 DROP TRIGGER IF EXISTS validate_payos_paid_before_write ON payos_payment_requests;
 CREATE TRIGGER validate_payos_paid_before_write
@@ -6553,10 +5803,10 @@ BEGIN
            OR NEW.total_amount <> v_total + NEW.tax_amount THEN
             RAISE EXCEPTION 'quotation totals must equal its Building line snapshots';
         END IF;
-    ELSIF NEW.billing_purpose = 'AIUsage' AND EXISTS (
+    ELSIF NEW.billing_purpose = 'AIQuotaTopUp' AND EXISTS (
         SELECT 1 FROM public.quotation_building_items AS item WHERE item.quotation_id = NEW.id
     ) THEN
-        RAISE EXCEPTION 'AIUsage quotation cannot contain Building service lines';
+        RAISE EXCEPTION 'AIQuotaTopUp quotation cannot contain Building service lines';
     END IF;
 
     RETURN NEW;
@@ -6727,13 +5977,8 @@ ALTER FUNCTION record_session_heartbeat(UUID, UUID, BIGINT, TIMESTAMPTZ) OWNER T
 ALTER FUNCTION record_session_event(UUID, UUID, UUID, BIGINT, TEXT, TEXT, JSONB, TIMESTAMPTZ) OWNER TO fet3d_session_owner;
 ALTER FUNCTION complete_training_session(UUID, UUID, TEXT, TEXT, JSONB, TIMESTAMPTZ, TIMESTAMPTZ) OWNER TO fet3d_session_owner;
 ALTER FUNCTION complete_playtest_session(UUID, UUID, TEXT, TEXT) OWNER TO fet3d_session_owner;
-ALTER FUNCTION close_ai_billing_period(UUID) OWNER TO fet3d_ai_accounting_owner;
-ALTER FUNCTION invoice_ai_billing_period(UUID, UUID) OWNER TO fet3d_ai_accounting_owner;
-ALTER FUNCTION pay_ai_billing_period(UUID, UUID) OWNER TO fet3d_ai_accounting_owner;
-ALTER FUNCTION reserve_ai_usage(UUID, TEXT, UUID, TEXT, UUID, UUID, TEXT, INT, BOOLEAN, UUID, UUID, JSONB, JSONB) OWNER TO fet3d_ai_accounting_owner;
+ALTER FUNCTION reserve_ai_usage(UUID, TEXT, UUID, TEXT, UUID, UUID, TEXT, INT, JSONB) OWNER TO fet3d_ai_accounting_owner;
 ALTER FUNCTION settle_ai_usage(UUID, TEXT) OWNER TO fet3d_ai_accounting_owner;
-ALTER FUNCTION validate_ai_billing_adjustment_write() OWNER TO fet3d_ai_accounting_owner;
-ALTER FUNCTION record_ai_billing_adjustment(UUID, UUID, UUID, UUID, TEXT, INT, NUMERIC, TEXT, TEXT, UUID) OWNER TO fet3d_ai_accounting_owner;
 ALTER FUNCTION claim_processing_attempt(UUID, TEXT, TEXT, TEXT, INT) OWNER TO fet3d_processing_owner;
 ALTER FUNCTION renew_processing_attempt(UUID, UUID, INT) OWNER TO fet3d_processing_owner;
 ALTER FUNCTION register_processing_output(UUID, UUID, TEXT, TEXT, TEXT, JSONB, TEXT, TEXT, JSONB, JSONB) OWNER TO fet3d_processing_owner;
@@ -6745,12 +5990,7 @@ REVOKE ALL ON FUNCTION record_session_heartbeat(UUID, UUID, BIGINT, TIMESTAMPTZ)
 REVOKE ALL ON FUNCTION record_session_event(UUID, UUID, UUID, BIGINT, TEXT, TEXT, JSONB, TIMESTAMPTZ) FROM PUBLIC;
 REVOKE ALL ON FUNCTION complete_training_session(UUID, UUID, TEXT, TEXT, JSONB, TIMESTAMPTZ, TIMESTAMPTZ) FROM PUBLIC;
 REVOKE ALL ON FUNCTION complete_playtest_session(UUID, UUID, TEXT, TEXT) FROM PUBLIC;
-REVOKE ALL ON FUNCTION close_ai_billing_period(UUID) FROM PUBLIC;
-REVOKE ALL ON FUNCTION invoice_ai_billing_period(UUID, UUID) FROM PUBLIC;
-REVOKE ALL ON FUNCTION pay_ai_billing_period(UUID, UUID) FROM PUBLIC;
-REVOKE ALL ON FUNCTION validate_ai_billing_adjustment_write() FROM PUBLIC;
-REVOKE ALL ON FUNCTION record_ai_billing_adjustment(UUID, UUID, UUID, UUID, TEXT, INT, NUMERIC, TEXT, TEXT, UUID) FROM PUBLIC;
-REVOKE ALL ON FUNCTION reserve_ai_usage(UUID, TEXT, UUID, TEXT, UUID, UUID, TEXT, INT, BOOLEAN, UUID, UUID, JSONB, JSONB) FROM PUBLIC;
+REVOKE ALL ON FUNCTION reserve_ai_usage(UUID, TEXT, UUID, TEXT, UUID, UUID, TEXT, INT, JSONB) FROM PUBLIC;
 REVOKE ALL ON FUNCTION settle_ai_usage(UUID, TEXT) FROM PUBLIC;
 REVOKE ALL ON FUNCTION claim_processing_attempt(UUID, TEXT, TEXT, TEXT, INT) FROM PUBLIC;
 REVOKE ALL ON FUNCTION renew_processing_attempt(UUID, UUID, INT) FROM PUBLIC;
@@ -6764,18 +6004,14 @@ GRANT EXECUTE ON FUNCTION record_session_event(UUID, UUID, UUID, BIGINT, TEXT, T
     complete_training_session(UUID, UUID, TEXT, TEXT, JSONB, TIMESTAMPTZ, TIMESTAMPTZ),
     complete_playtest_session(UUID, UUID, TEXT, TEXT)
     TO fet3d_session_sync_executor;
-GRANT EXECUTE ON FUNCTION close_ai_billing_period(UUID),
-    invoice_ai_billing_period(UUID, UUID),
-    pay_ai_billing_period(UUID, UUID),
-    reserve_ai_usage(UUID, TEXT, UUID, TEXT, UUID, UUID, TEXT, INT, BOOLEAN, UUID, UUID, JSONB, JSONB),
-    settle_ai_usage(UUID, TEXT),
-    record_ai_billing_adjustment(UUID, UUID, UUID, UUID, TEXT, INT, NUMERIC, TEXT, TEXT, UUID)
-    TO fet3d_accounting_executor;
-REVOKE ALL PRIVILEGES ON FUNCTION close_ai_billing_period(UUID),
-    reserve_ai_usage(UUID, TEXT, UUID, TEXT, UUID, UUID, TEXT, INT, BOOLEAN, UUID, UUID, JSONB, JSONB),
-    settle_ai_usage(UUID, TEXT),
-    record_ai_billing_adjustment(UUID, UUID, UUID, UUID, TEXT, INT, NUMERIC, TEXT, TEXT, UUID)
-    FROM fet3d_ai_service_executor;
+GRANT EXECUTE ON FUNCTION
+
+
+    reserve_ai_usage(UUID, TEXT, UUID, TEXT, UUID, UUID, TEXT, INT, JSONB),
+    settle_ai_usage(UUID, TEXT) TO fet3d_accounting_executor;
+REVOKE ALL PRIVILEGES ON FUNCTION
+    reserve_ai_usage(UUID, TEXT, UUID, TEXT, UUID, UUID, TEXT, INT, JSONB),
+    settle_ai_usage(UUID, TEXT) FROM fet3d_ai_service_executor;
 GRANT EXECUTE ON FUNCTION claim_processing_attempt(UUID, TEXT, TEXT, TEXT, INT),
     renew_processing_attempt(UUID, UUID, INT),
     register_processing_output(UUID, UUID, TEXT, TEXT, TEXT, JSONB, TEXT, TEXT, JSONB, JSONB),
@@ -6786,7 +6022,7 @@ REVOKE ALL ON FUNCTION validate_learn_editorial_write() FROM PUBLIC;
 
 REVOKE ALL ON TABLE processing_jobs, processing_job_attempts, revision_artifacts,
     validation_runs, validation_issues FROM fet3d_processing_worker_executor;
-REVOKE ALL ON TABLE ai_billing_periods, ai_billing_period_items, ai_billing_adjustments,
+REVOKE ALL ON TABLE
     ai_usage_ledger, ai_usage_reservations, ai_usage_reservation_allocations,
     ai_quota_grants FROM fet3d_ai_service_executor;
 
@@ -6797,25 +6033,26 @@ GRANT SELECT ON TABLE users, user_devices, buildings, trainings, releases,
     scenario_versions, scenario_drafts, release_packages, release_qr_codes,
     service_entitlements, validation_runs, revision_artifacts, validation_issues
     TO fet3d_session_prepare_executor;
-GRANT SELECT ON TABLE users, sessions, playtest_sessions, releases, trainings,
+GRANT SELECT ON TABLE users, sessions, playtest_sessions, buildings, releases, trainings,
     scenario_versions, release_packages, runtime_compatibility_catalog,
     release_qr_codes, service_entitlements, revisions, scenario_drafts, user_devices, validation_runs,
     revision_artifacts, validation_issues, ai_quota_grants
     TO fet3d_session_owner;
+-- Row-share locking during start needs UPDATE on one selected column; this role
+-- remains NOLOGIN and no session executor gets direct table DML.
+GRANT UPDATE(id) ON TABLE buildings TO fet3d_session_owner;
 GRANT INSERT, UPDATE ON TABLE sessions, playtest_sessions, service_entitlements
     TO fet3d_session_owner;
 GRANT SELECT, INSERT, UPDATE ON TABLE session_results, session_events, session_checkpoints
     TO fet3d_session_owner;
-GRANT SELECT ON TABLE ai_requests, ai_policy_versions, ai_overage_consents,
-    ai_billing_periods, ai_usage_ledger, ai_usage_reservations,
-    ai_usage_reservation_allocations, ai_quota_grants, ai_billing_adjustments,
-    ai_billing_period_items, buildings, users, quotations,
+GRANT SELECT ON TABLE ai_requests, ai_policy_versions,
+     ai_usage_ledger, ai_usage_reservations,
+    ai_usage_reservation_allocations, ai_quota_grants,
+     buildings, users, quotations,
     quotation_building_items, payos_payment_requests, payment_transactions
     TO fet3d_ai_accounting_owner;
 GRANT INSERT, UPDATE ON TABLE ai_requests, ai_usage_ledger, ai_usage_reservations,
-    ai_usage_reservation_allocations, ai_quota_grants, ai_billing_periods,
-    ai_billing_period_items, ai_billing_adjustments
-    TO fet3d_ai_accounting_owner;
+    ai_usage_reservation_allocations, ai_quota_grants TO fet3d_ai_accounting_owner;
 GRANT SELECT, UPDATE ON TABLE processing_jobs TO fet3d_processing_owner;
 GRANT SELECT, INSERT, UPDATE ON TABLE processing_job_attempts
     TO fet3d_processing_owner;
@@ -7414,3 +6651,689 @@ GRANT SELECT, INSERT, UPDATE ON TABLE service_package_discount_rules,
     quotation_building_items, enterprise_quote_requests,
     organization_notifications, notification_deliveries
     TO fet3d_backend_executor;
+
+
+-- ============================================================================
+-- V7 PRODUCT CONTRACT — fresh schema, not a production migration.
+-- Auth mapping follows BE 0683d90. No prices, thresholds or quota units seeded.
+-- ============================================================================
+ALTER TABLE users ADD COLUMN dob DATE, ADD COLUMN gender VARCHAR(30),
+    ADD COLUMN phone_number VARCHAR(50), ADD COLUMN email_verified_at TIMESTAMPTZ,
+    ADD COLUMN registration_expires_at TIMESTAMPTZ;
+CREATE UNIQUE INDEX users_email_normalized_key ON users(lower(btrim(email)));
+CREATE TABLE registration_email_challenges (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), email TEXT NOT NULL,
+    otp_hash TEXT NOT NULL, otp_ciphertext BYTEA NOT NULL, otp_nonce BYTEA NOT NULL, otp_tag BYTEA NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL, failed_attempts INT NOT NULL DEFAULT 0 CHECK(failed_attempts BETWEEN 0 AND 5),
+    verified_at TIMESTAMPTZ, superseded_at TIMESTAMPTZ,
+    registration_token_hash TEXT, registration_token_ciphertext BYTEA,
+    registration_token_nonce BYTEA, registration_token_tag BYTEA,
+    registration_token_expires_at TIMESTAMPTZ, registration_token_used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK(email=lower(btrim(email))), CHECK(expires_at>created_at),
+    CHECK((verified_at IS NULL AND registration_token_hash IS NULL AND registration_token_ciphertext IS NULL
+       AND registration_token_nonce IS NULL AND registration_token_tag IS NULL AND registration_token_expires_at IS NULL)
+       OR (verified_at IS NOT NULL AND registration_token_hash IS NOT NULL AND registration_token_ciphertext IS NOT NULL
+       AND registration_token_nonce IS NOT NULL AND registration_token_tag IS NOT NULL AND registration_token_expires_at IS NOT NULL))
+);
+CREATE INDEX registration_challenge_active ON registration_email_challenges(email,created_at DESC) WHERE superseded_at IS NULL;
+CREATE TABLE registration_otp_email_jobs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), challenge_id UUID NOT NULL REFERENCES registration_email_challenges(id),
+    email TEXT NOT NULL, remote_address TEXT, status TEXT NOT NULL DEFAULT 'Pending'
+        CHECK(status IN ('Pending','Leased','Succeeded','Dead')),
+    attempts INT NOT NULL DEFAULT 0 CHECK(attempts>=0), available_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    lease_token UUID, lease_until TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX registration_otp_claim ON registration_otp_email_jobs(status,available_at,created_at);
+CREATE INDEX registration_otp_email_rate ON registration_otp_email_jobs(email,created_at);
+CREATE INDEX registration_otp_ip_rate ON registration_otp_email_jobs(remote_address,created_at);
+-- Ciphertext is only for worker delivery/idempotent verification; encryption keys stay outside DB.
+-- BE application transaction owns OTP rates, proof consumption, identity creation and audit.
+CREATE TABLE device_installations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), device_uuid VARCHAR(255) NOT NULL UNIQUE,
+    secret_hash VARCHAR(64) NOT NULL CHECK(secret_hash ~ '^[0-9a-f]{64}$'),
+    secret_hash_scheme VARCHAR(32) CHECK(secret_hash_scheme IN ('sha256-text-v1','sha256-bytes-v2')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE user_devices ADD COLUMN installation_id UUID REFERENCES device_installations(id),
+    ADD COLUMN fcm_token_generation INT NOT NULL DEFAULT 0 CHECK(fcm_token_generation>=0),
+    ADD COLUMN revoked_at TIMESTAMPTZ;
+ALTER TABLE user_devices ALTER COLUMN notifications_enabled SET DEFAULT false;
+CREATE UNIQUE INDEX device_active_fcm ON user_devices(fcm_token)
+    WHERE fcm_token IS NOT NULL AND notifications_enabled AND revoked_at IS NULL;
+-- local_password_reset_tokens is BE's current store; password_reset_tokens is the legacy target.
+CREATE TABLE local_password_reset_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID NOT NULL REFERENCES users(id),
+    token_hash TEXT NOT NULL UNIQUE, expires_at TIMESTAMPTZ NOT NULL, used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(), CHECK(expires_at>created_at)
+);
+CREATE TABLE password_reset_email_jobs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), email TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Pending' CHECK(status IN ('Pending','Leased','Sent','Dead')),
+    attempts INT NOT NULL DEFAULT 0, available_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    lease_token UUID, lease_until TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Authenticated Organization authoring catalogs; never public Learn post storage.
+CREATE TABLE organization_library_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), kind TEXT NOT NULL CHECK(kind IN ('ScenarioTemplate','RubricSample','Equipment')),
+    code TEXT NOT NULL UNIQUE, is_active BOOLEAN NOT NULL DEFAULT true,
+    created_by UUID NOT NULL REFERENCES users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE organization_library_versions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), item_id UUID NOT NULL REFERENCES organization_library_items(id),
+    version_number INT NOT NULL CHECK(version_number>0), name TEXT NOT NULL,
+    payload JSONB NOT NULL CHECK(jsonb_typeof(payload)='object'),
+    required_capabilities JSONB NOT NULL DEFAULT '[]' CHECK(fet3d_capabilities_are_valid(required_capabilities)),
+    published_at TIMESTAMPTZ, created_by UUID NOT NULL REFERENCES users(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(), UNIQUE(item_id,version_number)
+);
+ALTER TABLE scenario_versions ADD COLUMN template_version_id UUID REFERENCES organization_library_versions(id),
+    ADD COLUMN rubric_sample_version_id UUID REFERENCES organization_library_versions(id),
+    ADD COLUMN learning_objectives JSONB NOT NULL DEFAULT '[]' CHECK(jsonb_typeof(learning_objectives)='array'),
+    ADD COLUMN learner_instructions TEXT NOT NULL DEFAULT '',
+    ADD COLUMN rubric JSONB NOT NULL DEFAULT '{}' CHECK(jsonb_typeof(rubric)='object');
+CREATE TABLE scenario_content_reviews (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), scenario_version_id UUID NOT NULL UNIQUE REFERENCES scenario_versions(id),
+    content_hash TEXT NOT NULL CHECK(content_hash ~ '^[0-9a-f]{64}$'), rubric_hash TEXT NOT NULL CHECK(rubric_hash ~ '^[0-9a-f]{64}$'),
+    submitted_by UUID NOT NULL REFERENCES users(id), submitted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    status TEXT NOT NULL DEFAULT 'Submitted' CHECK(status IN ('Submitted','Approved','Rejected')),
+    reviewed_by UUID REFERENCES users(id), reviewed_at TIMESTAMPTZ, reason TEXT,
+    CHECK((status='Submitted' AND reviewed_by IS NULL AND reviewed_at IS NULL)
+       OR (status<>'Submitted' AND reviewed_by IS NOT NULL AND reviewed_at IS NOT NULL)),
+    CHECK(status<>'Rejected' OR NULLIF(btrim(reason),'') IS NOT NULL)
+);
+
+CREATE OR REPLACE FUNCTION require_admin_v7(actor_id UUID) RETURNS VOID
+LANGUAGE plpgsql SET search_path=pg_catalog,public AS $$
+BEGIN IF NOT EXISTS(SELECT 1 FROM users WHERE id=actor_id AND role='PlatformAdmin' AND is_active AND deleted_at IS NULL)
+    THEN RAISE EXCEPTION 'active PlatformAdmin required'; END IF; END; $$;
+CREATE OR REPLACE FUNCTION immutable_snapshot_v7() RETURNS TRIGGER
+LANGUAGE plpgsql SET search_path=pg_catalog,public AS $$
+BEGIN RAISE EXCEPTION 'snapshot is immutable; create a new version'; END; $$;
+CREATE OR REPLACE FUNCTION validate_library_v7() RETURNS TRIGGER
+LANGUAGE plpgsql SET search_path=pg_catalog,public AS $$
+BEGIN
+    IF TG_OP='DELETE' THEN RAISE EXCEPTION 'retain library history; deactivate item'; END IF;
+    -- This function is shared by items and versions.  Convert OLD to JSON so
+    -- the item trigger never tries to resolve the version-only published_at column.
+    IF TG_OP='UPDATE' AND TG_TABLE_NAME='organization_library_versions'
+       AND (to_jsonb(OLD)->>'published_at') IS NOT NULL THEN
+        RAISE EXCEPTION 'published library version immutable'; END IF;
+    PERFORM require_admin_v7(NEW.created_by);
+    RETURN NEW;
+END; $$;
+CREATE TRIGGER library_item_write BEFORE INSERT OR UPDATE OR DELETE ON organization_library_items
+    FOR EACH ROW EXECUTE FUNCTION validate_library_v7();
+CREATE TRIGGER library_version_write BEFORE INSERT OR UPDATE OR DELETE ON organization_library_versions
+    FOR EACH ROW EXECUTE FUNCTION validate_library_v7();
+CREATE OR REPLACE FUNCTION scenario_review_hash_v7(p_scenario_version_id UUID) RETURNS TEXT
+LANGUAGE sql STABLE SET search_path=pg_catalog,public AS $$
+    SELECT fet3d_jsonb_payload_hash(to_jsonb(s)-'updated_at')
+    FROM scenario_versions s
+    WHERE s.id=p_scenario_version_id
+$$;
+CREATE OR REPLACE FUNCTION validate_content_review_v7() RETURNS TRIGGER
+LANGUAGE plpgsql SET search_path=pg_catalog,public AS $$
+DECLARE s public.scenario_versions%ROWTYPE; criteria JSONB; criterion_ids TEXT[]:=ARRAY[]::TEXT[]; criterion_id TEXT;
+BEGIN
+    IF TG_OP='DELETE' THEN RAISE EXCEPTION 'review history retained'; END IF;
+    SELECT * INTO s FROM scenario_versions WHERE id=NEW.scenario_version_id FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'scenario missing'; END IF;
+    IF TG_OP='INSERT' THEN
+        IF NEW.status<>'Submitted' OR NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.submitted_by
+          AND role='OrganizationUser' AND organization_id=s.organization_id AND is_active AND deleted_at IS NULL) THEN
+            RAISE EXCEPTION 'submission requires scenario owner'; END IF;
+        IF NEW.content_hash IS DISTINCT FROM scenario_review_hash_v7(s.id)
+           OR NEW.rubric_hash IS DISTINCT FROM fet3d_jsonb_payload_hash(s.rubric) THEN RAISE EXCEPTION 'review hash mismatch'; END IF;
+        -- No global thresholds are invented: each rubric must explicitly supply its rules.
+        IF NOT(s.rubric ?& ARRAY['schema_version','criteria','pass_threshold'])
+           OR jsonb_typeof(s.rubric->'schema_version') IS DISTINCT FROM 'string'
+           OR NULLIF(btrim(s.rubric->>'schema_version'),'') IS NULL
+           OR jsonb_typeof(s.rubric->'criteria') IS DISTINCT FROM 'array'
+           OR jsonb_array_length(s.rubric->'criteria')=0
+           OR jsonb_typeof(s.rubric->'pass_threshold') IS DISTINCT FROM 'number' THEN
+            RAISE EXCEPTION 'rubric requires version, criteria and numeric pass threshold'; END IF;
+        FOR criteria IN SELECT value FROM jsonb_array_elements(s.rubric->'criteria') LOOP
+            IF NOT(criteria ?& ARRAY['id','metric','mandatory','weight','operator','threshold'])
+               OR jsonb_typeof(criteria->'id') IS DISTINCT FROM 'string'
+               OR NULLIF(btrim(criteria->>'id'),'') IS NULL
+               OR jsonb_typeof(criteria->'metric') IS DISTINCT FROM 'string'
+               OR NULLIF(btrim(criteria->>'metric'),'') IS NULL
+               OR jsonb_typeof(criteria->'mandatory') IS DISTINCT FROM 'boolean'
+               OR jsonb_typeof(criteria->'weight') IS DISTINCT FROM 'number'
+               OR (criteria->>'weight')::NUMERIC<0
+               OR jsonb_typeof(criteria->'operator') IS DISTINCT FROM 'string'
+               OR criteria->>'operator' NOT IN ('gte','lte','eq')
+               OR jsonb_typeof(criteria->'threshold') IS DISTINCT FROM 'number' THEN
+                RAISE EXCEPTION 'criterion needs metric, mandatory, weight, operator, numeric threshold'; END IF;
+            criterion_id:=criteria->>'id';
+            IF criterion_id=ANY(criterion_ids) THEN RAISE EXCEPTION 'criterion id must be unique'; END IF;
+            criterion_ids:=array_append(criterion_ids,criterion_id);
+        END LOOP;
+    ELSE
+        IF OLD.status<>'Submitted' OR NEW.status NOT IN ('Approved','Rejected')
+           OR (to_jsonb(OLD)-ARRAY['status','reviewed_by','reviewed_at','reason']) IS DISTINCT FROM
+              (to_jsonb(NEW)-ARRAY['status','reviewed_by','reviewed_at','reason']) THEN RAISE EXCEPTION 'review decision immutable'; END IF;
+        PERFORM require_admin_v7(NEW.reviewed_by);
+        IF NEW.content_hash IS DISTINCT FROM scenario_review_hash_v7(s.id) THEN RAISE EXCEPTION 'submitted content changed'; END IF;
+    END IF;
+    RETURN NEW;
+END; $$;
+CREATE TRIGGER content_review_write BEFORE INSERT OR UPDATE OR DELETE ON scenario_content_reviews
+    FOR EACH ROW EXECUTE FUNCTION validate_content_review_v7();
+CREATE OR REPLACE FUNCTION freeze_submitted_scenario_v7() RETURNS TRIGGER
+LANGUAGE plpgsql SET search_path=pg_catalog,public AS $$
+BEGIN
+    IF EXISTS(SELECT 1 FROM scenario_content_reviews WHERE scenario_version_id=OLD.id) THEN
+        RAISE EXCEPTION 'submitted scenario/rubric immutable; author a new version'; END IF;
+    IF TG_OP='DELETE' THEN RETURN OLD; END IF; RETURN NEW;
+END; $$;
+CREATE TRIGGER aa_freeze_submitted_scenario BEFORE UPDATE OR DELETE ON scenario_versions
+    FOR EACH ROW EXECUTE FUNCTION freeze_submitted_scenario_v7();
+CREATE OR REPLACE FUNCTION require_scenario_approval_v7(version_id UUID) RETURNS VOID
+LANGUAGE plpgsql SET search_path=pg_catalog,public AS $$
+BEGIN IF NOT EXISTS(SELECT 1 FROM scenario_content_reviews r WHERE r.scenario_version_id=version_id
+    AND r.status='Approved' AND r.content_hash=scenario_review_hash_v7(version_id)) THEN
+    RAISE EXCEPTION 'approved scenario/rubric snapshot required'; END IF; END; $$;
+CREATE OR REPLACE FUNCTION validate_publish_approval_v7() RETURNS TRIGGER
+LANGUAGE plpgsql SET search_path=pg_catalog,public AS $$
+BEGIN IF NEW.status='Published' THEN PERFORM require_scenario_approval_v7(NEW.scenario_version_id); END IF; RETURN NEW; END; $$;
+CREATE TRIGGER aa_publish_content_approval BEFORE INSERT OR UPDATE ON releases
+    FOR EACH ROW EXECUTE FUNCTION validate_publish_approval_v7();
+
+-- Shared participation code grants access, never tenant membership.
+ALTER TABLE buildings ADD COLUMN visibility TEXT NOT NULL DEFAULT 'Private' CHECK(visibility IN ('Public','Private')),
+    ADD COLUMN access_revision BIGINT NOT NULL DEFAULT 1 CHECK(access_revision>0),
+    ADD COLUMN participation_code_hash TEXT;
+CREATE TABLE building_participation_grants (
+    building_id UUID NOT NULL REFERENCES buildings(id), trainee_user_id UUID NOT NULL REFERENCES users(id),
+    access_revision BIGINT NOT NULL, granted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY(building_id,trainee_user_id,access_revision)
+);
+CREATE OR REPLACE FUNCTION rotate_building_access_v7() RETURNS TRIGGER
+LANGUAGE plpgsql SET search_path=pg_catalog,public AS $$
+BEGIN
+    IF OLD.visibility IS DISTINCT FROM NEW.visibility OR OLD.participation_code_hash IS DISTINCT FROM NEW.participation_code_hash THEN
+        NEW.access_revision:=OLD.access_revision+1;
+    ELSIF NEW.access_revision IS DISTINCT FROM OLD.access_revision THEN RAISE EXCEPTION 'access revision server-owned'; END IF;
+    RETURN NEW;
+END; $$;
+CREATE TRIGGER building_access_revision BEFORE UPDATE ON buildings FOR EACH ROW EXECUTE FUNCTION rotate_building_access_v7();
+CREATE OR REPLACE FUNCTION can_access_building_v7(actor_id UUID,target_building UUID) RETURNS BOOLEAN
+LANGUAGE sql STABLE SET search_path=pg_catalog,public AS $$
+ SELECT EXISTS(SELECT 1 FROM users u JOIN buildings b ON b.id=target_building JOIN organizations o ON o.id=b.organization_id
+ WHERE u.id=actor_id AND u.role='Trainee' AND u.is_active AND u.deleted_at IS NULL
+ AND b.is_active AND b.deleted_at IS NULL AND o.is_active AND o.deleted_at IS NULL
+ AND (b.visibility='Public' OR EXISTS(SELECT 1 FROM building_participation_grants g
+     WHERE g.building_id=b.id AND g.trainee_user_id=u.id AND g.access_revision=b.access_revision)))
+$$;
+CREATE OR REPLACE FUNCTION verify_building_code_v7(actor_id UUID,target_building UUID,code TEXT) RETURNS BOOLEAN
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
+DECLARE b public.buildings%ROWTYPE;
+BEGIN
+    SELECT * INTO b FROM buildings WHERE id=target_building FOR UPDATE;
+    IF NOT FOUND OR NOT b.is_active OR b.deleted_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM users
+      WHERE id=actor_id AND role='Trainee' AND is_active AND deleted_at IS NULL) THEN RAISE EXCEPTION 'invalid participant/building'; END IF;
+    IF b.visibility='Public' THEN RETURN can_access_building_v7(actor_id,b.id); END IF;
+    IF b.participation_code_hash IS NULL OR code IS NULL OR length(code)>128
+       OR public.crypt(code,b.participation_code_hash) IS DISTINCT FROM b.participation_code_hash THEN
+        RAISE EXCEPTION 'INVALID_PARTICIPATION_CODE'; END IF;
+    INSERT INTO building_participation_grants(building_id,trainee_user_id,access_revision)
+        VALUES(b.id,actor_id,b.access_revision) ON CONFLICT DO NOTHING;
+    RETURN true;
+END; $$;
+CREATE OR REPLACE FUNCTION configure_building_access_v7(actor_id UUID,target_building UUID,new_visibility TEXT,new_code TEXT) RETURNS BIGINT
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
+DECLARE b public.buildings%ROWTYPE;
+BEGIN
+    SELECT * INTO b FROM buildings WHERE id=target_building FOR UPDATE;
+    IF NOT FOUND OR NOT EXISTS(SELECT 1 FROM users WHERE id=actor_id AND role='OrganizationUser'
+      AND organization_id=b.organization_id AND is_active AND deleted_at IS NULL) THEN RAISE EXCEPTION 'building owner required'; END IF;
+    IF new_visibility NOT IN ('Public','Private') OR (new_code IS NOT NULL AND (length(new_code)<8 OR length(new_code)>128)) THEN
+       RAISE EXCEPTION 'visibility/code invalid'; END IF;
+    -- NULL code explicitly revokes participation; Private may remain inaccessible until configured.
+    UPDATE buildings SET visibility=new_visibility,participation_code_hash=CASE WHEN new_code IS NULL THEN NULL
+        ELSE public.crypt(new_code,public.gen_salt('bf',12)) END WHERE id=b.id RETURNING access_revision INTO b.access_revision;
+    RETURN b.access_revision;
+END; $$;
+
+-- Service-period identity survives in-period upgrades. Renewals create new rows.
+ALTER TABLE service_packages ADD COLUMN learner_limit INT CHECK(learner_limit>0),
+    ADD COLUMN ai_quota_units INT CHECK(ai_quota_units>=0), ADD COLUMN commercial_policy JSONB NOT NULL DEFAULT '{}';
+ALTER TABLE quotation_building_items ADD COLUMN learner_limit INT CHECK(learner_limit>0),
+    ADD COLUMN ai_quota_units INT CHECK(ai_quota_units>=0), ADD COLUMN commercial_policy JSONB NOT NULL DEFAULT '{}',
+    ADD COLUMN starts_at TIMESTAMPTZ, ADD COLUMN ends_at TIMESTAMPTZ,
+    ADD COLUMN upgrade_entitlement_id UUID REFERENCES service_entitlements(id);
+ALTER TABLE service_entitlements ADD COLUMN learner_limit INT CHECK(learner_limit>0),
+    ADD COLUMN ai_quota_units INT CHECK(ai_quota_units>=0);
+ALTER TABLE service_entitlements ADD CONSTRAINT active_entitlement_capacity CHECK(status<>'Active' OR (learner_limit IS NOT NULL AND ai_quota_units IS NOT NULL));
+CREATE TABLE building_learner_seats (
+    entitlement_id UUID NOT NULL REFERENCES service_entitlements(id), trainee_user_id UUID NOT NULL REFERENCES users(id),
+    first_session_id UUID NOT NULL REFERENCES sessions(id), counted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY(entitlement_id,trainee_user_id)
+);
+CREATE TABLE entitlement_capacity_upgrades (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), entitlement_id UUID NOT NULL REFERENCES service_entitlements(id),
+    quotation_item_id UUID NOT NULL UNIQUE REFERENCES quotation_building_items(id), payment_transaction_id UUID NOT NULL REFERENCES payment_transactions(id),
+    learner_limit INT NOT NULL CHECK(learner_limit>0), effective_at TIMESTAMPTZ NOT NULL, ends_at TIMESTAMPTZ NOT NULL,
+    price_snapshot JSONB NOT NULL, terms_snapshot JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TRIGGER capacity_upgrade_immutable BEFORE UPDATE OR DELETE ON entitlement_capacity_upgrades
+    FOR EACH ROW EXECUTE FUNCTION immutable_snapshot_v7();
+ALTER TABLE sessions ADD COLUMN service_entitlement_id UUID REFERENCES service_entitlements(id),
+    ADD COLUMN content_review_id UUID REFERENCES scenario_content_reviews(id), ADD COLUMN rubric_hash TEXT;
+-- Separate triggers avoid referencing a nonexistent field on a polymorphic NEW record.
+CREATE OR REPLACE FUNCTION validate_package_config_v7() RETURNS TRIGGER
+LANGUAGE plpgsql SET search_path=pg_catalog,public AS $$
+BEGIN
+    IF NEW.is_active AND (NEW.duration_months IS NULL OR NEW.learner_limit IS NULL OR NEW.ai_quota_units IS NULL
+        OR NOT(NEW.commercial_policy ?& ARRAY['version','quota_unit','quota_validity','rollover','upgrade_pricing','upgrade_term'])) THEN
+        RAISE EXCEPTION 'active package requires explicit commercial policy'; END IF;
+    RETURN NEW;
+END; $$;
+CREATE OR REPLACE FUNCTION validate_line_config_v7() RETURNS TRIGGER
+LANGUAGE plpgsql SET search_path=pg_catalog,public AS $$
+DECLARE v_policy_id UUID; v_quota_start TIMESTAMPTZ; v_quota_end TIMESTAMPTZ;
+BEGIN
+    IF NEW.learner_limit IS NULL OR NEW.ai_quota_units IS NULL OR NEW.starts_at IS NULL OR NEW.ends_at IS NULL
+       OR NEW.ends_at<=NEW.starts_at OR NOT(NEW.commercial_policy ?& ARRAY['version','quota_unit','quota_validity','rollover','upgrade_pricing','upgrade_term']) THEN
+        RAISE EXCEPTION 'line requires configured capacity, quota, policy and effective dates'; END IF;
+    IF (NEW.purchase_action='Upgrade') IS DISTINCT FROM (NEW.upgrade_entitlement_id IS NOT NULL) THEN
+        RAISE EXCEPTION 'Upgrade requires existing period identity'; END IF;
+    -- A quota-bearing Building line must be fully provisionable before its
+    -- quotation can leave Draft; payment must never discover missing policy data.
+    IF NEW.ai_quota_units>0 THEN
+        IF jsonb_typeof(NEW.commercial_policy->'ai_policy_version_id') IS DISTINCT FROM 'string'
+           OR jsonb_typeof(NEW.commercial_policy->'quota_starts_at') IS DISTINCT FROM 'string'
+           OR jsonb_typeof(NEW.commercial_policy->'quota_ends_at') IS DISTINCT FROM 'string'
+           OR NULLIF(btrim(NEW.commercial_policy->>'ai_policy_version_id'),'') IS NULL
+           OR NULLIF(btrim(NEW.commercial_policy->>'quota_starts_at'),'') IS NULL
+           OR NULLIF(btrim(NEW.commercial_policy->>'quota_ends_at'),'') IS NULL THEN
+            RAISE EXCEPTION 'quota-bearing line requires AI policy and grant validity'; END IF;
+        v_policy_id:=(NEW.commercial_policy->>'ai_policy_version_id')::UUID;
+        v_quota_start:=(NEW.commercial_policy->>'quota_starts_at')::TIMESTAMPTZ;
+        v_quota_end:=(NEW.commercial_policy->>'quota_ends_at')::TIMESTAMPTZ;
+        IF v_quota_end<=v_quota_start OR NOT EXISTS(
+            SELECT 1 FROM quotations q JOIN ai_policy_versions p ON p.id=v_policy_id
+            WHERE q.id=NEW.quotation_id AND p.audience='organization' AND p.policy_kind='quota'
+              AND (p.organization_id IS NULL OR p.organization_id=q.organization_id)
+              AND p.effective_from<=v_quota_start
+              AND (p.effective_until IS NULL OR p.effective_until>=v_quota_end)
+              AND p.policy_snapshot->>'quota_unit'=NEW.commercial_policy->>'quota_unit') THEN
+            RAISE EXCEPTION 'quota policy/version, unit or validity does not match Building quotation'; END IF;
+    END IF;
+    RETURN NEW;
+END; $$;
+CREATE TRIGGER aa_package_config BEFORE INSERT OR UPDATE ON service_packages FOR EACH ROW EXECUTE FUNCTION validate_package_config_v7();
+CREATE TRIGGER aa_line_config BEFORE INSERT OR UPDATE ON quotation_building_items FOR EACH ROW EXECUTE FUNCTION validate_line_config_v7();
+
+ALTER TABLE ai_quota_grants DROP CONSTRAINT check_ai_quota_kind;
+ALTER TABLE ai_quota_grants ADD CONSTRAINT check_ai_quota_kind CHECK(quota_kind IN ('free','daily','trial','package','topup'));
+ALTER TABLE ai_quota_grants ADD COLUMN payment_transaction_id UUID REFERENCES payment_transactions(id),
+    ADD COLUMN service_entitlement_id UUID REFERENCES service_entitlements(id),
+    ADD COLUMN provisioning_key TEXT UNIQUE, ADD COLUMN quota_unit TEXT,
+    ADD COLUMN source_snapshot JSONB NOT NULL DEFAULT '{}';
+CREATE TABLE quotation_ai_quota_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), quotation_id UUID NOT NULL UNIQUE REFERENCES quotations(id),
+    policy_version_id UUID NOT NULL REFERENCES ai_policy_versions(id), units INT NOT NULL CHECK(units>0), quota_unit TEXT NOT NULL,
+    starts_at TIMESTAMPTZ NOT NULL, ends_at TIMESTAMPTZ NOT NULL, price_snapshot JSONB NOT NULL, terms_snapshot JSONB NOT NULL,
+    provisioning_key TEXT NOT NULL UNIQUE, CHECK(ends_at>starts_at)
+);
+CREATE OR REPLACE FUNCTION validate_topup_line_v7() RETURNS TRIGGER
+LANGUAGE plpgsql SET search_path=pg_catalog,public AS $$
+DECLARE q public.quotations%ROWTYPE;
+BEGIN
+    SELECT * INTO q FROM quotations WHERE id=CASE WHEN TG_OP='DELETE' THEN OLD.quotation_id ELSE NEW.quotation_id END FOR UPDATE;
+    IF q.status<>'Draft' OR q.billing_purpose<>'AIQuotaTopUp' THEN RAISE EXCEPTION 'editable prepaid quota quotation required'; END IF;
+    IF TG_OP='UPDATE' AND OLD.quotation_id<>NEW.quotation_id THEN RAISE EXCEPTION 'cannot move quota line'; END IF;
+    IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+    IF NOT EXISTS(SELECT 1 FROM ai_policy_versions WHERE id=NEW.policy_version_id AND audience IN ('organization','common')
+       AND (organization_id IS NULL OR organization_id=q.organization_id)) THEN RAISE EXCEPTION 'topup policy tenant mismatch'; END IF;
+    RETURN NEW;
+END; $$;
+CREATE TRIGGER topup_line_write BEFORE INSERT OR UPDATE OR DELETE ON quotation_ai_quota_items FOR EACH ROW EXECUTE FUNCTION validate_topup_line_v7();
+CREATE OR REPLACE FUNCTION validate_topup_quote_v7() RETURNS TRIGGER
+LANGUAGE plpgsql SET search_path=pg_catalog,public AS $$
+BEGIN
+    IF NEW.billing_purpose='AIQuotaTopUp' AND NEW.status IN ('Issued','Accepted') THEN
+        IF NOT EXISTS(SELECT 1 FROM quotation_ai_quota_items i WHERE i.quotation_id=NEW.id
+          AND i.price_snapshot=NEW.price_snapshot AND i.terms_snapshot=NEW.terms_snapshot)
+          OR NEW.quantity<>1 OR NEW.subtotal_amount<>NEW.unit_price OR NEW.total_amount<>NEW.subtotal_amount-NEW.discount_amount+NEW.tax_amount THEN
+            RAISE EXCEPTION 'prepaid quota line and quotation snapshots/totals required'; END IF;
+    END IF;
+    RETURN NEW;
+END; $$;
+CREATE TRIGGER aa_topup_quote BEFORE INSERT OR UPDATE ON quotations FOR EACH ROW EXECUTE FUNCTION validate_topup_quote_v7();
+CREATE OR REPLACE FUNCTION provision_ai_topup_v7(payment_id UUID) RETURNS UUID
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
+DECLARE q public.quotations%ROWTYPE; i public.quotation_ai_quota_items%ROWTYPE; grant_id UUID;
+BEGIN
+    SELECT q0.* INTO q FROM payment_transactions p JOIN payos_payment_requests req ON req.id=p.payment_request_id
+      JOIN quotations q0 ON q0.id=req.quotation_id WHERE p.id=payment_id AND p.status='Applied' AND q0.billing_purpose='AIQuotaTopUp';
+    IF NOT FOUND THEN RAISE EXCEPTION 'Applied prepaid quota payment required'; END IF;
+    SELECT * INTO i FROM quotation_ai_quota_items WHERE quotation_id=q.id;
+    IF NOT FOUND THEN RAISE EXCEPTION 'quota line missing'; END IF;
+    PERFORM pg_advisory_xact_lock(hashtextextended('ai-pool:organization:'||q.organization_id::TEXT,0));
+    SELECT id INTO grant_id FROM ai_quota_grants WHERE provisioning_key=i.provisioning_key;
+    IF FOUND THEN
+        IF NOT EXISTS(SELECT 1 FROM ai_quota_grants WHERE id=grant_id AND payment_transaction_id=payment_id) THEN
+          RAISE EXCEPTION 'quota provisioning conflict'; END IF;
+        RETURN grant_id;
+    END IF;
+    INSERT INTO ai_quota_grants(organization_id,audience,quota_kind,policy_version_id,units_granted,starts_at,ends_at,
+      configured_by,payment_transaction_id,provisioning_key,quota_unit,source_snapshot)
+    VALUES(q.organization_id,'organization','topup',i.policy_version_id,i.units,i.starts_at,i.ends_at,
+      q.requested_by,payment_id,i.provisioning_key,i.quota_unit,jsonb_build_object('quotation_id',q.id,'price',i.price_snapshot,'terms',i.terms_snapshot))
+    RETURNING id INTO grant_id;
+    RETURN grant_id;
+END; $$;
+
+CREATE OR REPLACE FUNCTION provision_building_line_v7(payment_id UUID,item_id UUID) RETURNS UUID
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
+DECLARE i public.quotation_building_items%ROWTYPE; q public.quotations%ROWTYPE;
+    ent public.service_entitlements%ROWTYPE; entitlement_id UUID; policy_id UUID; g UUID; quota_end TIMESTAMPTZ; quota_start TIMESTAMPTZ;
+BEGIN
+    SELECT * INTO i FROM quotation_building_items WHERE id=item_id;
+    IF NOT FOUND THEN RAISE EXCEPTION 'building line missing'; END IF;
+    SELECT q0.* INTO q FROM quotations q0 JOIN payos_payment_requests req ON req.quotation_id=q0.id
+      JOIN payment_transactions p ON p.payment_request_id=req.id WHERE q0.id=i.quotation_id AND p.id=payment_id AND p.status='Applied'
+      AND q0.billing_purpose='BuildingService';
+    IF NOT FOUND THEN RAISE EXCEPTION 'Applied matching Building payment required'; END IF;
+    PERFORM pg_advisory_xact_lock(hashtextextended('building-service:'||i.building_id::TEXT,0));
+    IF i.purchase_action='Upgrade' THEN
+        -- Return the already-provisioned period on a replay before checking
+        -- whether that period is still active.
+        SELECT e.* INTO ent FROM entitlement_capacity_upgrades u JOIN service_entitlements e ON e.id=u.entitlement_id
+          WHERE u.quotation_item_id=i.id FOR UPDATE OF e;
+        IF FOUND THEN
+            IF NOT EXISTS(SELECT 1 FROM entitlement_capacity_upgrades
+              WHERE quotation_item_id=i.id AND payment_transaction_id=payment_id) THEN RAISE EXCEPTION 'upgrade replay conflict'; END IF;
+            entitlement_id:=ent.id;
+        ELSE
+            SELECT * INTO ent FROM service_entitlements WHERE id=i.upgrade_entitlement_id FOR UPDATE;
+            IF NOT FOUND OR ent.building_id<>i.building_id OR ent.organization_id<>q.organization_id OR ent.status<>'Active'
+              OR effective_entitlement_end_v7(ent.id,ent.ends_at)<=now() OR i.starts_at<ent.starts_at OR i.ends_at<ent.ends_at OR i.learner_limit<=ent.learner_limit THEN
+                RAISE EXCEPTION 'upgrade requires same active period and higher capacity'; END IF;
+            IF EXISTS(SELECT 1 FROM service_entitlements e WHERE e.building_id=i.building_id AND e.id<>ent.id
+              AND e.status IN ('Trial','Active','Suspended') AND e.starts_at<i.ends_at
+              AND COALESCE((SELECT max(u.ends_at) FROM entitlement_capacity_upgrades u WHERE u.entitlement_id=e.id),e.ends_at)>i.starts_at) THEN
+                RAISE EXCEPTION 'upgrade period may not overlap another service period'; END IF;
+            INSERT INTO entitlement_capacity_upgrades(entitlement_id,quotation_item_id,payment_transaction_id,learner_limit,effective_at,ends_at,price_snapshot,terms_snapshot)
+              VALUES(ent.id,i.id,payment_id,i.learner_limit,i.starts_at,i.ends_at,i.price_snapshot,i.terms_snapshot) ON CONFLICT(quotation_item_id) DO NOTHING;
+            IF NOT EXISTS(SELECT 1 FROM entitlement_capacity_upgrades WHERE quotation_item_id=i.id AND payment_transaction_id=payment_id) THEN
+              RAISE EXCEPTION 'upgrade replay conflict'; END IF;
+            entitlement_id:=ent.id;
+        END IF;
+    ELSE
+        SELECT * INTO ent FROM service_entitlements WHERE quotation_item_id=i.id;
+        IF FOUND THEN
+            IF ent.payment_transaction_id<>payment_id THEN RAISE EXCEPTION 'entitlement replay conflict'; END IF;
+            entitlement_id:=ent.id;
+        ELSE
+            IF EXISTS(SELECT 1 FROM service_entitlements e WHERE e.building_id=i.building_id AND e.status IN ('Trial','Active','Suspended')
+              AND e.starts_at<i.ends_at
+              AND COALESCE((SELECT max(u.ends_at) FROM entitlement_capacity_upgrades u WHERE u.entitlement_id=e.id),e.ends_at)>i.starts_at) THEN
+                RAISE EXCEPTION 'service periods may not overlap'; END IF;
+            INSERT INTO service_entitlements(organization_id,building_id,service_package_id,quotation_id,quotation_item_id,
+              payment_transaction_id,provisioning_key,starts_at,ends_at,price_snapshot,terms_snapshot,created_by,learner_limit,ai_quota_units)
+            VALUES(q.organization_id,i.building_id,i.service_package_id,q.id,i.id,payment_id,
+              'service:'||i.id::TEXT||':'||payment_id::TEXT,
+              i.starts_at,i.ends_at,i.price_snapshot,i.terms_snapshot,q.requested_by,i.learner_limit,i.ai_quota_units) RETURNING id INTO entitlement_id;
+        END IF;
+    END IF;
+    -- Quota policy explicitly supplies absolute grant validity; missing config fails before any entitlement commits.
+    IF i.ai_quota_units>0 THEN
+        policy_id:=(i.commercial_policy->>'ai_policy_version_id')::UUID;
+        quota_start:=(i.commercial_policy->>'quota_starts_at')::TIMESTAMPTZ;
+        quota_end:=(i.commercial_policy->>'quota_ends_at')::TIMESTAMPTZ;
+        IF policy_id IS NULL OR quota_start IS NULL OR quota_end IS NULL OR quota_end<=quota_start THEN
+            RAISE EXCEPTION 'explicit AI policy and grant validity required'; END IF;
+        PERFORM pg_advisory_xact_lock(hashtextextended('ai-pool:organization:'||q.organization_id::TEXT,0));
+        INSERT INTO ai_quota_grants(organization_id,building_id,audience,quota_kind,policy_version_id,units_granted,
+          starts_at,ends_at,configured_by,payment_transaction_id,service_entitlement_id,provisioning_key,quota_unit,source_snapshot)
+        VALUES(q.organization_id,i.building_id,'organization','package',policy_id,i.ai_quota_units,
+          quota_start,quota_end,q.requested_by,payment_id,entitlement_id,'building-quota:'||i.id::TEXT,
+          i.commercial_policy->>'quota_unit',i.commercial_policy) ON CONFLICT(provisioning_key) DO NOTHING;
+        IF NOT EXISTS(SELECT 1 FROM ai_quota_grants WHERE provisioning_key='building-quota:'||i.id::TEXT AND payment_transaction_id=payment_id) THEN
+          RAISE EXCEPTION 'package quota replay conflict'; END IF;
+    END IF;
+    RETURN entitlement_id;
+END; $$;
+
+CREATE OR REPLACE FUNCTION pin_start_access_and_seat_v7() RETURNS TRIGGER
+LANGUAGE plpgsql SET search_path=pg_catalog,public AS $$
+DECLARE b UUID; e public.service_entitlements%ROWTYPE; capacity INT; term_end TIMESTAMPTZ; review public.scenario_content_reviews%ROWTYPE;
+BEGIN
+    IF NEW.started_at IS NULL OR (TG_OP='UPDATE' AND OLD.started_at IS NOT NULL) THEN RETURN NEW; END IF;
+    SELECT building_id INTO b FROM releases WHERE id=NEW.release_id;
+    PERFORM 1 FROM buildings WHERE id=b FOR SHARE;
+    IF NOT can_access_building_v7(NEW.trainee_user_id,b) THEN RAISE EXCEPTION 'BUILDING_ACCESS_DENIED'; END IF;
+    PERFORM require_scenario_approval_v7(NEW.scenario_version_id);
+    SELECT * INTO review FROM scenario_content_reviews WHERE scenario_version_id=NEW.scenario_version_id;
+    SELECT * INTO e FROM service_entitlements WHERE building_id=b AND status='Active' AND starts_at<=now()
+      AND effective_entitlement_end_v7(id,ends_at)>now()
+      ORDER BY starts_at DESC LIMIT 1 FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'active period missing'; END IF;
+    SELECT GREATEST(e.learner_limit,COALESCE(max(learner_limit),0)),GREATEST(e.ends_at,COALESCE(max(ends_at),e.ends_at))
+      INTO capacity,term_end FROM entitlement_capacity_upgrades WHERE entitlement_id=e.id AND effective_at<=now();
+    IF term_end<=now() THEN RAISE EXCEPTION 'service period expired'; END IF;
+    IF NOT EXISTS(SELECT 1 FROM building_learner_seats WHERE entitlement_id=e.id AND trainee_user_id=NEW.trainee_user_id) THEN
+        IF (SELECT count(*) FROM building_learner_seats WHERE entitlement_id=e.id)>=capacity THEN
+            RAISE EXCEPTION 'LEARNER_LIMIT_REACHED'; END IF;
+        INSERT INTO building_learner_seats(entitlement_id,trainee_user_id,first_session_id) VALUES(e.id,NEW.trainee_user_id,NEW.id);
+    END IF;
+    NEW.service_entitlement_id:=e.id; NEW.content_review_id:=review.id; NEW.rubric_hash:=review.rubric_hash;
+    RETURN NEW;
+END; $$;
+-- Existing start function still enforces package/QR/actor; this trigger adds atomic access/seat gates.
+CREATE TRIGGER aa_start_access_seat BEFORE UPDATE ON sessions FOR EACH ROW EXECUTE FUNCTION pin_start_access_and_seat_v7();
+CREATE OR REPLACE FUNCTION validate_private_preparation_v7() RETURNS TRIGGER
+LANGUAGE plpgsql SET search_path=pg_catalog,public AS $$
+DECLARE b UUID;
+BEGIN
+    SELECT building_id INTO b FROM releases WHERE id=NEW.release_id;
+    IF NOT can_access_building_v7(NEW.trainee_user_id,b) THEN RAISE EXCEPTION 'private content access denied'; END IF;
+    PERFORM require_scenario_approval_v7(NEW.scenario_version_id);
+    RETURN NEW;
+END; $$;
+CREATE TRIGGER aa_prepare_private BEFORE INSERT ON sessions FOR EACH ROW EXECUTE FUNCTION validate_private_preparation_v7();
+
+ALTER TABLE session_results ADD COLUMN assessment_outcome TEXT CHECK(assessment_outcome IN ('Passed','NotPassed','NotAssessed','Incomplete')),
+    ADD COLUMN rubric_hash TEXT, ADD COLUMN criterion_results JSONB NOT NULL DEFAULT '[]',
+    ADD COLUMN assessment_reasons JSONB NOT NULL DEFAULT '[]';
+CREATE OR REPLACE FUNCTION evaluate_result_v7() RETURNS TRIGGER
+LANGUAGE plpgsql SET search_path=pg_catalog,public AS $$
+DECLARE sess public.sessions%ROWTYPE; rubric JSONB; c JSONB; observed JSONB;
+    metric NUMERIC; ok BOOLEAN; missing BOOLEAN:=false; mandatory_failed BOOLEAN:=false; score NUMERIC:=0;
+BEGIN
+    SELECT * INTO sess FROM sessions WHERE id=NEW.session_id;
+    SELECT s.rubric INTO rubric FROM scenario_versions s WHERE s.id=sess.scenario_version_id;
+    NEW.rubric_hash:=sess.rubric_hash;
+    NEW.criterion_results:='[]'; NEW.assessment_reasons:='[]';
+    IF sess.mode<>'Assessment' THEN NEW.assessment_outcome:='NotAssessed'; RETURN NEW; END IF;
+    IF NOT(rubric ? 'criteria') THEN RAISE EXCEPTION 'approved rubric missing'; END IF;
+    FOR c IN SELECT value FROM jsonb_array_elements(rubric->'criteria') LOOP
+        observed:=NEW.result_snapshot->'metrics'->(c->>'metric');
+        IF jsonb_typeof(observed) IS DISTINCT FROM 'number' THEN
+            missing:=true; ok:=false; metric:=NULL;
+        ELSE
+            metric:=(observed#>>'{}')::NUMERIC;
+            ok:=CASE c->>'operator' WHEN 'gte' THEN metric>=(c->>'threshold')::NUMERIC
+              WHEN 'lte' THEN metric<=(c->>'threshold')::NUMERIC WHEN 'eq' THEN metric=(c->>'threshold')::NUMERIC ELSE false END;
+        END IF;
+        IF ok THEN score:=score+(c->>'weight')::NUMERIC;
+        ELSE
+            NEW.assessment_reasons:=NEW.assessment_reasons||jsonb_build_array(jsonb_build_object('criterion_id',c->>'id','reason',CASE WHEN metric IS NULL THEN 'MissingMetric' ELSE 'CriterionNotMet' END));
+            mandatory_failed:=mandatory_failed OR (c->>'mandatory')::BOOLEAN;
+        END IF;
+        NEW.criterion_results:=NEW.criterion_results||jsonb_build_array(jsonb_build_object('criterion_id',c->>'id','metric',metric,'met',ok,'mandatory',(c->>'mandatory')::BOOLEAN));
+    END LOOP;
+    NEW.score:=score;
+    NEW.assessment_outcome:=CASE WHEN missing THEN 'Incomplete' WHEN mandatory_failed OR score<(rubric->>'pass_threshold')::NUMERIC THEN 'NotPassed' ELSE 'Passed' END;
+    IF NOT missing AND score<(rubric->>'pass_threshold')::NUMERIC THEN
+      NEW.assessment_reasons:=NEW.assessment_reasons||jsonb_build_array(jsonb_build_object('reason','PassThresholdNotMet','score',score)); END IF;
+    RETURN NEW;
+END; $$;
+CREATE TRIGGER assessment_result BEFORE INSERT ON session_results FOR EACH ROW EXECUTE FUNCTION evaluate_result_v7();
+CREATE TRIGGER assessment_result_immutable BEFORE UPDATE OR DELETE ON session_results FOR EACH ROW EXECUTE FUNCTION immutable_snapshot_v7();
+
+-- Explicit learner-safe index snapshots; scope is reauthorized on every retrieval.
+CREATE TABLE scenario_knowledge_documents (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), scenario_version_id UUID NOT NULL UNIQUE REFERENCES scenario_versions(id),
+    review_id UUID NOT NULL REFERENCES scenario_content_reviews(id), content_hash TEXT NOT NULL,
+    learner_content JSONB NOT NULL, indexed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK(learner_content ?& ARRAY['name','objectives','instructions']),
+    CHECK((learner_content-ARRAY['name','objectives','instructions'])='{}'::JSONB)
+);
+CREATE OR REPLACE FUNCTION authorize_ai_scope_v7(actor_id UUID,audience TEXT,org_id UUID,building_id UUID,scope JSONB) RETURNS VOID
+LANGUAGE plpgsql SET search_path=pg_catalog,public AS $$
+DECLARE v_version_id UUID; v_session_id UUID; b UUID;
+BEGIN
+    IF jsonb_typeof(scope) IS DISTINCT FROM 'object' OR (scope-ARRAY['learn_post_id','learn_version_id','scenario_version_id','session_id','draft_id','common'])<>'{}'::JSONB THEN
+      RAISE EXCEPTION 'unsupported AI scope'; END IF;
+    IF audience='organization' THEN
+      IF NOT EXISTS(SELECT 1 FROM users u JOIN organizations o ON o.id=u.organization_id WHERE u.id=actor_id AND u.organization_id=org_id
+        AND u.role='OrganizationUser' AND u.is_active AND u.deleted_at IS NULL AND o.is_active AND o.deleted_at IS NULL) THEN RAISE EXCEPTION 'AI organization owner required'; END IF;
+      IF building_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM buildings b0 WHERE b0.id=building_id AND b0.organization_id=org_id) THEN RAISE EXCEPTION 'AI building tenant mismatch'; END IF;
+      IF scope ? 'draft_id' AND NOT EXISTS(SELECT 1 FROM scenario_drafts d WHERE d.id=(scope->>'draft_id')::UUID AND d.organization_id=org_id) THEN
+        RAISE EXCEPTION 'draft tenant mismatch'; END IF;
+    ELSIF audience='trainee' THEN
+      IF NOT EXISTS(SELECT 1 FROM users WHERE id=actor_id AND role='Trainee' AND is_active AND deleted_at IS NULL) THEN RAISE EXCEPTION 'active Trainee required'; END IF;
+      IF scope ? 'draft_id' THEN RAISE EXCEPTION 'Trainee cannot read draft'; END IF;
+      IF EXISTS(SELECT 1 FROM sessions WHERE trainee_user_id=actor_id AND mode='Assessment' AND status IN ('Launching','Running')) THEN
+        RAISE EXCEPTION 'AI unavailable during Assessment'; END IF;
+    ELSE RAISE EXCEPTION 'invalid AI audience'; END IF;
+    IF scope ? 'session_id' THEN
+      v_session_id:=(scope->>'session_id')::UUID;
+      IF audience<>'trainee' OR NOT EXISTS(SELECT 1 FROM sessions s JOIN session_results r ON r.session_id=s.id
+        WHERE s.id=v_session_id AND s.trainee_user_id=actor_id) THEN RAISE EXCEPTION 'only own stored results allowed'; END IF;
+    END IF;
+    IF scope ? 'scenario_version_id' THEN
+      v_version_id:=(scope->>'scenario_version_id')::UUID;
+      SELECT s.building_id INTO b FROM scenario_versions s WHERE s.id=v_version_id;
+      IF audience='organization' THEN
+        IF NOT EXISTS(SELECT 1 FROM scenario_versions WHERE id=v_version_id AND organization_id=org_id) THEN RAISE EXCEPTION 'scenario tenant mismatch'; END IF;
+      ELSE
+        PERFORM require_scenario_approval_v7(v_version_id);
+        IF NOT can_access_building_v7(actor_id,b) OR NOT EXISTS(SELECT 1 FROM releases r JOIN trainings t ON t.release_id=r.id
+          WHERE r.scenario_version_id=v_version_id AND r.status='Published' AND t.status='Active')
+          OR NOT EXISTS(SELECT 1 FROM service_entitlements e WHERE e.building_id=b AND e.status='Active' AND e.starts_at<=now() AND effective_entitlement_end_v7(e.id,e.ends_at)>now()) THEN
+          RAISE EXCEPTION 'scenario access or service expired'; END IF;
+      END IF;
+    END IF;
+    IF (scope ? 'learn_post_id') IS DISTINCT FROM (scope ? 'learn_version_id') THEN
+      RAISE EXCEPTION 'Learn scope requires both post and published version'; END IF;
+    IF scope ? 'learn_post_id' THEN
+      IF NOT EXISTS(SELECT 1 FROM learn_posts p JOIN learn_post_versions v ON v.id=p.published_version_id
+        WHERE p.id=(scope->>'learn_post_id')::UUID AND v.id=(scope->>'learn_version_id')::UUID
+          AND p.publication_status IN ('Published','Hidden') AND v.status='Published') THEN
+        RAISE EXCEPTION 'Learn source not eligible'; END IF;
+    END IF;
+END; $$;
+CREATE OR REPLACE FUNCTION validate_ai_scope_v7() RETURNS TRIGGER
+LANGUAGE plpgsql SET search_path=pg_catalog,public AS $$
+BEGIN PERFORM authorize_ai_scope_v7(NEW.user_id,NEW.audience,NEW.organization_id,NEW.building_id,NEW.source_scope); RETURN NEW; END; $$;
+CREATE TRIGGER aa_authorize_ai_scope BEFORE INSERT ON ai_requests FOR EACH ROW EXECUTE FUNCTION validate_ai_scope_v7();
+CREATE OR REPLACE FUNCTION validate_scenario_index_v7() RETURNS TRIGGER
+LANGUAGE plpgsql SET search_path=pg_catalog,public AS $$
+DECLARE s public.scenario_versions%ROWTYPE;
+BEGIN
+    PERFORM require_scenario_approval_v7(NEW.scenario_version_id);
+    SELECT * INTO s FROM scenario_versions WHERE id=NEW.scenario_version_id;
+    IF NOT EXISTS(SELECT 1 FROM releases WHERE scenario_version_id=s.id AND status='Published')
+       OR NOT EXISTS(SELECT 1 FROM scenario_content_reviews r WHERE r.id=NEW.review_id AND r.scenario_version_id=s.id AND r.status='Approved' AND r.content_hash=NEW.content_hash)
+       OR NEW.learner_content IS DISTINCT FROM jsonb_build_object('name',s.name,'objectives',s.learning_objectives,'instructions',s.learner_instructions) THEN
+      RAISE EXCEPTION 'index must be learner-safe approved/published snapshot'; END IF;
+    RETURN NEW;
+END; $$;
+CREATE TRIGGER scenario_index_write BEFORE INSERT OR UPDATE ON scenario_knowledge_documents FOR EACH ROW EXECUTE FUNCTION validate_scenario_index_v7();
+
+-- Dedicated NOLOGIN owner; only trusted backend/accounting executors invoke actor-bound gates.
+DO $$ BEGIN IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='fet3d_product_owner') THEN CREATE ROLE fet3d_product_owner NOLOGIN; END IF; END $$;
+GRANT USAGE ON SCHEMA public TO fet3d_product_owner;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO fet3d_product_owner;
+GRANT SELECT,INSERT,UPDATE ON building_participation_grants,service_entitlements,entitlement_capacity_upgrades,
+    ai_quota_grants TO fet3d_product_owner;
+GRANT UPDATE ON buildings TO fet3d_product_owner;
+ALTER FUNCTION configure_building_access_v7(UUID,UUID,TEXT,TEXT) OWNER TO fet3d_product_owner;
+ALTER FUNCTION verify_building_code_v7(UUID,UUID,TEXT) OWNER TO fet3d_product_owner;
+ALTER FUNCTION provision_building_line_v7(UUID,UUID) OWNER TO fet3d_product_owner;
+ALTER FUNCTION provision_ai_topup_v7(UUID) OWNER TO fet3d_product_owner;
+REVOKE ALL ON FUNCTION configure_building_access_v7(UUID,UUID,TEXT,TEXT),verify_building_code_v7(UUID,UUID,TEXT),
+    provision_building_line_v7(UUID,UUID),provision_ai_topup_v7(UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION configure_building_access_v7(UUID,UUID,TEXT,TEXT),verify_building_code_v7(UUID,UUID,TEXT) TO fet3d_backend_executor;
+GRANT EXECUTE ON FUNCTION provision_building_line_v7(UUID,UUID),provision_ai_topup_v7(UUID) TO fet3d_accounting_executor;
+GRANT SELECT ON scenario_content_reviews,building_participation_grants,building_learner_seats,entitlement_capacity_upgrades,
+    organizations TO fet3d_session_owner;
+GRANT INSERT ON building_learner_seats TO fet3d_session_owner;
+GRANT SELECT ON scenario_content_reviews,building_participation_grants,organizations TO fet3d_session_prepare_executor;
+GRANT SELECT ON users,organizations,buildings,scenario_versions,scenario_drafts,scenario_content_reviews,
+    building_participation_grants,service_entitlements,sessions,session_results,releases,trainings,learn_posts,learn_post_versions
+    TO fet3d_ai_request_owner,fet3d_ai_accounting_owner;
+REVOKE ALL ON registration_email_challenges,registration_otp_email_jobs,device_installations,local_password_reset_tokens,
+    password_reset_email_jobs,organization_library_items,organization_library_versions,scenario_content_reviews,
+    building_participation_grants,building_learner_seats,entitlement_capacity_upgrades,quotation_ai_quota_items,
+    scenario_knowledge_documents FROM PUBLIC;
+GRANT SELECT,INSERT,UPDATE,DELETE ON registration_email_challenges,registration_otp_email_jobs,device_installations,
+    local_password_reset_tokens,password_reset_email_jobs TO fet3d_backend_executor;
+GRANT SELECT,INSERT,UPDATE ON organization_library_items,organization_library_versions,scenario_content_reviews,
+    quotation_ai_quota_items,scenario_knowledge_documents TO fet3d_backend_executor;
+-- Library mutation actor checks are application-owned in the same audit/receipt transaction.
+-- All list/package/retrieval handlers must call can_access_building_v7/authorize_ai_scope_v7;
+-- direct client, worker and AI roles are never granted arbitrary private table reads.
+
+CREATE OR REPLACE FUNCTION effective_entitlement_end_v7(entitlement_id UUID,base_end TIMESTAMPTZ) RETURNS TIMESTAMPTZ
+LANGUAGE sql STABLE SET search_path=pg_catalog,public AS $$
+ SELECT GREATEST(base_end,COALESCE(max(u.ends_at),base_end)) FROM entitlement_capacity_upgrades u
+ WHERE u.entitlement_id=$1 AND u.effective_at<=now()
+$$;
+CREATE OR REPLACE FUNCTION validate_quota_source_v7() RETURNS TRIGGER
+LANGUAGE plpgsql SET search_path=pg_catalog,public AS $$
+BEGIN
+    IF NEW.quota_unit IS NULL OR NULLIF(btrim(NEW.quota_unit),'') IS NULL OR NEW.policy_version_id IS NULL
+       OR NOT EXISTS(SELECT 1 FROM ai_policy_versions p WHERE p.id=NEW.policy_version_id AND p.policy_kind='quota'
+          AND p.policy_snapshot->>'quota_unit'=NEW.quota_unit
+          AND (p.organization_id IS NULL OR p.organization_id=NEW.organization_id)) THEN
+        RAISE EXCEPTION 'quota grant requires matching versioned unit/policy'; END IF;
+    IF NEW.quota_kind IN ('package','topup') AND (NEW.audience<>'organization' OR NEW.provisioning_key IS NULL
+       OR NOT EXISTS(SELECT 1 FROM payment_transactions p JOIN payos_payment_requests req ON req.id=p.payment_request_id
+          WHERE p.id=NEW.payment_transaction_id AND p.status='Applied' AND req.organization_id=NEW.organization_id)) THEN
+        RAISE EXCEPTION 'paid quota grant requires Applied payment provenance'; END IF;
+    IF TG_OP='UPDATE' AND (to_jsonb(OLD)-ARRAY['units_used','units_reserved']) IS DISTINCT FROM
+        (to_jsonb(NEW)-ARRAY['units_used','units_reserved']) THEN RAISE EXCEPTION 'quota grant source immutable'; END IF;
+    RETURN NEW;
+END; $$;
+CREATE TRIGGER aa_quota_source BEFORE INSERT OR UPDATE ON ai_quota_grants FOR EACH ROW EXECUTE FUNCTION validate_quota_source_v7();
+CREATE OR REPLACE FUNCTION validate_capacity_upgrade_v7() RETURNS TRIGGER
+LANGUAGE plpgsql SET search_path=pg_catalog,public AS $$
+DECLARE e service_entitlements%ROWTYPE; i quotation_building_items%ROWTYPE;
+BEGIN
+    SELECT * INTO e FROM service_entitlements WHERE id=NEW.entitlement_id FOR UPDATE;
+    SELECT * INTO i FROM quotation_building_items WHERE id=NEW.quotation_item_id;
+    IF i.upgrade_entitlement_id IS DISTINCT FROM e.id OR i.purchase_action<>'Upgrade'
+       OR i.learner_limit IS DISTINCT FROM NEW.learner_limit OR i.starts_at IS DISTINCT FROM NEW.effective_at
+       OR i.ends_at IS DISTINCT FROM NEW.ends_at OR i.price_snapshot IS DISTINCT FROM NEW.price_snapshot
+       OR i.terms_snapshot IS DISTINCT FROM NEW.terms_snapshot OR e.building_id IS DISTINCT FROM i.building_id
+       OR NOT EXISTS(SELECT 1 FROM payment_transactions p JOIN payos_payment_requests r ON r.id=p.payment_request_id
+         WHERE p.id=NEW.payment_transaction_id AND p.status='Applied' AND r.quotation_id=i.quotation_id AND r.organization_id=e.organization_id) THEN
+        RAISE EXCEPTION 'upgrade must match paid quotation and same Building period'; END IF;
+    IF NEW.learner_limit<=GREATEST(e.learner_limit,COALESCE((SELECT max(u.learner_limit) FROM entitlement_capacity_upgrades u WHERE u.entitlement_id=e.id),0)) THEN
+        RAISE EXCEPTION 'upgrade must increase current capacity'; END IF;
+    IF EXISTS(SELECT 1 FROM service_entitlements other WHERE other.building_id=e.building_id AND other.id<>e.id
+       AND other.status IN ('Trial','Active','Suspended') AND other.starts_at<NEW.ends_at
+       AND COALESCE((SELECT max(u.ends_at) FROM entitlement_capacity_upgrades u WHERE u.entitlement_id=other.id),other.ends_at)>NEW.effective_at) THEN
+        RAISE EXCEPTION 'upgrade period may not overlap another service period'; END IF;
+    RETURN NEW;
+END; $$;
+CREATE TRIGGER capacity_upgrade_provenance BEFORE INSERT ON entitlement_capacity_upgrades FOR EACH ROW EXECUTE FUNCTION validate_capacity_upgrade_v7();
+-- Preserve protected period/rubric pins after an online start; sync needs no new access grant.
+CREATE OR REPLACE FUNCTION immutable_session_pins_v7() RETURNS TRIGGER
+LANGUAGE plpgsql SET search_path=pg_catalog,public AS $$
+BEGIN
+    IF OLD.started_at IS NOT NULL AND (OLD.service_entitlement_id IS DISTINCT FROM NEW.service_entitlement_id
+       OR OLD.content_review_id IS DISTINCT FROM NEW.content_review_id OR OLD.rubric_hash IS DISTINCT FROM NEW.rubric_hash) THEN
+        RAISE EXCEPTION 'started session pins immutable'; END IF; RETURN NEW;
+END; $$;
+CREATE TRIGGER ab_session_product_pins BEFORE UPDATE ON sessions FOR EACH ROW EXECUTE FUNCTION immutable_session_pins_v7();
+GRANT SELECT ON entitlement_capacity_upgrades TO fet3d_product_owner,fet3d_session_owner,fet3d_ai_request_owner,fet3d_ai_accounting_owner;

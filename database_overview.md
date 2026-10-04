@@ -1,10 +1,43 @@
-# FET3D v6 — Database Overview (Họp nhóm)
+# FET3D v7 — Database Overview (Họp nhóm)
 
-> **Dự án:** Fire Evacuation Training 3D | **DB:** PostgreSQL | **Schema version:** v6.7
-> **Đối chiếu:** SQL thiết kế là nguồn chính cho bảng, field, FK và constraint. Tài liệu này mô tả các nhóm nghiệp vụ; không dùng số lượng bảng cũ làm cam kết vì Learn, billing, AI và integration schema tiếp tục được đồng bộ.
-> Stored function/gate được mô tả tại technology và schema; đây là thiết kế mục tiêu, chưa phải migration đã chạy.
+**Đối chiếu auth BE 03/10/2026:** v7 biểu diễn flow main `0683d90`: form → OTP challenge → proof một lần → account verified → login, gồm challenge/proof/job và unique email trim/lowercase. Refresh rotation/family check, profile/organization ETag và reset/change transaction vẫn cần nghiệm thu trong DB/provider/deployment thực tế; Google onboarding/link còn thiếu API hoàn tất. [BE authentication](../BE/docs/authentication.md) và [workflows](fire-evacuation-training-workflows.md) là nguồn flow đối chiếu.
+
+> **Dự án:** Fire Evacuation Training 3D | **DB:** PostgreSQL | **Schema version:** v7.0
+> **Đối chiếu:** SQL v7 là nguồn thiết kế cho cấu trúc/field/FK/gate của quyết định 03/10/2026. Requirements là nguồn hành vi đích; schema không chứng minh migration, API hay worker đã chạy production.
+> Stored function/gate là contract thiết kế; chúng vẫn cần migration, phân quyền deploy và integration test.
 
 ---
+
+## Thiết kế v7 và giới hạn triển khai
+
+**Thư viện hỗ trợ Organization** gồm template kịch bản tùy chọn, bộ tiêu chí chấm mẫu và danh mục thiết bị game đã được runtime hỗ trợ. PlatformAdmin duy trì các nội dung chuẩn; OrganizationUser dùng để soạn/cấu hình bài trong khu quản lý đã đăng nhập. Thư viện này tách khỏi **Learn công khai** trên web: bài viết, mẹo và video cho mọi người đọc không cần đăng nhập; lưu bài/hỏi AI cần đăng nhập. Learn giữ quy trình biên tập hiện tại và không có bước duyệt bài riêng. Mode Learn trong Unity là trải nghiệm làm quen không gian, không phải blog. IFC, mô hình và kịch bản riêng của Organization không tự được chia sẻ vào thư viện.
+
+| Nghiệp vụ đích | Representation v7; API/runtime chưa triển khai |
+| --- | --- |
+| Template/rubric/thiết bị cho Organization | Catalog/version riêng, quyền PlatformAdmin; không dùng learn_posts làm bảng template hoặc thiết bị |
+| Admin duyệt mọi phiên bản | `scenario_content_reviews` lưu submit/approve/reject đúng scenario version/rubric và lý do; readiness revision_reviews không thay review nội dung |
+| Public/private bằng mã chung | Visibility, hash mã, `access_revision` và grant theo tài khoản; không tạo role Visitor/membership |
+| Thi lại không giới hạn | Không có `max_attempts`; từng session result giữ outcome/rubric riêng |
+| Gói 6/12 tháng và số người | Snapshot gói, seat theo Building/kỳ và nâng cấp hạn mức |
+| AI trả trước | Quota chung từ gói/mua thêm, payment provenance, grant/reservation/usage idempotent; không có period/consent trả sau |
+| Chấm đạt/chưa đạt | Rubric version/approval cùng outcome, điểm và lý do; completion tách khỏi đạt; ngưỡng cấu hình theo rubric |
+
+Gói từng Building có thời hạn 6 hoặc 12 tháng, gộp phí game, hạn mức người và quota AI. Hạn mức đếm Trainee khác nhau theo mã tài khoản đã start game tại Building trong kỳ; đăng nhập, xem bài, preparation và Organization playtest không tính suất. Chơi lại/nhiều kịch bản cùng tòa trong kỳ chỉ một suất; tòa khác tính riêng. Hết suất chặn người mới, người đã tính suất vẫn chơi lại trong quyền/dịch vụ còn hợp lệ; Organization nâng cấp gói nhiều người hơn. Kỳ gia hạn mới tính hạn mức theo kỳ mới. Giá, các mức người và cách tính nâng cấp giữa kỳ chưa chốt.
+
+Quota AI đi kèm các Building cộng chung cho Organization; hết quota phải mua thêm và thanh toán trước khi tiếp tục dùng AI tính phí. Không tự cho dùng vượt quota rồi đối soát cuối kỳ. Trainee giữ quota ngày miễn phí riêng, không trừ quỹ Organization. Đơn vị/lượng quota, hiệu lực và xử lý quota còn dư chưa chốt. Reserve/settle và retry phải chống trừ/cấp quota trùng; timeout reconcile bằng request ID trước khi hoàn hoặc gọi lại.
+
+Không thêm certificate, curriculum/module/sprint hoặc role Visitor. V7 thêm các record/gate cần thiết cho review, quyền private, seat, quota trả trước và learner-safe RAG; không tự đặt giá, quota, expiry/rollover hay rubric threshold. Migration và runtime vẫn phải được triển khai/kiểm thử riêng. Xem [schema v7 contract](schema_v7_contract.md).
+
+### Bảng/gate bổ sung trong v7
+
+| Nhóm | Bảng hoặc thay đổi chính | Mục đích |
+| --- | --- | --- |
+| Xác thực | `registration_email_challenges`, `registration_otp_email_jobs`, `device_installations`, reset-token/job | Lưu OTP/proof/job và vòng đời local auth, không lưu secret plaintext. |
+| Thư viện & duyệt | `organization_library_items`, `organization_library_versions`, `scenario_content_reviews` | Catalog nội bộ version hóa; duyệt hash nội dung và chặn publish khi chưa duyệt. |
+| Quyền Building | `buildings.visibility/access_revision/participation_code_hash`, `building_participation_grants` | Code cấp quyền cho đúng Trainee; rotate/revoke làm grant cũ mất hiệu lực. |
+| Sức chứa thương mại | `building_learner_seats`, `entitlement_capacity_upgrades`, field snapshot entitlement/quote | Chỉ session start chiếm unique learner seat; upgrade/snapshot không tính lại lịch sử. |
+| AI trả trước | `quotation_ai_quota_items`, quota grant payment/entitlement provenance | Payment cấp quota một lần; reserve/settle chỉ dùng số dư grant. |
+| RAG người học | `scenario_knowledge_documents` | Chỉ index `name`, `objectives`, `instructions` của version approved + published; retrieval recheck quyền. |
 
 ## 🗺️ Sơ đồ kiến trúc tổng quan
 
@@ -97,6 +130,9 @@
 ## Nhóm 2 — Building / Hồ sơ Tòa nhà
 
 ### 4. `buildings`
+
+Thiết kế đích bổ sung public/private và mã tham gia chung; Trainee đăng nhập ở cả hai. Bảng dưới là SQL hiện có, chưa thể hiện đầy đủ quyền mới.
+
 | Thuộc tính | Giá trị |
 |---|---|
 | **Mục đích** | Hồ sơ hiện hành của công trình |
@@ -278,6 +314,9 @@ Draft ──[Source Accepted]──► Uploaded ──► Processing ──► R
 ## Nhóm 6 — Governance / Phát hành & Điều phối Đào tạo
 
 ### 19. `revision_reviews`
+
+Readiness trong bảng hiện có là kiểm tra kỹ thuật. Thiết kế mới yêu cầu thêm PlatformAdmin duyệt nội dung/rubric của từng phiên bản trước publish và duyệt lại bản sửa; mapping review/approval còn cần thiết kế, không coi action hiện tại đã đáp ứng.
+
 | Thuộc tính | Giá trị |
 |---|---|
 | **Mục đích** | Lịch sử xác nhận hoặc từ chối kịch bản trước khi phát hành |
@@ -315,10 +354,10 @@ Built ──[package + Active Training]──► Published ──► Superseded
 | Thuộc tính | Giá trị |
 |---|---|
 | **Mục đích** | Một "đợt đào tạo" dùng release cụ thể cho học viên |
-| **Cột quan trọng** | `release_id`, `scenario_version_id`, `organization_id`, `name`, `status` (Draft/Active/Closed/Archived), `mode`, `allowed_modes`, `max_attempts`, `start_date`, `end_date`, `created_by` |
+| **Cột quan trọng** | `release_id`, `scenario_version_id`, `organization_id`, `name`, `status` (Draft/Active/Closed/Archived), `mode`, `allowed_modes`, `start_date`, `end_date`, `created_by` |
 | **Quan hệ** | N trainings → 1 release; 1 training → N QR codes, N sessions |
-| **Ràng buộc** | Sau khi có QR/session: lịch, mode, max_attempts **bị khóa** (không sửa được). Tên/mô tả vẫn sửa được |
-| **Lưu ý** | `max_attempts` là số dương theo thiết kế hiện tại; policy đếm Assessment/không đếm Learn-Guided phải được backend đặc tả khi triển khai |
+| **Ràng buộc** | Sau khi có QR/session: lịch và mode **bị khóa** (không sửa được). Tên/mô tả vẫn sửa được; không có giới hạn số lần thi ở v7. |
+| **Lưu ý** | Hoàn thành session không mặc định đạt; kết quả rubric/outcome được lưu theo session result và không cấp certificate. |
 | **Trạng thái** | ✅ Phase 1 cần thiết |
 
 ### 23. `release_qr_codes`
@@ -403,7 +442,7 @@ Created ──► Launching ──► Running ──► Completed
 ### 30. Learn blog: `learn_posts`, `learn_post_versions`, `learn_situations`, `learn_post_version_situations`, `learn_post_version_sources`, `learn_bookmarks`
 | Thuộc tính | Giá trị |
 |---|---|
-| **Mục đích** | Thư viện blog/tip & trick/video PCCC công khai, phân loại theo tình huống; tách khỏi `trainings`, `sessions` và kết quả Unity |
+| **Mục đích** | Learn công khai: blog/tip/video theo tình huống, tách khỏi thư viện template/rubric/thiết bị Organization và khỏi trainings/sessions Unity. Lifecycle Learn giữ nguyên. |
 | **Quyền** | `PlatformAdmin` tạo, sửa draft, phát hành ngay hoặc lưu nháp, ẩn/hiện bài; Trainee chỉ đọc nội dung public và quản lý bookmark của chính mình |
 | **Nguồn chính** | `learn_posts` là identity; `learn_post_versions` là snapshot; draft có thể liên kết Common chưa Approved, còn publish/show và RAG yêu cầu source Common Approved; `knowledge_chunks` dùng lại cho RAG |
 | **Media** | `content_blocks` JSONB có schema; video chỉ lưu provider/URL/ID đã chuẩn hóa và được allowlist YouTube/Facebook/TikTok; không nhận iframe/script tùy ý |
@@ -419,6 +458,9 @@ Created ──► Launching ──► Running ──► Completed
 > Các nhóm này thuộc thiết kế đích, chưa phải bằng chứng production-ready. Entitlement, quotation immutability, checkout mồ côi, thanh toán muộn/duplicate, invoice discount và notification/reconcile vẫn cần implementation và kiểm thử thực thi riêng.
 
 ### 31. `service_packages`
+
+Gói từng Building 6/12 tháng gồm phí game, hạn mức người và quota AI. V7 snapshot quota/hạn mức/giá/terms theo quotation line, provision entitlement idempotently, và dùng `building_learner_seats` với `entitlement_capacity_upgrades` để kiểm tra suất khi start.
+
 | Thuộc tính | Giá trị |
 |---|---|
 | **Mục đích** | Danh mục gói dịch vụ thương mại do PlatformAdmin quản lý |
@@ -436,9 +478,9 @@ Created ──► Launching ──► Running ──► Completed
 ### 32.1. `quotation_building_items`
 | Thuộc tính | Giá trị |
 |---|---|
-| **Mục đích** | Một dòng cho đúng một Building trong mua mới hoặc gia hạn |
+| **Mục đích** | Một dòng cho đúng một Building trong mua mới, gia hạn hoặc nâng cấp hạn mức |
 | **Cột quan trọng** | `quotation_id`, `building_id`, `service_package_id`, `purchase_action`, `service_duration_months`, `unit_price`, `discount_amount`, `price_snapshot`, `terms_snapshot`, `line_provisioning_key` |
-| **Ràng buộc** | Unique quotation–Building; Building phải cùng organization, có tên và địa chỉ; một payment có thể provision nhiều dòng nhưng entitlement từng dòng có key riêng |
+| **Ràng buộc** | Unique quotation–Building; Building phải cùng organization, có tên và địa chỉ; dòng có quota phải có policy/unit/hiệu lực quota hợp lệ trước phát hành; các kỳ đã cam kết không chồng nhau; một payment có thể provision nhiều dòng nhưng entitlement từng dòng có key riêng và retry trả lại kết quả cũ |
 | **Trạng thái** | 🟠 Phase 2 |
 
 ### 32.2. `service_package_discount_rules` và `enterprise_quote_requests`
@@ -462,7 +504,7 @@ Created ──► Launching ──► Running ──► Completed
 |---|---|
 | **Mục đích** | Reconcile cấp quyền sau payment Applied theo từng Building line |
 | **Cột quan trọng** | `payment_transaction_id`, `quotation_id`, `quotation_item_id`, `organization_id`, `provisioning_key`, `status`, `attempts` |
-| **Ràng buộc** | Một payment có nhiều record theo quotation line; mỗi record chỉ xử lý một dòng, retry/reconcile không cấp entitlement trùng và không áp dụng cho quotation AIUsage |
+| **Ràng buộc** | Một payment có nhiều record theo quotation line; mỗi record chỉ xử lý một dòng, retry/reconcile không cấp entitlement trùng. AI top-up dùng dòng `quotation_ai_quota_items` và provisioning quota riêng. |
 | **Trạng thái** | 🟠 Phase 2 |
 
 ### 33. `payos_payment_requests`
@@ -517,8 +559,8 @@ Created ──► Launching ──► Running ──► Completed
 | `record_session_heartbeat(UUID, UUID, BIGINT, TIMESTAMPTZ)` | Ghi heartbeat server-received, chống sequence NULL/lặp | actor, session id, sequence, client timestamp |
 | `record_session_event(UUID, UUID, UUID, BIGINT, TEXT, TEXT, JSONB, TIMESTAMPTZ)` | Ghi event offline theo event ID/sequence, chống replay | actor, session, event ID, sequence, schema/type, payload, client timestamp |
 | `complete_training_session(UUID, UUID, TEXT, TEXT, JSONB, TIMESTAMPTZ, TIMESTAMPTZ)` | Ghi kết quả và chuyển phiên đang chạy sang Completed qua gate sync | actor, session, result idempotency key/hash, snapshot, client timestamps |
-| `close_ai_billing_period(UUID)` | Đóng kỳ AI và snapshot usage/item/tổng tiền nguyên tử | billing period id |
-| `invoice_ai_billing_period(UUID, UUID)` / `pay_ai_billing_period(UUID, UUID)` | Gắn quotation AI rồi payment Applied theo đúng lifecycle, replay-safe | period, quotation hoặc payment transaction |
+| `reserve_ai_usage(...)` / `settle_ai_usage(...)` | Reserve quota trả trước rồi consume/release allocation theo request idempotency | Không tạo overage hoặc period invoice |
+| `provision_ai_topup_v7(...)` / `provision_building_line_v7(...)` | Cấp quota/top-up hoặc entitlement Building đúng một lần sau payment đã xác thực | Snapshot/payment provenance bắt buộc |
 | `register_processing_output(...)` | Ghi artifact/validation/issues theo current attempt và lease; lưu hash danh sách issue để chống replay khác nội dung | attempt, lease token, output hash, metadata, validator, issues |
 
 ---
@@ -554,7 +596,7 @@ Created ──► Launching ──► Running ──► Completed
 | **Audit có provenance** | `audit_logs` giữ `user_id`, `organization_id`, `actor_type` và `correlation_id`; append-only, không ghi secret |
 
 ### 3. Workflow chưa có implementation
-- Auth onboarding Google, profile/avatar và reset-password transaction mục tiêu (schema refresh/reset token đã có; BE hiện có family check nhưng reset handler chưa hoàn tất thu hồi trong cùng transaction)
+- Google onboarding completion/link còn thiếu; BE main `0683d90` đã có profile/avatar và reset/change thu hồi family trong transaction, cần đối chiếu schema và nghiệm thu DB/S3/Mailgun
 - IFC geometry validator (worker ngoài DB)
 - Object storage integration (DB chỉ lưu key, không lưu bytes)
 - React Native/Expo native Android bridge–Unity launch protocol

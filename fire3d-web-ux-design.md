@@ -1,9 +1,13 @@
 # Fire3D — đặc tả UX web và hướng hình ảnh
 
+**Đồng bộ auth BE 03/10/2026:** theo [authentication](../BE/docs/authentication.md) và [API guide](../BE/docs/api-docs.md), source BE main `0683d90`. Local registration dùng form → OTP → registrationToken → register → login; register trả account, chưa cấp JWT. Google UID đã link đăng nhập được; onboarding/link mới còn thiếu API hoàn tất. Các quy tắc đầy đủ và sơ đồ nằm tại [workflows mục 2.1–2.4](fire-evacuation-training-workflows.md#21-đăng-ký-local-form--otp--account--login). Source không chứng minh client/provider/deployment đã nghiệm thu.
+
 **Trạng thái:** thiết kế và prototype FE đã triển khai; chưa nghiệm thu đầy đủ chất lượng hình ảnh/hiệu năng
 
 **Cập nhật:** 2026-09-16
 **Phạm vi:** website công khai, cổng Learn, Góc học tập và khu quản lý tổ chức
+
+**Đồng bộ thiết kế ngày 03/10/2026:** yêu cầu nghiệp vụ, SQL design v7, ERD Markdown và Word ý tưởng đã được đồng bộ. Tên bảng/function là contract thiết kế, không chứng minh migration/API/runtime đã triển khai. [Requirements](fire_evacuation_requirements.md) là nguồn yêu cầu sản phẩm; [ghi chú quyết định](phan_tich_khoang_cach_va_quyet_dinh_nghiep_vu.md) ghi lại lựa chọn và chi tiết còn mở.
 
 ## 1. Ý tưởng sản phẩm
 
@@ -103,7 +107,7 @@ Camera rẽ vào một vùng sáng hơn; cảnh công trình thu nhỏ thành m�
 - Khách chưa đăng nhập: chọn tiếp tục sẽ đưa tới đăng nhập, sau đó về Góc học tập.
 - Trainee đã đăng nhập: đi thẳng tới Góc học tập với AI, bài lưu, lịch sử và kết quả cá nhân.
 - QR công khai là QR ổn định của **Building**, không pin một Training. QR mở landing web/app để xem danh sách bài đã phát hành; Trainee chọn bài rồi phiên mới pin `training/release/scenario` cụ thể.
-- Chưa cài app: QR mở trang web của tòa nhà, có đăng ký/đăng nhập và hướng dẫn tải app. Đã cài nhưng chưa đăng nhập: mở app và cho chọn email/password hoặc Google Sign-In qua Firebase. Đã đăng nhập: chỉ bắt đầu phiên sau khi backend kiểm tra service entitlement online.
+- Chưa cài app: QR mở trang web của tòa nhà, có đăng ký/đăng nhập và hướng dẫn tải app. Đã cài nhưng chưa đăng nhập: mở app và cho chọn email/password hoặc Google Sign-In qua Firebase. Đã đăng nhập: public tham gia trực tiếp, private nhập mã chung; chỉ bắt đầu sau khi backend kiểm tra quyền, entitlement và hạn mức người online.
 - Nếu service hết hạn, QR và landing vẫn mở được nhưng chặn phát hành/bắt đầu phiên mới; phiên đang chạy có thể hoàn tất. Mất mạng sau khi bắt đầu thì app giữ kết quả và đồng bộ lại; mất mạng trước khi bắt đầu không được mở phiên.
 - Web không suy đoán trạng thái “đã cài app”. Không hứa giữ deep link xuyên cài đặt nếu chưa kiểm chứng; có nút quay lại trang tòa nhà hoặc quét lại QR.
 
@@ -117,11 +121,19 @@ Trang công khai giải thích năng lực chuẩn bị công trình, nhập IFC
 
 ### 5.3. Editor 3D và khu vận hành tổ chức
 
+Organization tự soạn hoặc dùng template tùy chọn, có thể kết hợp mục tiêu sơ tán, nhận biết nguy cơ, dùng thiết bị và hỗ trợ người khác trong capability runtime. Admin cung cấp tiêu chí mẫu; Organization điều chỉnh rồi gửi duyệt cùng kịch bản. PlatformAdmin duyệt mọi phiên bản trước phát hành hoặc từ chối kèm lý do. Sửa nội dung/rubric phải tạo phiên bản mới và gửi duyệt lại. IFC QA/ConfirmForTraining là readiness kỹ thuật, không thay bước duyệt nội dung; release chỉ publish khi cả hai đạt. Phiên và kết quả cũ giữ phiên bản đã pin.
+
 Khu `OrganizationUser` dùng Three.js cho preview/editor: chọn tầng, xoay/zoom, ẩn lớp, chọn đối tượng, đặt và chỉnh các thành phần kịch bản được runtime hỗ trợ. Editor có lưu nháp, undo/redo, validation, issue và tạo scenario version; nhiều scenario có thể dùng chung geometry. Fire, smoke, spread, wind, blocked route, extinguisher/towel/water, spawn, goal và thời lượng được lưu tách khỏi geometry. Wind theo khu vực/cửa là đề xuất mô hình game, không phải mô phỏng thông gió đã kiểm chứng.
 
 Preview web chỉ minh họa timeline và hiệu ứng. Playtest đầy đủ dùng app Unity với quyền thử riêng, không phát hành bản nháp qua QR Trainee. Trợ lý AI của tổ chức có thể đề xuất hoặc tạo draft có nguồn, nhưng không tự sửa editor hay publish.
 
-Khu billing/AI usage hiển thị dịch vụ theo từng Building, ngày hiệu lực/hết hạn, lượt AI được cấp/đã dùng/còn/vượt, đơn giá snapshot, chi phí tạm tính, kỳ đối soát và lịch sử. Phân biệt learner session với organization playtest; playtest không vào thống kê học. Điều khoản và sự đồng ý vượt hạn mức phải hiển thị trước khi phát sinh phí.
+Khu billing hiển thị gói từng Building 6/12 tháng, phí game, số người đã dùng/còn lại và thời hạn; có CTA nâng cấp gói khi hết suất. Khu AI usage hiển thị quỹ Organization được cấp/đã dùng/còn lại, lịch sử và CTA mua thêm khi hết; không cho dùng overage rồi trả cuối kỳ. Quota AI đi kèm các Building cộng chung cho Organization; hết quota phải mua thêm và thanh toán trước khi tiếp tục dùng AI tính phí. Không tự cho dùng vượt quota rồi đối soát cuối kỳ. Trainee giữ quota ngày miễn phí riêng, không trừ quỹ Organization. Đơn vị/lượng quota, hiệu lực và xử lý quota còn dư chưa chốt. Reserve/settle và retry phải chống trừ/cấp quota trùng; timeout reconcile bằng request ID trước khi hoàn hoặc gọi lại.
+
+### 5.4. Thư viện Organization và quản trị riêng
+
+**Thư viện hỗ trợ Organization** gồm template kịch bản tùy chọn, bộ tiêu chí chấm mẫu và danh mục thiết bị game đã được runtime hỗ trợ. PlatformAdmin duy trì các nội dung chuẩn; OrganizationUser dùng để soạn/cấu hình bài trong khu quản lý đã đăng nhập. Thư viện này tách khỏi **Learn công khai** trên web: bài viết, mẹo và video cho mọi người đọc không cần đăng nhập; lưu bài/hỏi AI cần đăng nhập. Learn giữ quy trình biên tập hiện tại và không có bước duyệt bài riêng. Mode Learn trong Unity là trải nghiệm làm quen không gian, không phải blog. IFC, mô hình và kịch bản riêng của Organization không tự được chia sẻ vào thư viện.
+
+Trong khu Organization đã đăng nhập, tách thư viện thành template, tiêu chí mẫu và thiết bị. Organization chọn mẫu hoặc tự soạn trong editor, chỉnh rubric và gửi duyệt; hiển thị trạng thái chờ/được duyệt/từ chối cùng lý do theo từng phiên bản. Khu Admin có phần duy trì ba danh mục và hàng chờ duyệt kịch bản; biên tập Learn nằm ở khu riêng. Danh mục thiết bị không cho tạo behavior Unity mới chỉ bằng thao tác CMS.
 
 ## 6. Learn và Góc học tập
 
@@ -140,12 +152,16 @@ Phân biệt rõ Learn web (blog kiến thức cộng đồng) với mode Learn 
 ### Tài khoản và hồ sơ
 
 - Đăng ký Trainee dùng email/username/password/confirm password; username được chuẩn hóa lowercase và kiểm tra không trùng ngay trong form/backend. OrganizationUser đăng ký email/password/confirm password cùng tên, địa chỉ và số điện thoại tổ chức; username cá nhân có thể bổ sung sau.
-- Google mới sau xác minh Firebase hiển thị bước chọn `Trainee` hoặc `OrganizationUser`; Trainee nhập username, OrganizationUser nhập thông tin tổ chức. Google đã liên kết không chọn lại role. Hồ sơ cho phép đổi username, tên hiển thị, avatar và mật khẩu; game start không còn username gate.
-- Avatar dùng upload intent tới S3 private và signed URL ngắn hạn; không nhận URL ảnh tùy ý. Google Sign-In dùng Firebase, FCM chỉ là push, Mailgun gửi reset password.
+- Form local giữ trong bộ nhớ, tiếp tục sang OTP; “Xác thực và đăng ký” verify mã rồi register toàn bộ form + registrationToken. Sau 201 AccountResponse, login riêng để lấy phiên. Đổi email xác minh lại, reload quay về form; không lưu password vào URL/web storage. Email trùng hiển thị errors.email, OTP/quota lỗi theo BE và Retry-After.
+- Google UID đã link đăng nhập theo role cũ; OnboardingRequired và ACCOUNT_LINK_REQUIRED chưa có API hoàn tất. Thiết kế đích onboarding chọn Trainee/OrganizationUser còn cần triển khai. Hồ sơ dùng GET/PATCH /api/auth/me và /api/organizations/me với ETag/If-Match; reset/change thành công đưa về login. Game start không hỏi username.
+- Avatar dùng upload intent tới S3 private và signed URL ngắn hạn; không nhận URL ảnh tùy ý. Google Sign-In dùng Firebase, FCM chỉ là push, Mailgun gửi OTP đăng ký và reset password.
 
-AI Trainee hoạt động trên web/mobile ngoài gameplay, dùng quota ngày do Admin cấu hình, chỉ truy cập kho kiến thức chung đã duyệt và dữ liệu cá nhân được phép. AI tổ chức dùng corpus riêng theo tenant và dữ liệu BIM được cấp quyền; hai nhóm không dùng chung phạm vi truy xuất.
+AI Trainee hoạt động ngoài lượt đánh giá, dùng quota ngày riêng; truy cập Learn/Common hợp lệ, mục tiêu/hướng dẫn bài đã duyệt/phát hành có quyền chơi và kết quả của chính mình. AI tổ chức dùng corpus riêng theo tenant và dữ liệu BIM được cấp quyền; hai nhóm không dùng chung phạm vi truy xuất.
 
 ### Góc học tập
+
+Trainee tự chọn đọc Learn/blog, Learn trong Unity, Guided Drill hoặc vào Assessment ngay; không có prerequisite học/luyện. Assessment giảm/tắt gợi ý, chấm đạt/chưa đạt theo rubric đã duyệt và trả lý do/debrief. Lưu từng lần làm; thi lại không giới hạn và không bắt buộc luyện lại. Hoàn thành session không tự đồng nghĩa đạt; lỗi, hủy và chưa sync phải phân biệt với kết quả hợp lệ. Không cấp chứng nhận, không curriculum/module/sprint. Tiêu chí bắt buộc/tùy chọn, trọng số, ngưỡng điểm và lỗi khiến chưa đạt cần chốt theo từng loại bài, chưa hard-code con số.
+
 
 Góc học tập là nơi riêng của Trainee sau đăng nhập, gồm hỏi AI, bài đã lưu, lịch sử hoạt động và kết quả tập huấn cá nhân. Trainee chỉ xem dữ liệu của mình; kết quả mô phỏng không phải chứng nhận hoặc kết luận an toàn công trình.
 
@@ -205,12 +221,16 @@ FE hiện tại dùng Next.js App Router, TypeScript strict, Tailwind 4, Radix/s
 - Menu và hai nhánh dùng nhãn nhu cầu, có keyboard focus và vùng bấm đủ lớn.
 - Cuộn tiến/lùi giữ đúng camera, khói lửa bám kiến trúc, có che khuất và phản sáng; dừng cuộn không làm mất trạng thái.
 - Chuyển cảnh sang trainee và organization giữ liên tục không gian; người dùng có thể quay lại và chọn nhánh khác.
-- QR Building luôn resolve được landing; Trainee xem danh sách bài, chọn bài và chỉ mở phiên mới khi entitlement online còn hạn; không mở gameplay web.
+- QR resolve landing/status; public cần login, private cần mã/quyền trước list/package. Online start kiểm tra entitlement và suất người; không mở gameplay web.
 - Editor organization cho phép chỉnh scenario, lưu draft, undo/redo, issue và version; preview web không được coi là gameplay Unity.
 - Hết hạn service chặn publish/phiên mới nhưng không làm mất khả năng xem landing hoặc hoàn tất phiên đã bắt đầu.
 - OrganizationUser bị backend giới hạn theo `organizationId`; nội dung marketing công khai không cấp quyền nghiệp vụ.
 - Cảnh có fallback ảnh tĩnh, reduced motion và phương án mobile; không trình bày mô phỏng như hướng dẫn chữa cháy hoặc chứng nhận PCCC.
 - Bản dựng phải kiểm tra ảnh chụp ở desktop/mobile, frame sáng nhất để đo tương phản, loading WebGL, tab ẩn, cuộn nhanh/ngược, focus keyboard và tài nguyên renderer.
+
+- Thư viện Organization có ba nhóm riêng và không xuất hiện như bài Learn công khai; Admin editorial Learn giữ nguyên cơ chế.
+- Kịch bản/rubric được Admin duyệt trước publish; bản sửa hiển thị chờ duyệt lại.
+- Hết suất chặn người mới và dẫn Organization nâng cấp; người đã tính suất chơi lại được. Hết quota AI dẫn mua thêm trả trước.
 
 ## 10. Tài liệu liên quan
 

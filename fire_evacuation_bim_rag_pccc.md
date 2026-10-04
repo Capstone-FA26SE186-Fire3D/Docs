@@ -1,18 +1,20 @@
 # Thiết Kế RAG Python Hỗ Trợ Gợi Ý Thiết Bị PCCC Từ BIM
 
+**Đồng bộ thiết kế ngày 03/10/2026:** yêu cầu nghiệp vụ, SQL design v7, ERD Markdown và Word ý tưởng đã được đồng bộ. Tên bảng/function là contract thiết kế, không chứng minh migration/API/runtime đã triển khai. [Requirements](fire_evacuation_requirements.md) là nguồn yêu cầu sản phẩm; [ghi chú quyết định](phan_tich_khoang_cach_va_quyet_dinh_nghiep_vu.md) ghi lại lựa chọn và chi tiết còn mở.
+
 ## 1. Mục tiêu và ranh giới an toàn
 
 Mô-đun hỗ trợ người dùng và chuyên gia được ủy quyền **xem xét** các không gian/đối tượng BIM có thể cần đánh giá thêm về thiết bị PCCC. Nó kết hợp tài liệu đã phê duyệt, facts trích xuất từ IFC, rule kiểm tra minh bạch và RAG bằng Python.
 
-Đầu ra được tách thành `KnowledgeAnswer` hoặc `ScenarioDraft`. `KnowledgeAnswer` trả lời kiến thức cho `Trainee`/`OrganizationUser` với citation nguồn chung đã duyệt; chỉ `ScenarioDraft` mới mang trạng thái `NeedsUserEdit`. Không đầu ra nào là thiết kế thi công, kết luận tuân thủ, chứng nhận hay phê duyệt PCCC. Hệ thống không tự sửa IFC, editor, route, scoring, runtime state, không tự publish release và không đưa ra hướng dẫn ứng phó cháy thực tế.
+Đầu ra được tách thành `KnowledgeAnswer` hoặc `ScenarioDraft`. KnowledgeAnswer trả lời trong phạm vi được cấp quyền với nguồn/evidence phù hợp (Learn/Common, ngữ cảnh bài hoặc kết quả cá nhân); chỉ `ScenarioDraft` mới mang trạng thái `NeedsUserEdit`. Không đầu ra nào là thiết kế thi công, kết luận tuân thủ, chứng nhận hay phê duyệt PCCC. Hệ thống không tự sửa IFC, editor, route, scoring, runtime state, không tự publish release và không đưa ra hướng dẫn ứng phó cháy thực tế.
 
 > Đây là capability nghiên cứu/authoring tách biệt với training. Nó không thay đổi ý nghĩa `ConfirmForTraining`.
 
 ## 2. Hai nhóm người dùng và ranh giới quyền
 
-Trợ lý cho `OrganizationUser` có thể trả lời: “Không gian nào có thuộc tính BIM còn thiếu để chuyên gia xem xét trang bị PCCC?”, “Tài liệu nguồn nào liên quan đến `IfcSpace` này?” hoặc tạo **bản nháp kịch bản** để người dùng chỉnh trong editor web. Bản nháp không tự sửa editor, IFC, scenario đã phát hành hoặc quyền dịch vụ.
+Trợ lý OrganizationUser hỗ trợ soạn/chỉnh bản nháp thuộc tenant mình, tìm template/tiêu chí/thiết bị phù hợp và giải thích BIM facts có nguồn. Draft được đưa vào ngữ cảnh yêu cầu có kiểm tra quyền; không mặc định index draft vào corpus chung. Người dùng chỉnh trong editor, gửi PlatformAdmin duyệt phiên bản/rubric trước publish; AI không tự mutate hoặc phát hành.
 
-Trợ lý cho `Trainee` chỉ hỏi đáp kiến thức PCCC, giải thích bài Learn đang đọc và kết quả cá nhân ngoài gameplay. Trainee không được truy cập tài liệu nội bộ của organization chỉ vì đã quét QR; nguồn được phép là bài Learn thuộc post đang `Published` hoặc `Hidden` với version khớp `published_version_id`, kho kiến thức chung đã Approved và dữ liệu cá nhân được cấp quyền. Draft, Unpublished và Deleted bị loại ngay tại backend dù index/cache chưa kịp cập nhật; Hidden không mở thành bài đọc công khai nhưng vẫn có thể làm nguồn RAG.
+Trợ lý Trainee hỏi đáp kiến thức, giải thích Learn, mục tiêu/hướng dẫn của kịch bản đã được Admin duyệt và phát hành có quyền chơi, cùng kết quả cá nhân ngoài lượt đánh giá. Building public cần đăng nhập; private cần mã/quyền tham gia. QR không cấp quyền đọc kho nội bộ. Learn Published/Hidden với published_version_id hợp lệ và Common Approved giữ policy cũ; Draft/Unpublished/Deleted Learn bị loại. Draft scenario Organization không là nguồn cho Trainee. Hidden Learn không đọc công khai nhưng có thể làm nguồn RAG.
 
 Hệ thống phải từ chối/chuyển chuyên gia các yêu cầu: xác nhận tòa nhà đạt chuẩn, tự động quyết định số lượng/vị trí lắp đặt cuối cùng, chỉ đường thoát khi có sự cố thật, hoặc tự bịa phòng/vị trí/thiết bị khi IFC thiếu facts. Khi không có nguồn phù hợp, phải nói rõ giới hạn thay vì trả lời có vẻ chắc chắn.
 
@@ -35,9 +37,15 @@ IFC là đầu vào model tự động duy nhất. Python extractor tạo facts 
 }
 ```
 
+**Thư viện hỗ trợ Organization** gồm template kịch bản tùy chọn, bộ tiêu chí chấm mẫu và danh mục thiết bị game đã được runtime hỗ trợ. PlatformAdmin duy trì các nội dung chuẩn; OrganizationUser dùng để soạn/cấu hình bài trong khu quản lý đã đăng nhập. Thư viện này tách khỏi **Learn công khai** trên web: bài viết, mẹo và video cho mọi người đọc không cần đăng nhập; lưu bài/hỏi AI cần đăng nhập. Learn giữ quy trình biên tập hiện tại và không có bước duyệt bài riêng. Mode Learn trong Unity là trải nghiệm làm quen không gian, không phải blog. IFC, mô hình và kịch bản riêng của Organization không tự được chia sẻ vào thư viện.
+
 ### Kho tri thức
 
 Chỉ ingest tài liệu đã được phê duyệt trong đúng scope: kho `Common` do PlatformAdmin/owner được ủy quyền quản lý và kho `Organization` do tổ chức quản lý. Draft Learn có thể gắn nguồn Common chưa Approved để biên tập, nhưng chỉ version Learn Published của post đang `Published` hoặc `Hidden` và nguồn Common đã Approved mới đủ điều kiện retrieval. Deleted Learn bị loại ngay cả khi index cũ còn tham chiếu. Chỉ tóm tắt/transcript đã được Admin kiểm tra mới được dùng làm nguồn video. Nhúng URL YouTube/Facebook/TikTok không tự động ingest video. Mỗi tài liệu phải có owner, phạm vi áp dụng, jurisdiction, version, ngày hiệu lực/rà soát, hash và locator trích dẫn. RAG không tự quyết định quy chuẩn nào áp dụng; người có quyền cấu hình corpus theo dự án.
+
+### Ngữ cảnh scenario và quyền truy xuất
+
+Upload không tự index toàn bộ scenario/model. Tên, mục tiêu, hướng dẫn và tiêu chí được duyệt là ứng viên dữ liệu theo quyền người hỏi; field/schema/index cụ thể chưa chốt. Organization có thể đưa draft mình vào ngữ cảnh authoring riêng; không cho tenant khác/Trainee đọc. Trainee chỉ dùng phiên bản đã duyệt/phát hành của bài có quyền chơi và dữ liệu cá nhân. Không suy quyền từ QR hoặc Building public để mở raw IFC/kho nội bộ. Bản sửa chưa duyệt không thay nguồn của phiên bản phát hành.
 
 ## 4. Kiến trúc Python
 
@@ -58,7 +66,7 @@ Approved documents -> parser/OCR -> chunker -> Supabase PostgreSQL + pgvector
 | `recommendation_service` | Tổng hợp duy nhất từ evidence, BIM facts và rule results. |
 | `review_service` | Lưu review, quyết định, lý do và audit. |
 | `scenario_draft_service` | Tạo cấu hình kịch bản có schema; OrganizationUser phải chỉnh/xác nhận trong editor trước khi lưu hoặc publish. |
-| `ai_usage_service` | Trả usage kỹ thuật/request status cho backend; `.NET` reserve/chốt quota, overage, consent và đơn giá, không để AI hoặc frontend tự tính tiền. |
+| `ai_usage_service` | Trả usage kỹ thuật/request status cho backend; backend reserve/chốt quota có sẵn và cấp quota mua thêm qua payment riêng; không để AI/frontend tự tính tiền hoặc cho dùng overage trả sau. |
 
 AI/RAG service chạy Python/FastAPI riêng trên Azure; Container Apps là phương án triển khai đề xuất. IFC/Blender worker dùng Python/IfcOpenShell nhưng chạy job/process độc lập với chat. Dữ liệu quan hệ, chunk metadata và embedding nằm trong Supabase PostgreSQL; `pgvector` là vector store chuẩn, không dùng ChromaDB trong kiến trúc đích. Pipeline package 3D/Unity vẫn tách biệt và chỉ đọc revision facts đã kiểm soát quyền.
 
@@ -102,7 +110,7 @@ LLM production chưa chọn giữa OpenAI API và Google Gemini API (khóa/cấu
 
 `learn_context` chỉ xuất hiện khi Trainee hỏi về một bài Learn; backend phải kiểm tra post/version còn hợp lệ trước retrieval: Published cho đọc công khai, Hidden chỉ được dùng làm nguồn RAG, Deleted/Unpublished bị loại. AI không trả hoặc trích dẫn Draft, Deleted version hay nguồn Organization qua ngữ cảnh Learn.
 
-`KnowledgeAnswer` bắt buộc có ít nhất một citation nguồn chung đã duyệt; nếu câu hỏi mang ngữ cảnh Learn, citation phải trỏ đúng `learn_post_id`/version đang Published và source/chunk tương ứng. `ScenarioDraft` phải có citation và BIM anchor khi draft sử dụng BIM facts; BIM anchor không bắt buộc cho câu trả lời chỉ dùng kiến thức chung. Thiếu evidence, anchor không hợp lệ hoặc evidence mâu thuẫn phải trả `InsufficientEvidence`; yêu cầu bị safety gate trả `RejectedBySafetyGate`. `NeedsUserEdit` chỉ hợp lệ với `ScenarioDraft`. `high` chỉ là độ đầy đủ evidence trong phạm vi đã chọn, không bao giờ là mức xác nhận an toàn/tuân thủ.
+KnowledgeAnswer kiến thức chung/Learn phải có citation nguồn chung hợp lệ; giải thích scenario hoặc kết quả phải có evidence đúng phiên bản bài/quyền và dữ liệu cá nhân tương ứng, không bịa Common citation. Contract locator cho scenario còn cần đặc tả; nếu câu hỏi mang ngữ cảnh Learn, citation phải trỏ đúng `learn_post_id`/version đang Published và source/chunk tương ứng. `ScenarioDraft` phải có citation và BIM anchor khi draft sử dụng BIM facts; BIM anchor không bắt buộc cho câu trả lời chỉ dùng kiến thức chung. Thiếu evidence, anchor không hợp lệ hoặc evidence mâu thuẫn phải trả `InsufficientEvidence`; yêu cầu bị safety gate trả `RejectedBySafetyGate`. `NeedsUserEdit` chỉ hợp lệ với `ScenarioDraft`. `high` chỉ là độ đầy đủ evidence trong phạm vi đã chọn, không bao giờ là mức xác nhận an toàn/tuân thủ.
 
 ## 7. Guardrails
 
@@ -111,7 +119,7 @@ LLM production chưa chọn giữa OpenAI API và Google Gemini API (khóa/cấu
 - Safety gate chặn câu hỏi compliance, bố trí cuối cùng và hướng dẫn sự cố thực tế.
 - Chỉ OrganizationUser đúng tenant mới được accept/edit/reject `ScenarioDraft` trong editor. Expert review nội dung là một policy/assignment còn cần chốt, không phải role thứ tư.
 - Fact store, index metadata, document và audit query phải tenant-scoped khi dữ liệu thuộc organization.
-- Kho kiến thức chung, Learn Published/Hidden và kho riêng organization phải có scope/filter riêng; Draft, Unpublished và Deleted không được retrieval, còn Hidden không public nhưng vẫn được phép làm nguồn khi pointer/version/source hợp lệ. QR không phải là quyền đọc kho riêng. Trạng thái/current pointer của post và version phải được kiểm tra trước retrieval, trước trả câu trả lời và khi nạp lại answer cache/hội thoại.
+- Kho kiến thức chung, Learn Published/Hidden và kho riêng organization phải có scope/filter riêng; Draft/Unpublished/Deleted Learn không được retrieval; scenario draft chỉ trong ngữ cảnh Organization được phép, còn Hidden không public nhưng vẫn được phép làm nguồn khi pointer/version/source hợp lệ. QR không phải là quyền đọc kho riêng; lời giải thích scenario phải kiểm tra approval/publication/version và quyền public/private riêng. Trạng thái/current pointer của post và version phải được kiểm tra trước retrieval, trước trả câu trả lời và khi nạp lại answer cache/hội thoại.
 - AI chỉ gợi ý cấu hình; route, scoring và trạng thái mô phỏng runtime do Unity/backend contract quyết định, không suy ra từ câu trả lời hoặc hình ảnh hiệu ứng.
 - `request_id`/idempotency key được tạo và kiểm tra ở backend; lỗi/retry/webhook không ghi usage hoặc charge trùng.
 - Coi tài liệu là dữ liệu không tin cậy: bỏ qua mệnh lệnh trong document, giới hạn tool access và không cho document thay đổi policy.
@@ -133,11 +141,11 @@ Kiểm thử gồm: unit test IFC provenance/quality flags; retrieval metadata f
 
 ## 9. Tích hợp FET3D
 
-Mô-đun đọc Building revision/facts thuộc organization và hỗ trợ authoring/research. Nó không cấp QR, mở Unity session, quyết định runtime route/scoring hoặc tự publish. AI draft chỉ là đầu vào cho editor; sau khi người dùng xác nhận, scenario version mới phải chạy validation/readiness và được gắn với release bất biến. RAG không phải công cụ chuyển IFC thành mô hình; IFC pipeline và Unity build worker xử lý artifact riêng.
+Mô-đun đọc Building revision/facts thuộc organization và hỗ trợ authoring/research. Nó không cấp QR, mở Unity session, quyết định runtime route/scoring hoặc tự publish. AI draft chỉ là đầu vào cho editor; sau khi người dùng chỉnh, scenario version/rubric phải qua validation/readiness và PlatformAdmin duyệt nội dung trước publish release bất biến. RAG không phải công cụ chuyển IFC thành mô hình; IFC pipeline và Unity build worker xử lý artifact riêng.
 
 ## 10. Contract AI–BE và recovery
 
-Production client gọi `.NET API`; BE kiểm tra phiên FET3D (local email/password hoặc Google exchange; Firebase chỉ xác minh Google), audience, tenant, Building scope, policy version, quota/consent và idempotency trước khi gọi FastAPI trên Azure. FastAPI chỉ nhận scope đã được cấp và trả `request_id`, `KnowledgeAnswer` hoặc `ScenarioDraft`, trạng thái, citations/source version, BIM anchor khi có, model/version và usage kỹ thuật. AI không trả overage, đơn giá, charge hoặc quyết định publish.
+Production client gọi `.NET API`; BE kiểm tra phiên FET3D (local email/password hoặc Google exchange; Firebase chỉ xác minh Google), audience, tenant, Building scope, policy version, quota hiện có, quyền bài và idempotency trước khi gọi FastAPI trên Azure. FastAPI chỉ nhận scope đã được cấp và trả `request_id`, `KnowledgeAnswer` hoặc `ScenarioDraft`, trạng thái, citations/source version, BIM anchor khi có, model/version và usage kỹ thuật. AI không quyết định quota, đơn giá, charge hoặc publish.
 
 Redis nằm sau `.NET API` và chỉ hỗ trợ cache-aside hoặc vận chuyển event/job sau outbox; AI service không kết nối Redis để quyết định quyền, quota hoặc billing. `ai_requests`, reservation/ledger và kết quả accounting vẫn nằm ở PostgreSQL. Backend dùng tenant enqueue cho allowlist `ProcessingJobRequested` schema `1`, system enqueue cho allowlist `SystemNotification`/`PlatformCacheInvalidation` schema `1` và requeue gate riêng cho `ProcessingJobRequeue`; helper nội bộ không cấp cho AI/worker. Dispatcher lease khác với worker attempt/lease. Redis Streams có thể giao message lặp, nên consumer khóa/đối chiếu outbox, kiểm tra receipt trước tác động, ghi receipt cùng transaction rồi mới ACK bằng event key/hash hoặc job/attempt contract. Redis Pub/Sub không được dùng để bảo đảm xử lý chat hay processing; message sai metadata được giữ để chẩn đoán và replay từ outbox sau khi sửa handler.
 
@@ -145,8 +153,10 @@ Request mới phải vào `Accepted` không có result. Cùng idempotency key v�
 
 IFC/Blender và Unity build không chạy trong request chat. Logical job giữ input hash; worker attempt giữ lease/token/toolchain và artifact/validation provenance. Lease còn hiệu lực không được claim lại; kết quả từ attempt cũ bị chặn. Đây là thiết kế mục tiêu, chưa phải bằng chứng prototype FastAPI đã có tenant authorization hoặc pgvector production.
 
-### 10.1. Bất biến request, policy và đối soát
+### 10.1. Bất biến request, policy và quota trả trước
+
+Quota AI đi kèm các Building cộng chung cho Organization; hết quota phải mua thêm và thanh toán trước khi tiếp tục dùng AI tính phí. Không tự cho dùng vượt quota rồi đối soát cuối kỳ. Trainee giữ quota ngày miễn phí riêng, không trừ quỹ Organization. Đơn vị/lượng quota, hiệu lực và xử lý quota còn dư chưa chốt. Reserve/settle và retry phải chống trừ/cấp quota trùng; timeout reconcile bằng request ID trước khi hoàn hoặc gọi lại.
 
 Request chỉ được tạo ở `Accepted` với identity, scope, input hash và policy version đã kiểm tra; không nhận sẵn result, citation, model hoặc usage để bỏ qua processing. Khi result đã terminal, replay cùng evidence là no-op, evidence khác là conflict. Policy version và giá snapshot không update lịch sử; policy mới phải tạo version mới.
 
-Quota reservation và settlement do `.NET`/database accounting sở hữu, khóa theo một thứ tự: `billing period nếu có → request → ledger/reservation → grant theo id tăng dần`. FastAPI chỉ trả usage kỹ thuật, request ID, model/version và evidence nguồn; không reserve/settle, đóng kỳ hoặc quyết định overage. Period AI chỉ đóng sau khi usage billable đã xác nhận; items sau close không chỉnh sửa, usage muộn đi qua adjustment. Processing worker dùng gate lease-bound `register_processing_output` cho artifact/validation/issues; gameplay event/result đi qua gate session sau khi start; `invoice_ai_billing_period`/`pay_ai_billing_period` thuộc backend accounting.
+Quota reservation/settle do backend accounting sở hữu, theo thứ tự khóa ổn định request → ledger/reservation → grants; thiếu quota chặn request tính phí trước khi gọi provider. Payment mua thêm quota và replay dùng provisioning key/idempotency. FastAPI chỉ trả request ID, usage kỹ thuật và evidence. V7 dùng prepaid quota grant/provisioning và không có lifecycle period, overage consent hay invoice/pay period. Worker lease-bound và session event/result gate giữ nguyên.

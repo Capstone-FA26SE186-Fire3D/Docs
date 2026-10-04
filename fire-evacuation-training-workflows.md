@@ -1,5 +1,7 @@
 # Fire Evacuation Training 3D — Workflows
 
+**Đồng bộ thiết kế ngày 03/10/2026:** yêu cầu nghiệp vụ, SQL design v7, ERD Markdown và Word ý tưởng đã được đồng bộ. Tên bảng/function là contract thiết kế, không chứng minh migration/API/runtime đã triển khai. [Requirements](fire_evacuation_requirements.md) là nguồn yêu cầu sản phẩm; [ghi chú quyết định](phan_tich_khoang_cach_va_quyet_dinh_nghiep_vu.md) ghi lại lựa chọn và chi tiết còn mở.
+
 ## 1. Nguyên tắc chung
 
 - Có ba loại tài khoản: `PlatformAdmin`, `OrganizationUser`, `Trainee`.
@@ -25,6 +27,8 @@ Khách mở website chung
 3. Nhánh tập huấn đưa khách chưa đăng nhập đến đăng nhập; Trainee đã đăng nhập vào Góc học tập. Nhánh tổ chức dẫn tới trang giới thiệu công khai; thao tác quản lý vẫn đi qua authz `OrganizationUser` và `organizationId`.
 4. Learn web (bài có nguồn, hỏi AI, lưu bài) là luồng riêng với mode Learn trong Unity. Chức năng hỏi AI/lưu bài cần auth và nguồn trả lời.
 
+**Thư viện hỗ trợ Organization** gồm template kịch bản tùy chọn, bộ tiêu chí chấm mẫu và danh mục thiết bị game đã được runtime hỗ trợ. PlatformAdmin duy trì các nội dung chuẩn; OrganizationUser dùng để soạn/cấu hình bài trong khu quản lý đã đăng nhập. Thư viện này tách khỏi **Learn công khai** trên web: bài viết, mẹo và video cho mọi người đọc không cần đăng nhập; lưu bài/hỏi AI cần đăng nhập. Learn giữ quy trình biên tập hiện tại và không có bước duyệt bài riêng. Mode Learn trong Unity là trải nghiệm làm quen không gian, không phải blog. IFC, mô hình và kịch bản riêng của Organization không tự được chia sẻ vào thư viện.
+
 ### 1.2. Workflow Learn blog
 
 ```text
@@ -46,19 +50,79 @@ PlatformAdmin tạo Draft
 
 ## 2. Workflow quản trị nền tảng
 
-1. Người dùng đăng nhập bằng email/password do BE xác minh hoặc Google Sign-In qua Firebase; backend ánh xạ Firebase UID (khi có) sang bản ghi FET3D. `PlatformAdmin` tạo organization và gán ba loại tài khoản nghiệp vụ cần thiết. Mailgun phục vụ reset password, FCM chỉ phục vụ push.
-2. Hệ thống gắn `OrganizationUser` với phạm vi `organizationId` để ownership. `Trainee` là tài khoản xác thực có thể xem danh sách bài qua QR canonical của Building; session participation pin bài đã chọn và không biến Trainee thành thành viên của organization. Firebase chỉ xác thực Google identity, không quyết định quyền nghiệp vụ.
+PlatformAdmin có hai khu riêng: thư viện hỗ trợ Organization (template, rubric mẫu, thiết bị) và biên tập Learn công khai. Admin nhận/duyệt mọi phiên bản kịch bản cùng rubric; sửa phải duyệt lại. Không áp dụng bước duyệt kịch bản vào Learn, vốn giữ workflow editorial ở mục 1.2.
+
+1. Người dùng đăng nhập bằng email/password do BE xác minh hoặc Google Sign-In qua Firebase; backend ánh xạ Firebase UID (khi có) sang bản ghi FET3D. `PlatformAdmin` tạo organization và gán ba loại tài khoản nghiệp vụ cần thiết. Mailgun phục vụ OTP đăng ký và reset password, FCM chỉ phục vụ push.
+2. Hệ thống gắn `OrganizationUser` với phạm vi `organizationId` để ownership. Trainee là tài khoản đăng nhập; tòa public tham gia trực tiếp, private cần mã chung trước khi nhận bài/package được phép; session participation pin bài đã chọn và không biến Trainee thành thành viên của organization. Firebase chỉ xác thực Google identity, không quyết định quyền nghiệp vụ.
 3. `PlatformAdmin` khóa/mở khóa tài khoản, xem health, audit, support và billing aggregate cấp nền tảng.
    Quản trị Learn theo workflow riêng: tạo/sửa draft, phát hành ngay hoặc lưu nháp, ẩn/hiện bài; thao tác editorial được audit và không trao quyền CMS cho `OrganizationUser` hay `Trainee`.
 4. API từ chối request ownership không có tài khoản đã xác thực hoặc không khớp `organizationId`; QR resolve cần identity để mở danh sách, còn explicit session start mới cần entitlement Building, bài Published và kiểm tra online.
 5. Mobile đăng ký/rotate token FCM theo installation. Backend xóa hoặc vô hiệu hóa token không hợp lệ; token FCM không thay thế password session hoặc Firebase ID token.
 
-### 2.1. Đăng ký, username và hồ sơ
+### 2.1. Đăng ký local: form → OTP → account → login
 
-1. `POST /api/auth/register/trainee` nhận email/username/password/confirm password; `POST /api/auth/register/organization` nhận email/password/confirm password cùng tên, địa chỉ và số điện thoại tổ chức. BE tự gán role/tenant và retry không tạo bản ghi trùng.
-2. Google exchange xác minh Firebase ID token. Tài khoản Google đã liên kết đăng nhập theo role/tenant hiện có; Google mới nhận onboarding token ngắn hạn, chọn Trainee hoặc OrganizationUser rồi hoàn tất thông tin tương ứng. Không có lựa chọn PlatformAdmin hoặc organization có sẵn.
-3. Username Trainee phải unique, lowercase và đúng pattern ngay trong đăng ký local hoặc bước Google onboarding. OrganizationUser có thể bổ sung username sau. Game start không còn `ProfileIncomplete`; tài khoản Trainee cũ thiếu username phải hoàn thiện trong profile/onboarding trước khi dùng chức năng phụ thuộc username.
-4. `GET/PATCH /api/me/profile`, change/set password, link Google và `GET/PATCH /api/me/organization` kiểm tra ETag/actor; không cập nhật role, tenant, email hoặc account status. Avatar upload dùng S3 intent/complete/delete, không nhận URL tùy ý.
+Đối chiếu [BE authentication](../BE/docs/authentication.md) và [API guide](../BE/docs/api-docs.md), BE main `0683d90` ngày 03/10/2026. Đây là hành vi source hiện tại; nghiệm thu client và gửi Mailgun thật được kiểm tra riêng.
+
+1. Trainee nhập email/username/password/confirmPassword; OrganizationUser nhập email/password/confirmPassword và tên/địa chỉ/điện thoại organization. Client giữ form/password trong bộ nhớ rồi chuyển sang OTP. Username Trainee lowercase, unique, pattern `[a-z0-9._-]{3,30}`; local login dùng email/password. Organization register chưa nhận username cá nhân; bổ sung qua profile sau.
+2. `POST /api/auth/registration/request-otp` nhận email. Email trim/lowercase đã có account, kể cả inactive/deleted, trả `409 EMAIL_EXISTS` và `errors.email`, không enqueue. Email mới trả 202, lưu challenge/job, chưa tạo user/organization. Mailgun worker gửi mã; 202 chưa chứng minh delivered.
+3. OTP sáu số giữ số 0 đầu, hạn 10 phút; verify sai đủ 5 lần vô hiệu challenge. `POST /api/auth/resend-verification` trong cooldown 60 giây trả 202 nhưng không tạo job mới; sau cooldown phát mã mới và vô hiệu mã/proof cũ. Hai route gửi mã chung quota 5/email/giờ, 20/IP/giờ; vượt trả `429 OTP_RATE_LIMITED` và `Retry-After`.
+4. Nút “Xác thực và đăng ký” gọi `POST /api/auth/registration/verify-otp` với email/otp để nhận registrationToken/expiresAt, rồi gửi toàn bộ form + registrationToken tới `/api/auth/register/trainee` hoặc `/api/auth/register/organization`. Proof gắn email, hạn 15 phút, dùng một lần; verify chưa tạo account hay kiểm password. `/api/auth/register` là alias Trainee.
+5. Register validate form trước khi consume proof. Form sai trả 400 theo field và giữ proof; proof thiếu/sai/hết hạn/đã dùng trả `400 EMAIL_VERIFICATION_REQUIRED`; email/username trùng trả 409. BE consume proof, tạo account đã verified, organization/owner nếu có và audit trong cùng transaction. Trả `201 AccountResponse`, chưa cấp JWT; gọi login tiếp theo. Retry không được tạo account thứ hai.
+6. Đổi email bỏ proof và xác minh lại; reload mất form thì quay về form. Không lưu password trong URL/web storage. `/check-email/` BE là demo OTP/proof; `/api/auth/verify-email` deprecated chỉ hỗ trợ account pending legacy. Game start không có username gate.
+
+```mermaid
+sequenceDiagram
+    participant Client as Web/Mobile
+    participant BE
+    participant DB as PostgreSQL
+    participant Mail as Mailgun worker
+    Client->>Client: Nhập form và giữ trong bộ nhớ
+    Client->>BE: request-otp(email)
+    BE->>DB: Kiểm email, cooldown/quota; lưu challenge/job
+    BE-->>Client: 202 hoặc 409 EMAIL_EXISTS
+    Mail->>DB: Claim job còn hiệu lực
+    Mail->>Mail: Gửi OTP
+    Client->>BE: verify-otp(email, otp)
+    BE-->>Client: registrationToken + expiresAt
+    Client->>BE: register(form + registrationToken)
+    BE->>DB: Validate; consume proof + account/organization + audit atomic
+    BE-->>Client: 201 AccountResponse
+    Client->>BE: login(email, password)
+    BE-->>Client: accessToken + refreshToken + user
+```
+
+### 2.2. Login, refresh và logout
+
+1. `POST /api/auth/login` nhận email/password; kiểm hash, account/organization và pending legacy. Sai credential trả 401; account/organization bị khóa trả 403. Thành công tạo family, lưu refresh hash và audit atomic; response gồm accessToken/refreshToken/user, không có expiresAt. TTL theo cấu hình Jwt.
+2. API bảo vệ nhận Bearer Fire3D; middleware kiểm JWT và trạng thái account/organization/role/tenant/family trong DB. Access token còn hạn vẫn bị từ chối khi family revoked.
+3. `POST /api/auth/refresh` nhận refreshToken mới nhất, không cần Bearer; rotation giữ hạn tuyệt đối family. Replay token consume/revoke thu hồi family và trả `401 INVALID_REFRESH_TOKEN`. Client đồng bộ refresh và thay cả hai token. Quota 10/IP/phút mỗi instance; vượt trả `429 AUTH_REFRESH_RATE_LIMITED` cùng Retry-After.
+4. `POST /api/auth/logout` dùng Bearer, không body, trả 204 và revoke family hiện tại. `/api/auth/logout-all` revoke mọi family, tắt push bindings và audit atomic; client xóa token, login mới và đăng ký device lại khi cần push.
+
+### 2.3. Google và hồ sơ
+
+`POST /api/auth/login-firebase` nhận Firebase ID token dạng JSON string. UID đã link trả `200 Authenticated` kèm authentication; UID/email mới trả `200 OnboardingRequired`, chưa tạo account; email local trùng trả `409 ACCOUNT_LINK_REQUIRED`. Chưa có API/proof hoàn tất onboarding hoặc explicit link. Yêu cầu đích vẫn là chọn Trainee/OrganizationUser cho identity mới và chứng minh local account trước khi link; không cấp PlatformAdmin hoặc tự gia nhập tenant.
+
+`GET/PATCH /api/auth/me` sửa fullName/username/dob/gender/phoneNumber; `GET/PATCH /api/organizations/me` sửa hồ sơ organization. GET trả ETag, PATCH cần If-Match; không đổi role/tenant/email/status. Avatar dùng `/api/me/avatar` upload-intent/upload/complete/GET/delete với private S3; complete/upload/delete cần If-Match. Device dùng Bearer và X-Installation-Key, không dùng FCM token để login.
+
+### 2.4. Forgot/reset và change password
+
+`POST /api/auth/forgot-password` nhận email, trả 202 chung; chỉ account hoạt động có password local được enqueue reset. Worker Mailgun gửi link token 64 ký tự hex, hạn 30 phút, dùng một lần. `POST /api/auth/reset-password` nhận token/newPassword, không cần Bearer; `POST /api/auth/change-password` cần Bearer và currentPassword/newPassword, không gửi email. Password mới 6–128 ký tự, không chỉ whitespace, không tự trim. Google-only không dùng reset để thêm password local.
+
+BE source đã khóa user, đổi hash, vô hiệu reset token, revoke family và audit trong transaction; lỗi rollback toàn bộ. Thành công trả 204, không cấp JWT mới; client login lại. Nghiệm thu DB/provider được xác nhận riêng.
+
+### 2.5. Tiêu chí nghiệm thu auth
+
+| Tình huống | Kết quả cần kiểm chứng |
+| --- | --- |
+| OTP hết hạn, sai 5 lần, gửi lại và vượt quota | Không verify challenge vô hiệu; mã/proof cũ bị chặn sau resend; 429 có Retry-After |
+| Email trùng khác casing/whitespace, inactive/deleted | 409 EMAIL_EXISTS theo errors.email, không enqueue OTP; forgot vẫn trả 202 chung |
+| Form sai, proof dùng lại, đăng ký Organization lỗi DB/audit | Form sai giữ proof; proof dùng rồi không tạo account mới; consume/owner/organization/audit rollback cùng nhau |
+| Refresh đồng thời/replay và logout/logout-all | Client đồng bộ refresh; token replay revoke family; access JWT cũ bị từ chối; logout-all tắt push bindings |
+| Reset hết hạn/dùng lại, change sai currentPassword, race login/reset | Không đổi hash sai; commit revoke phiên; lỗi DB/audit rollback; không cấp phiên từ password cũ sau reset commit |
+| Google linked/new/local-email collision | Linked nhận phiên đúng role/tenant; hai nhánh còn lại không tự tạo/link account hoặc coi là đã login |
+| Profile/avatar ETag và client reload/đổi email | Mutation thiếu ETag trả 428, stale trả 412; không sửa role/tenant; reload quay form, đổi email phải verify lại |
+
+Đây là ca nghiệm thu cho triển khai/tích hợp; đợt đồng bộ Markdown chỉ kiểm tra contract, liên kết và định dạng, không chạy lại provider/DB/client tests.
 
 ## 3. Workflow Building và IFC
 
@@ -84,6 +148,8 @@ OrganizationUser tạo Building
 
 ## 4. Workflow scenario và readiness
 
+Organization tự soạn hoặc dùng template tùy chọn, có thể kết hợp mục tiêu sơ tán, nhận biết nguy cơ, dùng thiết bị và hỗ trợ người khác trong capability runtime. Admin cung cấp tiêu chí mẫu; Organization điều chỉnh rồi gửi duyệt cùng kịch bản. PlatformAdmin duyệt mọi phiên bản trước phát hành hoặc từ chối kèm lý do. Sửa nội dung/rubric phải tạo phiên bản mới và gửi duyệt lại. IFC QA/ConfirmForTraining là readiness kỹ thuật, không thay bước duyệt nội dung; release chỉ publish khi cả hai đạt. Phiên và kết quả cũ giữ phiên bản đã pin.
+
 ```text
 ReadyForScenario hoặc ConfirmedForTraining revision
   -> OrganizationUser tạo logical Scenario + editor Draft
@@ -92,7 +158,9 @@ ReadyForScenario hoặc ConfirmedForTraining revision
   -> validate candidate package + manifest
   -> checklist readiness
   -> optional Organization playtest (Trial còn quota thử hoặc Building entitlement Active)
-  -> ConfirmForTraining cho revision/version
+  -> ConfirmForTraining kỹ thuật cho revision/version
+  -> submit phiên bản + rubric cho PlatformAdmin
+  -> Admin duyệt hoặc từ chối kèm lý do; sửa thì gửi lại
   -> readiness record của đúng ScenarioVersion
 ```
 
@@ -102,7 +170,7 @@ ReadyForScenario hoặc ConfirmedForTraining revision
 4. Scenario ghi hazard parameters, time limit, rubric, route weights, seed, interaction config và version để replay được.
 5. Hệ thống chạy validation về route, blocked edge, floor portal, object anchors, package hash, protocol/schema, runtime version và giới hạn hiệu năng.
 6. OrganizationUser có thể chạy thử riêng bằng Mobile/Unity với package đã verify. Khi start, backend kiểm tra Trial còn hạn/còn quota thử hoặc entitlement Building `Active`; playtest không yêu cầu QR, không tạo learner session và không vào learner analytics. Entitlement hết hạn sau start không cắt playtest.
-7. Khi mọi điều kiện readiness đạt, `OrganizationUser` thực hiện action `ConfirmForTraining`; hệ thống persist readiness của đúng revision/version. Revision có thể tiếp tục author scenario khác.
+7. Readiness kỹ thuật được ghi bằng ConfirmForTraining đúng revision/version. Organization gửi phiên bản/rubric cho PlatformAdmin duyệt nội dung; bị từ chối thì chỉnh và gửi lại. Sửa bản đã duyệt phải tạo phiên bản mới và duyệt lại, không đổi phiên bản kết quả cũ.
 8. Hệ thống audit actor, timestamp, revision, scenario/version và các validation pass/fail. QR không nằm trong checklist vì chưa có release/`Training` để bind.
 
 `ConfirmForTraining` chỉ nói rằng package và scenario version đã sẵn sàng cho phiên tập huấn của đồ án. Nếu geometry, exit hoặc hazard baseline thay đổi thì cần revision mới; nếu chỉ đổi tham số scenario tương thích thì tạo version mới và readiness mới. Không kết quả nào trong workflow này xác nhận mức độ an toàn thực tế.
@@ -114,6 +182,7 @@ ConfirmedForTraining revision + confirmed ScenarioVersion
   -> create immutable TrainingRelease ở Built
   -> persist manifest/content package
   -> create matching Active Training
+  -> verify PlatformAdmin approval đúng ScenarioVersion/rubric
   -> verify Active Building service entitlement
   -> publish release
   -> keep/generate canonical Building QR
@@ -122,9 +191,9 @@ ConfirmedForTraining revision + confirmed ScenarioVersion
 
 1. Từ revision `ConfirmedForTraining` và đúng scenario/version đã được action confirm, backend tạo `TrainingRelease` bất biến ở `Built`.
 2. Backend persist manifest/package gồm `releaseId`, `buildingId`, `scenarioId`, `scenarioVersionId`, package hash, `protocolVersion`, schema version và `minRuntimeVersion`, rồi tạo một `Training` active khớp release/scenario/version/organization.
-3. Backend kiểm tra Building còn service entitlement `Active` cho publish. Trial chỉ cấp import/editor/playtest theo quota và không đủ để publish; playtest cũng có thể start với entitlement Active. Publish bị từ chối nếu package, `Training` active hoặc entitlement chưa hợp lệ.
+3. Backend kiểm tra đúng ScenarioVersion/rubric có approval của PlatformAdmin và Building có gói 6/12 tháng còn Active cho publish. Trial chỉ cấp import/editor/playtest theo quota và không đủ để publish; playtest cũng có thể start với entitlement Active. Publish bị từ chối nếu package, `Training` active hoặc entitlement chưa hợp lệ.
 4. `OrganizationUser` publish release. QR canonical cấp Building được giữ ổn định; người dùng có thể in hoặc rotate vì lý do quản trị.
-5. QR resolve Building và trả danh sách bài Published còn khả dụng. Khi Trainee chọn một bài, backend pin `release_id`, `training_id`, `scenario_version_id` vào session.
+5. QR resolve Building/trạng thái public; danh sách bài/package private chỉ trả sau đăng nhập và xác minh mã/quyền tham gia. Khi Trainee chọn một bài, backend pin `release_id`, `training_id`, `scenario_version_id` vào session.
 6. Release/Training/scenario/version/organization phải khớp nhau. Hết hạn entitlement chặn publish/session mới nhưng không làm mất QR landing; revoke QR vì quản trị là trạng thái riêng.
 
 Quy ước sản phẩm là mỗi Building có một QR canonical ổn định. QR chỉ là mã resolve công khai; nó không chứa package, access token hoặc APK. Khi phát hành release mới, danh sách bài thay đổi nhưng QR không cần đổi; rotate/revoke chỉ là thao tác quản trị.
@@ -134,21 +203,22 @@ Quy ước sản phẩm là mỗi Building có một QR canonical ổn định. 
 ```text
 QR
   -> chưa cài app: web landing/login/download app
-  -> đã cài app: Mobile nhận context Building và yêu cầu Google Sign-In
+  -> đã cài app: Mobile nhận Building, đăng nhập local hoặc Google
   -> backend resolve Building + trạng thái QR/dịch vụ
-  -> trả danh sách Published Training
+  -> public: Trainee đăng nhập; private: đăng nhập + mã tham gia
+  -> trả danh sách Published Training được phép
   -> Trainee chọn bài
   -> tải/verify package còn thiếu
   -> POST /api/training/sessions (prepare + idempotency key)
-  -> POST /api/training/sessions/{sessionId}/start (online entitlement/QR/package/runtime check)
+  -> POST /api/training/sessions/{sessionId}/start (online quyền public/private/suất người/entitlement/QR/package/runtime check)
   -> React Native/Expo native bridge launch Unity
 ```
 
 1. QR mở web nếu chưa cài app; người dùng có thể đăng ký/đăng nhập email/password hoặc Google rồi tải app và quét lại QR.
 2. Mobile dùng phiên FET3D từ local email/password hoặc Google exchange; với Google, gửi Firebase ID token để backend kiểm tra. Không bắt buộc Google nếu người dùng đã có phiên local hợp lệ.
-3. Backend resolve QR và trả danh sách bài Published được phép hiển thị; bước preparation chỉ kiểm tra identity, bài, QR, release/scenario và package metadata, chưa cấp quyền chơi.
+3. Backend resolve QR/status; Trainee đăng nhập, tòa private xác minh mã tham gia chung trước khi trả bài/package được phép; bước preparation chỉ kiểm tra identity, bài, QR, release/scenario và package metadata, chưa cấp quyền chơi.
 4. Trainee chọn bài, Mobile nhận manifest/package URL ký ngắn hạn, tải phần còn thiếu, xác minh hash/schema/runtime rồi tạo preparation record với idempotency key.
-5. Chỉ `POST /api/training/sessions/{sessionId}/start` kiểm tra Building entitlement `Active`, QR chưa revoke, release/training/scenario tương thích, package hash/schema/runtime và cấp launch grant online; không cho start mới offline dù package đã cache. Sau start, backend pin `trainingId`/`releaseId`/`scenarioId`/`qrCodeId` bất biến.
+5. Chỉ `POST /api/training/sessions/{sessionId}/start` kiểm tra quyền public/private, suất người theo Building/kỳ, entitlement Active, QR chưa revoke, release/training/scenario tương thích, package hash/schema/runtime và cấp launch grant online; không cho start mới offline dù package đã cache. Sau start, backend pin `trainingId`/`releaseId`/`scenarioId`/`qrCodeId` bất biến.
 6. Native Android bridge truyền `sessionId`, manifest path, grant và protocol version cho Unity. Unity không giữ credential dài hạn và không tự chọn release.
 
 Nếu thiết bị chưa cài Mobile app, URL/deep link của QR mở landing/trạng thái Building và dẫn tới kênh cài đặt phù hợp; người dùng quét lại sau khi cài nếu context chưa được giữ. Gameplay không chạy bằng Three.js trên trình duyệt; Three.js làm landing và editor/preview tổ chức, còn gameplay đầy đủ chạy trong Unity.
@@ -162,6 +232,8 @@ Nếu thiết bị chưa cài Mobile app, URL/deep link của QR mở landing/tr
 
 ## 7. Workflow training online
 
+Trainee tự chọn đọc Learn/blog, Learn trong Unity, Guided Drill hoặc vào Assessment ngay; không có prerequisite học/luyện. Assessment giảm/tắt gợi ý, chấm đạt/chưa đạt theo rubric đã duyệt và trả lý do/debrief. Lưu từng lần làm; thi lại không giới hạn và không bắt buộc luyện lại. Hoàn thành session không tự đồng nghĩa đạt; lỗi, hủy và chưa sync phải phân biệt với kết quả hợp lệ. Không cấp chứng nhận, không curriculum/module/sprint. Tiêu chí bắt buộc/tùy chọn, trọng số, ngưỡng điểm và lỗi khiến chưa đạt cần chốt theo từng loại bài, chưa hard-code con số.
+
 ```text
 Unity load package
   -> initialize scenario/hazard surrogate/risk-aware A*
@@ -173,7 +245,7 @@ Unity load package
 ```
 
 1. Unity load scene, navigation graph, hazard surrogate và luật mode từ manifest/scenario đã pin.
-2. Learn cung cấp hướng dẫn; Guided Drill ghi decision và re-plan; Assessment áp dụng rubric đã cấu hình.
+2. Người chơi tự chọn Learn/Guided Drill/Assessment; không cần học trước. Assessment dùng rubric đã được Admin duyệt, giảm/tắt gợi ý; debrief đạt/chưa đạt lưu theo từng lần và phiên bản bài.
 3. Event có `eventId` ổn định do client tạo, sequence, session ID và schema version. Unity trả event/result qua native Android bridge về React Native/Expo; Mobile gửi dữ liệu đó lên API khi online.
 4. Backend validate grant, release pin và sequence rồi đánh dấu `Completed`, `Aborted` hoặc trạng thái lỗi có lý do.
 5. `Trainee` xem debrief cá nhân; `OrganizationUser` xem aggregate cơ bản.
@@ -205,32 +277,22 @@ Contract bên gửi/nhận và checklist tích hợp được mô tả tại m�
 - Đợt đầu: backend aggregate learner plays, completion, duration, route decision và modeled exposure theo Building/scenario.
 - Đợt mở rộng: thêm filter thời gian, cohort comparison, export và debrief aggregate; đây vẫn là năng lực mục tiêu bản cuối.
 - `Trainee` chỉ xem session của mình. `OrganizationUser` chỉ xem dữ liệu organization. `PlatformAdmin` giám sát aggregate nền tảng khi cần vận hành.
+- Pass rate Assessment phải tách khỏi completion rate; điểm/đạt-chưa đạt theo rubric đã duyệt, session lỗi/hủy/chưa sync không tự coi là kết quả hợp lệ.
 - Dashboard phải nhắc rõ analytics mô tả hoạt động trong mô phỏng, không phải kết luận an toàn hay chứng nhận PCCC.
 
-## 11. Workflow dịch vụ Building, AI usage, thanh toán và support
+## 11. Workflow dịch vụ Building, hạn mức người và quota AI
 
-```text
-OrganizationUser quản lý nhiều Building có tên + địa chỉ
-  -> chọn Building mới hoặc Building đã import/thử nghiệm
-  -> chọn một/nhiều Building, gói và thời hạn
-  -> backend tính discount đủ điều kiện và phát hành quotation nhiều dòng
-  -> backend gọi PayOS ngoài DB transaction
-  -> webhook xác thực + DB idempotent
-  -> cấp/gia hạn entitlement đúng Building
-  -> AI usage ghi quota/overage riêng organization
-  -> đối soát cuối kỳ AI + invoice/revenue
-```
+1. Organization tạo/chọn Building có tên và địa chỉ; Trial import/editor/playtest giữ hạn mức thử Admin cấu hình.
+2. Chọn gói từng Building thời hạn 6 hoặc 12 tháng. Quotation nhiều dòng snapshot phí game, hạn mức người, quota AI, giá/discount, điều khoản, policy quota và thời hạn quota; mọi dữ liệu quota phải hợp lệ trước khi báo giá rời Draft. Kỳ dịch vụ đã cam kết không được chồng nhau; discount không cộng dồn theo quy tắc hiện có. Báo giá Liên hệ phải xác định từng Building trước checkout.
+3. Backend gọi PayOS ngoài transaction DB; returnUrl/cancelUrl chỉ điều hướng. Adapter verify webhook, đối chiếu và ghi payment idempotent.
+4. Payment thành công cấp/gia hạn entitlement từng Building đúng một lần và cộng quota đi kèm vào quỹ Organization. Retry provisioning dùng khóa ổn định, kể cả khi kỳ đã hết hạn, và trả lại entitlement/quota đã cấp thay vì cấp trùng.
+5. Trước hạn 5 ngày nhắc web/email theo entitlement/kỳ, gia hạn chọn lọc từng Building. Hết hạn chặn publish/start mới, giữ dữ liệu và phiên đã start.
+6. Người mới hết suất bị chặn; Organization nâng cấp gói có hạn mức người cao hơn. Nâng cấp giữ identity kỳ hiện tại và không được chồng với kỳ dịch vụ khác đã cam kết. Giá/thời hạn nâng cấp giữa kỳ chưa chốt.
+7. Khi quota AI Organization hết, chặn request tính phí mới; thanh toán mua thêm quota rồi mới tiếp tục. Payment AI không gia hạn dịch vụ Building.
 
-1. `OrganizationUser` quản lý nhiều Building; mỗi Building bắt buộc có tên và địa chỉ trước khi đưa vào quotation. Có thể chọn Building đã tạo để thử nghiệm/import hoặc tạo mới. Import/editor/playtest thử chỉ bị giới hạn bởi quota thử do Admin cấu hình; playtest cũng được phép khi entitlement Building đã Active.
-2. Organization chọn một hoặc nhiều Building, thời hạn và gói chuẩn. Backend tính số dòng, lọc rule theo package/số Building/thời hạn/thời gian hiệu lực; nếu nhiều rule hợp lệ thì chọn mức giảm lớn nhất, tie-break ổn định bằng rule ID, không cộng dồn, không vượt tổng hợp lệ và phân bổ discount xuống từng dòng theo quy tắc làm tròn của currency. Giá/discount/terms snapshot được lưu vào quotation `BuildingService`. Số lượng không được dùng thay cho danh sách Building. Với yêu cầu Liên hệ, request chỉ ghi nhu cầu ban đầu; trước khi checkout, Admin/backend vẫn phải chốt danh sách Building cụ thể thành các quotation line.
-3. Thanh toán trước khi publish. Quotation snapshot phải ghi từng Building, mục đích, thời hạn dịch vụ, giá và điều khoản; AI settlement dùng quotation `AIUsage`/kỳ AI riêng và không cấp quyền service Building.
-   Quotation đi qua `Draft → Issued → Accepted`; khi chuyển sang `Accepted`, backend/trigger ghi `accepted_at` đúng một lần. Sau khi phát hành, line không thể chuyển sang quotation khác và snapshot thương mại không thể sửa.
-4. Backend gọi PayOS bên ngoài database transaction; executor chỉ tạo request `Pending`. Trusted webhook adapter xác thực `req.body`; chỉ webhook hợp lệ và idempotent mới ghi `Paid`.
-5. Sau payment, provisioning/reconcile cấp hoặc gia hạn entitlement riêng cho từng dòng bằng khóa `quotation_item + payment`; cùng đợt dùng chung mốc kích hoạt, tòa mua sau có kỳ riêng. Gia hạn chọn lọc, gia hạn sớm nối tiếp hạn cũ; payment lỗi không cấp trùng.
-6. `returnUrl` và `cancelUrl` chỉ điều hướng UI. Mismatched/duplicate webhook được lưu trace, không gia hạn hoặc ghi Paid lần hai.
-7. Trước hạn 5 ngày, background task tạo notification web và email cho OrganizationUser theo từng entitlement. Notification/delivery có idempotency và retry; thông báo dẫn tới danh sách để chọn Building gia hạn. Redis không phải nguồn duy nhất của lịch nhắc.
-8. Mỗi Building có kỳ tháng riêng. Organization có quota AI dùng chung; Trainee có grant theo user/ngày. Mỗi AI request ghi `requestId`, grant, Building/user/audience, loại request, consent overage, đơn giá và trạng thái thành công/lỗi.
-9. Khi vượt quota miễn phí, web/mobile hiển thị overage và yêu cầu đồng ý trước khi phát sinh phí; usage được chốt theo kỳ đối soát organization riêng. `OrganizationUser` xem billing/usage trong organization; `PlatformAdmin` quản lý giá, discount, quota, entitlement và aggregate. Playtest tách khỏi learner analytics.
+Gói từng Building có thời hạn 6 hoặc 12 tháng, gộp phí game, hạn mức người và quota AI. Hạn mức đếm Trainee khác nhau theo mã tài khoản đã start game tại Building trong kỳ; đăng nhập, xem bài, preparation và Organization playtest không tính suất. Chơi lại/nhiều kịch bản cùng tòa trong kỳ chỉ một suất; tòa khác tính riêng. Hết suất chặn người mới, người đã tính suất vẫn chơi lại trong quyền/dịch vụ còn hợp lệ; Organization nâng cấp gói nhiều người hơn. Kỳ gia hạn mới tính hạn mức theo kỳ mới. Giá, các mức người và cách tính nâng cấp giữa kỳ chưa chốt.
+
+Quota AI đi kèm các Building cộng chung cho Organization; hết quota phải mua thêm và thanh toán trước khi tiếp tục dùng AI tính phí. Không tự cho dùng vượt quota rồi đối soát cuối kỳ. Trainee giữ quota ngày miễn phí riêng, không trừ quỹ Organization. Đơn vị/lượng quota, hiệu lực và xử lý quota còn dư chưa chốt. Reserve/settle và retry phải chống trừ/cấp quota trùng; timeout reconcile bằng request ID trước khi hoàn hoặc gọi lại.
 
 ## 12. Đánh giá capstone
 
@@ -241,9 +303,9 @@ Các buổi phản hồi chuyên môn, usability test và user study được t�
 ### 13.1. AI/RAG trên Azure
 
 1. Web/Mobile gửi request tới `.NET API`, không gọi trực tiếp FastAPI trong contract production.
-2. `.NET API` xác minh phiên FET3D, role, tenant, audience, corpus scope và quota/consent; nếu phiên bắt nguồn từ Google thì Firebase chỉ cung cấp bước xác minh Google identity.
-3. Backend tạo `ai_requests`, reserve quota và tạo request ledger bằng transaction PostgreSQL ngắn; nếu có kỳ billing thì khóa kỳ trước, sau đó khóa request, ledger/reservation và các grant theo `id` tăng dần. Sau commit mới gọi AI/RAG FastAPI trên Azure.
-4. AI trả `requestId`, response type/status, citations/source version, BIM anchors khi có, model/version và usage kỹ thuật. AI không quyết định giá, overage hoặc entitlement.
+2. `.NET API` xác minh phiên FET3D, role, tenant, audience, corpus scope, quyền bài public/private và quota hiện có; nếu phiên bắt nguồn từ Google thì Firebase chỉ cung cấp bước xác minh Google identity.
+3. Backend tạo `ai_requests`, reserve quota và tạo request ledger bằng transaction PostgreSQL ngắn; khóa request/ledger/reservation/grants theo thứ tự ổn định; không cho quota âm hoặc tự dùng overage. Lock order/schema trả trước chi tiết cần đồng bộ riêng. Sau commit mới gọi AI/RAG FastAPI trên Azure.
+4. AI trả `requestId`, response type/status, citations/source version, BIM anchors khi có, model/version và usage kỹ thuật. AI không quyết định giá, mua quota hoặc entitlement.
 5. Backend ghi kết quả qua contract `record_ai_request_result` sau khi xác minh request, evidence/citations, model và usage kỹ thuật; sau đó chốt `Recorded` hoặc giải phóng reservation đúng một lần. Timeout chuyển request/ledger sang `NeedsReconcile`; backend gọi `GET /api/ai/requests/{requestId}` hoặc reconcile nội bộ trước khi quyết định chốt/hoàn, không tự hoàn rồi tạo request mới.
 
 IFC/Blender và Unity build không chạy trong request chat. Backend ghi processing job + outbox trong transaction; dispatcher giao message, worker claim lease, gọi `register_processing_output` để ghi artifact/validation/issues theo lease rồi mới accept attempt. `issues_hash` giữ dấu vết canonical của danh sách QA để replay khác nội dung bị từ chối. Attempt cũ hết lease không được ghi đè kết quả mới; package fail hoặc QA còn Error/Critical thì không publish.
@@ -251,7 +313,7 @@ IFC/Blender và Unity build không chạy trong request chat. Backend ghi proces
 ### 13.2. Quy tắc nhất quán và mất kết nối
 
 - Hai request tranh lượt cuối chỉ một request reserve thành công; việc khóa grant không dùng `SKIP LOCKED` để báo hết quota giả. Retry cùng idempotency key và cùng input hash trả request cũ, key dùng lại cho input khác bị từ chối.
-- Webhook PayOS trùng không ghi payment hoặc entitlement trùng. Payment Applied nhưng provisioning lỗi đi vào `NeedsReconcile` và được retry bằng provisioning key cũ. Tranh chấp AI chỉ ghi metadata riêng; không mở lại period hoặc thay snapshot.
+- Webhook PayOS trùng không ghi payment hoặc entitlement trùng. Payment Applied nhưng provisioning lỗi đi vào `NeedsReconcile` và được retry bằng provisioning key cũ. Payment mua thêm quota phải chống cấp trùng; retry không sửa snapshot giá/quota đã mua.
 - Transaction không bao quanh LLM, PayOS, S3 hay worker. ACID chỉ bảo vệ từng transaction PostgreSQL; outbox/lease/reconcile xử lý eventual consistency giữa các service. Attempt hết lease không được ghi đè attempt hiện hành.
 - Payment, quota, publish và start session mới bị từ chối khi không kiểm tra được nguồn có thẩm quyền. Session đã start được tiếp tục offline và sync event/result sau khi có mạng.
 
@@ -276,7 +338,7 @@ Public API ingress theo kiến trúc đích là `Web/Mobile → OneShield/OnePor
 
 Ba cổng runtime của release/publish, Trainee start và OrganizationUser playtest đều đọc manifest/artifact đã pin và runtime catalog server-side. `minRuntimeVersion`, protocol, manifest schema và capability phải tồn tại và hợp lệ; metadata thiếu không được thay bằng giá trị mặc định. Start cùng idempotency key chỉ replay khi runtime payload giống request đầu tiên.
 
-Kỳ AI được xử lý theo thứ tự `Open → Closed → Invoiced → Paid`. `Closed` chỉ đóng băng snapshot; quotation `AIUsage` được gắn ở bước `Closed → Invoiced`, payment `Applied` tương ứng được gắn ở bước `Invoiced → Paid`. Retry cùng chứng từ là no-op, chứng từ khác là conflict; adjustment là bản ghi mới, không sửa kỳ đã chốt.
+AI dùng quota trả trước: reservation/settle chống trừ trùng và payment mua thêm chống cấp trùng; quota hết không gọi provider tính phí. V7 không có lifecycle Open → Closed → Invoiced → Paid, close/invoice/pay period hoặc overage consent trên workflow billing này.
 
 Processing ghi `processing_jobs` và outbox trong một transaction. Job giữ input hash bất biến; worker claim khóa job rồi attempt. Lease còn hạn trả `Busy`, attempt thành công trả `AlreadyCompleted`, chỉ job `Failed` mới được requeue có chủ đích bằng key mới; replay key cũ sau Running/Succeeded/Cancelled/Failed lại trả `AlreadyRequeued`, còn key khác envelope trả `Conflict`. `Cancelled` là terminal và muốn chạy lại phải tạo job mới. Attempt hết lease bị đánh dấu `Expired`, attempt mới có lease token mới. Renew và accept chỉ dành cho current attempt; artifact, validation và scenario/revision phải cùng provenance. Kết quả cũ hoặc khác hash trả `StaleAttempt`/`Conflict`.
 
@@ -286,7 +348,7 @@ Các tiêu chí này là yêu cầu kiểm thử triển khai, chưa phải kế
 
 | Invariant | Đường thành công | Đường từ chối/recovery | Nguồn chính |
 |---|---|---|---|
-| Close AI period | Period `Open` được khóa, items từ usage billable đã xác nhận lấy số lượt/giá/currency/policy/consent lịch sử rồi chuyển `Closed` | Item thêm/sửa/xóa sau close bị chặn; late/uncertain usage tạo adjustment | Technology 14.6, `close_ai_billing_period` |
+| AI quota trả trước | Quota còn đủ được reserve, request thành công settle đúng một lần; payment mua thêm cấp quota đúng một lần | Hết quota chặn request mới; timeout reconcile request ID; webhook/retry không cấp hoặc trừ trùng | Requirements FR-BILLING-05/RECOVERY-01; SQL v7 contract cần runtime test |
 | AI request/result | Request mới `Accepted`, reserve/settle cùng lock order, terminal result lưu evidence | Sai scope/policy bị chặn tại insert; retry khác input conflict; timeout `NeedsReconcile` | BIM/RAG 10, schema request trigger |
 | Worker lease | Job lock trước attempt; `Claimed` nhận token, accept đúng provenance | Lease còn hạn `Busy`; stale `StaleAttempt`; `Failed` chỉ requeue idempotent; `Cancelled` terminal | Technology 14.6, worker contract |
 | Runtime/package | Capability hợp lệ, catalog active đủ version/protocol/schema, package hash/manifest hash/build target và artifact hash khớp | null/số/chuỗi rỗng, metadata thiếu, provenance sai hoặc package pinned bị thay đều bị chặn | Schema helper và compatibility contract |

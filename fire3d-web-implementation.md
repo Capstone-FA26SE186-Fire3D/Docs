@@ -2,6 +2,14 @@
 
 Cập nhật 2026-09-16. Đây là báo cáo prototype, không phải biên bản nghiệm thu toàn bộ sản phẩm. Thiết kế chuẩn ở [UX web](fire3d-web-ux-design.md). Tài liệu mục tiêu hiện mở rộng website từ landing/Learn/RAG mẫu thành khu editor Three.js, billing/AI usage và QR landing; các năng lực này chưa được coi là đã triển khai chỉ vì đã có trong thiết kế.
 
+**Đồng bộ auth BE 03/10/2026:** theo [authentication](../BE/docs/authentication.md) và [API guide](../BE/docs/api-docs.md), source BE main `0683d90`. Local registration dùng form → OTP → registrationToken → register → login; register trả account, chưa cấp JWT. Google UID đã link đăng nhập được; onboarding/link mới còn thiếu API hoàn tất. Các quy tắc đầy đủ và sơ đồ nằm tại [workflows mục 2.1–2.4](fire-evacuation-training-workflows.md#21-đăng-ký-local-form--otp--account--login). Source không chứng minh client/provider/deployment đã nghiệm thu.
+
+## Khác biệt với yêu cầu đồng bộ ngày 03/10/2026
+
+Báo cáo này giữ nguyên bằng chứng prototype đã chạy. Thiết kế mới tách thư viện hỗ trợ Organization (template tùy chọn, tiêu chí mẫu, thiết bị) khỏi Learn/blog công khai; bổ sung Admin duyệt mọi phiên bản kịch bản, Building public/private dùng mã tham gia, đánh giá đạt/chưa đạt không prerequisite và thi lại không giới hạn. Gói từng Building 6/12 tháng gồm hạn mức người và quota AI; hết suất nâng cấp gói, hết quota mua thêm trả trước. Các năng lực này cần triển khai/tích hợp, chưa được chứng minh bởi FE demo.
+
+Learn tiếp tục đọc công khai, auth cho bookmark/hỏi AI, Admin biên tập theo lifecycle hiện có; chưa tuyên bố CMS/embed/index production đã hoàn tất. SQL design v7, ERD và Word đã đồng bộ contract nghiệp vụ; code/API vẫn chưa là bằng chứng triển khai. [Requirements](fire_evacuation_requirements.md) là nguồn yêu cầu; [UX](fire3d-web-ux-design.md) mô tả trải nghiệm đích.
+
 ## So với thiết kế ban đầu
 
 | Ban đầu | Hiện tại |
@@ -49,4 +57,4 @@ Test tổng hợp chuyển cảnh từng vượt 90 giây sau khi qua bước b�
 
 RAG giữ contract thử nghiệm; dữ liệu học tập/tài khoản/chat mẫu không đại diện backend nghiệp vụ. Không nhập IFC thật hoặc gameplay Unity trên web.
 
-Phạm vi production còn cần nối contract với BE/AI: IFC pipeline IfcOpenShell/IfcConvert → Blender optimization → Unity build worker, editor scenario, PayOS/Building entitlement, canonical Building QR và AI usage ledger. Những phần này là thiết kế mục tiêu; báo cáo prototype chỉ là bằng chứng cho những gì đã chạy trong FE, không phải bằng chứng tích hợp end-to-end hay benchmark Android/Unity.
+Phạm vi production còn cần nối contract với BE/AI: IFC pipeline IfcOpenShell/IfcConvert → Blender optimization → Unity build worker, editor/thư viện Organization, review phiên bản, PayOS/gói 6/12 tháng/hạn mức người, quyền private qua mã, QR Building và quota AI trả trước. Những phần này là thiết kế mục tiêu; báo cáo prototype chỉ là bằng chứng cho những gì đã chạy trong FE, không phải bằng chứng tích hợp end-to-end hay benchmark Android/Unity.

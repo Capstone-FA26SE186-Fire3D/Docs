@@ -1,8 +1,27 @@
 # Fire Evacuation Training 3D — PostgreSQL ERD
 
-This ERD mirrors the design target in `fire_evacuation_schema.sql` version 6.7. SQL is authoritative for defaults and check-constraint expressions; every table, column, enum-backed field, foreign key, and relationship is represented below. This is a design document, not a database migration.
+This ERD mirrors the design target in `fire_evacuation_schema.sql` version 7.0. SQL is authoritative for defaults and check-constraint expressions. This is a design document, not a database migration.
 
-## Contract notes
+**Authentication alignment (2026-10-03):** v7 adds OTP challenge/proof/job records and normalized-email uniqueness for the BE `0683d90` flow: form → OTP challenge → single-use proof → verified account → login. Refresh rotation/session-family checks, profile/organization ETags and transactional reset/change are implementation concerns; Google onboarding completion/link endpoints remain missing. See [BE authentication](../BE/docs/authentication.md) and [workflows](fire-evacuation-training-workflows.md).
+
+## Product decisions represented by v7.0
+
+The detailed baseline relationship map below is retained for existing entities. The v7 overlay and `fire_evacuation_schema.sql` add the current product controls below; [requirements](fire_evacuation_requirements.md) remains authoritative for user-visible behavior.
+
+| Current product decision | v7 representation |
+| --- | --- |
+| Organization library: optional templates, rubric samples, supported equipment; Admin maintains it | `organization_library_items` and immutable versions; separate from public Learn. |
+| Learn remains a public web blog | Existing editorial lifecycle, bookmarks and Common-source RAG remain separate from authoring catalogs. |
+| Admin reviews every scenario/rubric version before publication, including edits | `scenario_content_reviews`, content hash, frozen submitted version and publish gate. |
+| Public/private Buildings; authenticated Trainees, shared code for private access | Visibility/code revision/hash and `building_participation_grants`; no Visitor role or tenant membership. |
+| Freely choose learning/practice/Assessment; unlimited retries; no certificates/curriculum | `max_attempts` removed; `session_results` stores rubric snapshot, criterion results, outcome and explanation. |
+| Per-Building 6/12-month package, game fee, unique-user limit and AI quota | Commercial snapshots, `building_learner_seats` and capacity upgrades; login/prepare/playtest excluded. |
+| Pooled Organization AI quota; paid top-ups before more use; separate Trainee grants | Prepaid quota provenance and `quotation_ai_quota_items`; reserve/settle uses grants only. |
+| AI draft assistance for own Organization; Trainee explanations of accessible published/approved scenarios | `scenario_knowledge_documents` indexes only learner name/objectives/instructions and reauthorizes retrieval. |
+
+Prices, user limits, AI units/expiry/rollover, upgrade pricing, rubric thresholds and access-code lifecycle remain configuration decisions; v7 stores/snapshots configured values without inventing defaults. See [schema v7 contract](schema_v7_contract.md).
+
+## Baseline relationship notes and v7 overlay
 
 - `user_role_enum` is exactly `PlatformAdmin | OrganizationUser | Trainee`. `OrganizationUser` requires `organization_id`; `PlatformAdmin` and `Trainee` require it to be null.
 - BE owns local email/password credentials and Fire3D sessions. `users.password_hash` is nullable for Google-only accounts, while `users.firebase_uid` maps a verified Firebase Google identity to FET3D roles/tenant data. The database stores only password/refresh/reset token hashes, never plaintext passwords or Google refresh tokens. FCM registration tokens belong to device installations and are not authentication credentials.
@@ -10,22 +29,41 @@ This ERD mirrors the design target in `fire_evacuation_schema.sql` version 6.7. 
 - `file_type_enum` is exactly `IFC`.
 - Redis is a target cache/Streams transport behind the backend; PostgreSQL remains authoritative and Redis is not modeled as a source table. Outbox and consumer dedup are represented by `integration_outbox_events` and `integration_event_consumptions`.
 - `ConfirmForTraining` is the persisted `revision_reviews.action` for one revision/ScenarioVersion pair; it may transition the revision from `ReadyForScenario` to `ConfirmedForTraining` but does not prevent authoring other compatible Scenarios. It is readiness-only. The executable order is confirmed revision/scenario → `Built` release + package + matching Active `Training` → Active Building service entitlement → `Published` release → stable Building QR → published training list → selected session pin.
-- `release_qr_codes` is canonical at Building scope and has no release/training FK. Preparation directly pins `trainee_user_id`, selected `training_id`, `scenario_version_id`, `release_id`, and `qr_code_id`; only the explicit online session start requires an Active Building entitlement. QR participation never compares the Trainee to an organization or allowlist.
+- `release_qr_codes` is canonical at Building scope and has no release/training FK. Preparation pins `trainee_user_id`, selected training/scenario/release/QR; v7 first checks `can_access_building_v7`. A private-code grant is account-bound at the current access revision, while session start also needs an Active entitlement and a learner seat.
 - The design keeps at most one active canonical row per Building; physical copies may reuse the same opaque QR value. A management revoke deactivates the QR separately from service expiry.
 - A trusted PayOS adapter verifies `req.body` with the official SDK `webhooks.verify`, or canonicalizes and alphabetically sorts webhook `data` fields using the official algorithm, before database invocation. `apply_verified_payos_webhook` performs no cryptography; it records adapter attestation, deduplicates `webhook_event_id`, and compares `orderCode`, amount, and currency before recording `Paid`.
 - `create_pending_payos_payment_request` derives organization, amount and currency from an unexpired `Accepted` quotation and can create only `Pending`. `fet3d_payos_request_executor` and `fet3d_payos_webhook_executor` are separate function-only `NOLOGIN` roles with no payment-table DML; the function/table owner is a separate `NOLOGIN` ledger role. Deployment must not grant ledger-owner inheritance or direct payment-table DML to runtime logins.
 - `payment_transactions` is append-only once terminal, and an `Applied` transaction plus its `Paid` request provenance is immutable.
 - `return_url` is UI navigation only and is never payment confirmation. PayOS does not imply automatic recurring debit.
-- Building service periods are independent from organization AI billing periods. AI usage is ledgered by organization/building/user/audience/request type with request/idempotency keys, reservation allocations, overage consent and immutable price snapshots. Trainee daily grants are user-scoped and do not require organization membership.
+- AI usage is prepaid and ledgered by organization/building/user/audience/request type with request/idempotency keys and reservation allocations. Package/top-up grants have payment/entitlement provenance; insufficient quota rejects billable work before it runs. Trainee daily grants remain user-scoped and do not require Organization membership.
 - `Scenario` is the logical authoring object; `ScenarioVersion` is an append-only snapshot tied to compatible revision geometry. A revision can host multiple scenarios and can continue authoring after one scenario has been confirmed.
 - `ScenarioDraft` and `ProcessingJob` are non-release working records. `ValidationRun`/`ValidationIssue` hold toolchain/artifact evidence and block publish on open Error/Critical issues. Organization playtest may use a verified draft package within Admin limits or an Active Building entitlement, but it is not a Trainee session and is excluded from learning analytics.
 - `processing_jobs.input_hash` is the canonical logical-job input hash. Attempts add lease/toolchain/output provenance; an attempt may be claimed only when queued or when the current lease has expired. A completed job is replay-safe and is not re-run by duplicate delivery.
-- AI billing snapshots become immutable at `Closed`, while `settlement_quotation_id` is attached only on `Closed → Invoiced` and `settlement_payment_transaction_id` only on `Invoiced → Paid`. Adjustment records are used after close; dispute metadata does not become a settlement status and does not reopen or rewrite the period.
-- `close_ai_billing_period` locks the period, includes only confirmed billable usage, creates immutable items and freezes the totals in one transaction. Items cannot be added, edited or deleted after close; late/uncertain usage becomes an adjustment with its own organization and idempotency key.
+- v7 does not create, invoice or pay AI billing periods. `reserve_ai_usage` locks and allocates active matching grants; settlement consumes or releases those exact allocations idempotently. There is no overage consent or automatic debt path.
 - Runtime capability arrays are valid only when every element is a non-empty string; an explicitly declared empty array is valid. Publish accepts any active catalog runtime that is numerically at least the package minimum and matches protocol/schema.
 - Worker claim returns `Claimed`, `Busy`, `AlreadyCompleted`, `NotClaimable` or `Conflict`; requeue is an explicit idempotent outbox operation. Job identity/input hash, artifact rows, accepted validation provenance and policy versions are immutable.
 - `fet3d_session_owner`, `fet3d_ai_accounting_owner` and `fet3d_processing_owner` are `NOLOGIN` function owners. Runtime executors receive only the listed `EXECUTE` privileges and no direct DML on protected tables. Learn actor, ETag, idempotency, audit and publish/hide/show/delete/restore orchestration belongs to the .NET application service; SQL retains only relational and immutable Published-snapshot checks.
 - Learn is a public blog/library, separate from Unity `trainings` and `sessions`. `PlatformAdmin` owns editorial writes; a post can be created as Unpublished or published immediately, then moved Published ↔ Hidden or soft-deleted/restored through controlled gates. `learn_posts` is the stable identity and `learn_post_versions` is the immutable published snapshot; Hidden retains `published_version_id` and remains eligible for RAG, while Deleted is excluded from public reads and retrieval. A Published version also freezes its situation/source join rows; bookmark rows are Trainee-owned create/delete records, not editable enrollment. Drafts may reference Common sources before independent approval, but publish/show and RAG require an allowed Approved Common source. Video blocks store validated provider/URL metadata; no provider-specific media table or arbitrary iframe/script is part of the design.
+
+### v7 relationship overlay
+
+```mermaid
+erDiagram
+    organization_library_items ||--o{ organization_library_versions : versions
+    scenario_versions ||--o| scenario_content_reviews : reviewed
+    scenario_versions ||--o| scenario_knowledge_documents : learner_safe_index
+    buildings ||--o{ building_participation_grants : grants
+    users ||--o{ building_participation_grants : receives
+    service_entitlements ||--o{ building_learner_seats : reserves
+    users ||--o{ building_learner_seats : occupies
+    service_entitlements ||--o{ entitlement_capacity_upgrades : extends
+    quotations ||--o{ quotation_ai_quota_items : contains
+    service_entitlements ||--o{ ai_quota_grants : grants
+    ai_usage_reservations ||--o{ ai_usage_reservation_allocations : allocates
+    ai_quota_grants ||--o{ ai_usage_reservation_allocations : funds
+```
+
+The large baseline diagram below predates v7 and is retained for its stable base relationships. For the authoritative v7 additions and gates, use this overlay with [schema v7 contract](schema_v7_contract.md) and the SQL file; v7-only controls are intentionally represented in the overlay rather than repeated in the baseline map.
 
 ## Enum values
 
@@ -406,7 +444,6 @@ erDiagram
         training_status_enum status
         session_mode_enum mode
         TEXT_ARRAY allowed_modes
-        INT max_attempts
         UUID created_by FK
         TIMESTAMPTZ created_at
         TIMESTAMPTZ updated_at
@@ -718,25 +755,6 @@ erDiagram
         TIMESTAMPTZ created_at
     }
 
-    ai_billing_periods {
-        UUID id PK
-        UUID organization_id FK
-        TIMESTAMPTZ period_start
-        TIMESTAMPTZ period_end
-        VARCHAR status
-        UUID settlement_quotation_id FK
-        UUID settlement_payment_transaction_id FK
-        JSONB unit_price_snapshot
-        INT overage_units
-        DECIMAL overage_amount
-        VARCHAR currency
-        TIMESTAMPTZ disputed_at
-        TEXT disputed_reason
-        UUID disputed_by FK
-        TIMESTAMPTZ closed_at
-        TIMESTAMPTZ created_at
-    }
-
     ai_policy_versions {
         UUID id PK
         UUID organization_id FK
@@ -765,15 +783,6 @@ erDiagram
         TIMESTAMPTZ ends_at
         UUID configured_by FK
         TIMESTAMPTZ created_at
-    }
-
-    ai_overage_consents {
-        UUID id PK
-        UUID organization_id FK
-        UUID accepted_by FK
-        TIMESTAMPTZ accepted_at
-        JSONB terms_snapshot
-        JSONB scope
     }
 
     ai_requests {
@@ -815,38 +824,9 @@ erDiagram
         VARCHAR request_type
         UUID policy_version_id FK
         INT units
-        UUID overage_consent_id FK
-        BOOLEAN billable
         JSONB unit_price_snapshot
-        UUID billing_period_id FK
         VARCHAR status
         JSONB source_scope
-        TIMESTAMPTZ created_at
-    }
-
-    ai_billing_period_items {
-        UUID id PK
-        UUID billing_period_id FK
-        UUID usage_ledger_id FK
-        INT units
-        JSONB unit_price_snapshot
-        DECIMAL amount
-        VARCHAR status
-        TIMESTAMPTZ created_at
-    }
-
-    ai_billing_adjustments {
-        UUID id PK
-        UUID billing_period_id FK
-        UUID organization_id FK
-        UUID usage_ledger_id FK
-        UUID original_item_id FK
-        VARCHAR adjustment_type
-        INT units
-        DECIMAL amount
-        TEXT reason
-        VARCHAR idempotency_key
-        UUID created_by FK
         TIMESTAMPTZ created_at
     }
 
@@ -1218,7 +1198,6 @@ erDiagram
     service_packages ||--o{ quotation_building_items : prices
     organizations ||--o{ enterprise_quote_requests : requests
     quotations o|--o{ enterprise_quote_requests : answers
-    ai_billing_periods o|--o| quotations : settles
     users ||--o{ quotations : requests
     users o|--o{ quotations : issues
     quotations ||--o{ payos_payment_requests : requests
@@ -1244,19 +1223,11 @@ erDiagram
     buildings o|--o{ organization_notifications : concerns
     service_entitlements o|--o{ organization_notifications : expires
     organization_notifications ||--o{ notification_deliveries : delivers
-    organizations ||--o{ ai_billing_periods : settles
-    ai_billing_periods ||--o{ ai_billing_period_items : includes
-    ai_billing_periods ||--o{ ai_billing_adjustments : adjusts
-    ai_usage_ledger ||--o{ ai_billing_period_items : billed
-    ai_usage_ledger o|--o{ ai_billing_adjustments : corrected
-    ai_billing_period_items o|--o{ ai_billing_adjustments : references
     organizations o|--o{ ai_policy_versions : configures
     organizations ||--o{ ai_quota_grants : receives
     buildings o|--o{ ai_quota_grants : scopes
     users o|--o{ ai_quota_grants : receives
     users ||--o{ ai_quota_grants : configures
-    organizations ||--o{ ai_overage_consents : accepts
-    users ||--o{ ai_overage_consents : accepts
     organizations o|--o{ ai_requests : accounts
     buildings o|--o{ ai_requests : scopes
     users ||--o{ ai_requests : submits
@@ -1265,13 +1236,11 @@ erDiagram
     buildings o|--o{ ai_usage_ledger : attributes
     users ||--o{ ai_usage_ledger : requests
     sessions o|--o{ ai_usage_ledger : debriefs
-    ai_billing_periods o|--o{ ai_usage_ledger : settles
     ai_policy_versions ||--o{ ai_quota_grants : versions
     ai_policy_versions ||--o{ ai_usage_ledger : versions
     ai_quota_grants o|--o{ ai_usage_reservation_allocations : allocates
     ai_usage_ledger ||--o| ai_usage_reservations : reserves
     ai_usage_reservations ||--o{ ai_usage_reservation_allocations : allocates
-    ai_overage_consents o|--o{ ai_usage_ledger : authorizes
     organizations o|--o{ knowledge_sources : owns
     knowledge_sources ||--o{ knowledge_chunks : chunks
     users o|--o{ knowledge_sources : approves
