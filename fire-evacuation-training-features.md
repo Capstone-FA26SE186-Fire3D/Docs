@@ -1,5 +1,9 @@
 # Fire Evacuation Training 3D — Tổng Hợp Tính Năng
 
+**Đồng bộ auth BE 03/10/2026:** theo [authentication](../BE/docs/authentication.md) và [API guide](../BE/docs/api-docs.md), source BE main `0683d90`. Local registration dùng form → OTP → registrationToken → register → login; register trả account, chưa cấp JWT. Google UID đã link đăng nhập được; onboarding/link mới còn thiếu API hoàn tất. Các quy tắc đầy đủ và sơ đồ nằm tại [workflows mục 2.1–2.4](fire-evacuation-training-workflows.md#21-đăng-ký-local-form--otp--account--login). Source không chứng minh client/provider/deployment đã nghiệm thu.
+
+**Đồng bộ thiết kế ngày 03/10/2026:** yêu cầu nghiệp vụ, SQL design v7, ERD Markdown và Word ý tưởng đã được đồng bộ. Tên bảng/function là contract thiết kế, không chứng minh migration/API/runtime đã triển khai. [Requirements](fire_evacuation_requirements.md) là nguồn yêu cầu sản phẩm; [ghi chú quyết định](phan_tich_khoang_cach_va_quyet_dinh_nghiep_vu.md) ghi lại lựa chọn và chi tiết còn mở.
+
 > Đặc tả sản phẩm cho đồ án FET3D. Toàn bộ nhóm năng lực dưới đây thuộc mục tiêu bản cuối; phase chỉ dùng để sắp xếp triển khai.
 
 ## 1. Định vị sản phẩm
@@ -16,13 +20,17 @@ Giá trị cốt lõi là giúp người học làm quen với không gian đã 
 
 | Tài khoản | Phạm vi |
 | :--- | :--- |
-| `PlatformAdmin` | Quản lý nền tảng, organization, tài khoản, Learn public content, giám sát và support ở cấp nền tảng. |
+| `PlatformAdmin` | Quản lý nền tảng, thư viện hỗ trợ Organization, Learn công khai, gói/quota; duyệt mọi phiên bản kịch bản/rubric. |
 | `OrganizationUser` | Sở hữu Building, IFC, scenario, publish, QR, analytics và billing cho organization. |
 | `Trainee` | Quét QR Building, chọn bài đã publish trong app Android và chỉ xem dữ liệu buổi tập huấn của chính mình. |
 
-Mô hình quyền không dùng cơ chế thành viên, lời mời, truy cập khách hoặc tập huấn không định danh. `organizationId` giới hạn ownership của Building, authoring, analytics và billing; nó không là điều kiện QR participation của `Trainee` đã xác thực.
+Building public cho mọi Trainee đã đăng nhập tham gia; Building private yêu cầu thêm mã tham gia chung do Organization cung cấp. Mã không tạo role, membership hoặc quyền đọc tài liệu nội bộ. Xác minh mã tạo grant theo tài khoản ở `access_revision` hiện tại; đổi/thu hồi mã hoặc đổi public/private làm grant cũ mất hiệu lực. QR chỉ resolve Building, không thay kiểm tra quyền. Backend kiểm tra quyền trước khi trả bài/package private và kiểm tra lại ở online start.
 
 ## 3. Năng lực của OrganizationUser
+
+**Thư viện hỗ trợ Organization** gồm template kịch bản tùy chọn, bộ tiêu chí chấm mẫu và danh mục thiết bị game đã được runtime hỗ trợ. PlatformAdmin duy trì các nội dung chuẩn; OrganizationUser dùng để soạn/cấu hình bài trong khu quản lý đã đăng nhập. Thư viện này tách khỏi **Learn công khai** trên web: bài viết, mẹo và video cho mọi người đọc không cần đăng nhập; lưu bài/hỏi AI cần đăng nhập. Learn giữ quy trình biên tập hiện tại và không có bước duyệt bài riêng. Mode Learn trong Unity là trải nghiệm làm quen không gian, không phải blog. IFC, mô hình và kịch bản riêng của Organization không tự được chia sẻ vào thư viện.
+
+Organization tự soạn hoặc dùng template tùy chọn, có thể kết hợp mục tiêu sơ tán, nhận biết nguy cơ, dùng thiết bị và hỗ trợ người khác trong capability runtime. Admin cung cấp tiêu chí mẫu; Organization điều chỉnh rồi gửi duyệt cùng kịch bản. PlatformAdmin duyệt mọi phiên bản trước phát hành hoặc từ chối kèm lý do. Sửa nội dung/rubric phải tạo phiên bản mới và gửi duyệt lại. IFC QA/ConfirmForTraining là readiness kỹ thuật, không thay bước duyệt nội dung; release chỉ publish khi cả hai đạt. Phiên và kết quả cũ giữ phiên bản đã pin.
 
 ### 3.1. Building và IFC
 
@@ -39,16 +47,16 @@ Mô hình quyền không dùng cơ chế thành viên, lời mời, truy cập k
 - Lưu draft, undo/redo, validation và version scenario riêng với geometry. Đổi tham số scenario không convert lại toàn bộ IFC; đổi IFC tạo revision mới.
 - Preview web chỉ minh họa timeline/hiệu ứng; chạy thử đầy đủ hành vi, route và scoring bằng app Unity của organization.
 - Chạy checklist readiness: candidate package/manifest, graph, route kiểm tra và scenario; QR chưa tồn tại ở bước này.
-- Revision đạt IFC/connectivity QA ở `ReadyForScenario`; OrganizationUser có thể tạo nhiều logical Scenario và version trên cùng geometry. `ConfirmForTraining` được persist cho đúng cặp revision/version và không khóa scenario khác.
+- Revision đạt IFC/connectivity QA ở ReadyForScenario; mọi scenario/rubric version còn phải được PlatformAdmin duyệt nội dung trước phát hành; OrganizationUser có thể tạo nhiều logical Scenario và version trên cùng geometry. `ConfirmForTraining` được persist cho đúng cặp revision/version và không khóa scenario khác.
 - OrganizationUser có thể chạy thử draft/version riêng trên Mobile/Unity trong hạn mức Admin cấu hình. Playtest phải thuộc đúng tenant, không mở qua QR Trainee và không tính learner analytics.
 
 `ConfirmForTraining` là nhãn readiness nội bộ. Nó không tuyên bố Building, lối thoát, scenario hay kết quả mô phỏng đã được chứng nhận, phê duyệt hoặc kiểm định về PCCC.
 
 ### 3.3. Publish, QR và analytics
 
-- Sau `ConfirmedForTraining`, tạo release `Built`, package và `Training` khớp revision/scenario/organization; publish chỉ khi package có checksum/manifest/runtime tương thích, validation đạt, không còn issue Error/Critical mở và `Training` active đã tồn tại.
-- Sau publish, tạo, in và rotate QR canonical ở cấp Building. QR resolve danh sách `Training`/release đã publish; khi Trainee chọn bài, session mới pin đúng `trainingId`, `releaseId` và `scenarioVersionId`.
-- Publish chỉ được phép khi Building còn dịch vụ tháng hợp lệ. Hết hạn khóa publish và session mới; QR vẫn mở landing/trang trạng thái để đăng nhập, tải app hoặc gia hạn.
+- Sau `ConfirmedForTraining`, tạo release `Built`, package và `Training` khớp revision/scenario/organization; publish còn yêu cầu đúng phiên bản/rubric được PlatformAdmin duyệt và chỉ khi package có checksum/manifest/runtime tương thích, validation đạt, không còn issue Error/Critical mở và `Training` active đã tồn tại.
+- Sau publish, tạo, in và rotate QR canonical ở cấp Building. QR resolve trạng thái Building; public cần đăng nhập, private cần mã/quyền trước danh sách Training/package; khi Trainee chọn bài, session mới pin đúng `trainingId`, `releaseId` và `scenarioVersionId`.
+- Publish chỉ được phép khi Building còn gói 6/12 tháng hợp lệ. Hết hạn khóa publish và session mới; QR vẫn mở landing/trang trạng thái để đăng nhập, tải app hoặc gia hạn.
 - Xem analytics cơ bản và expanded analytics cho Building/scenario thuộc organization theo thứ tự rollout; tách learner plays, playtest, Trainee unique và active sessions ước tính từ heartbeat.
 - Xem quotation, transaction, invoice metadata, entitlement và revenue theo quyền billing.
 
@@ -56,8 +64,8 @@ Mô hình quyền không dùng cơ chế thành viên, lời mời, truy cập k
 
 1. Chưa cài app: quét QR mở web, đăng nhập/đăng ký email/password hoặc Google và hướng dẫn tải app; sau khi cài có thể quét lại QR.
 2. Đã cài nhưng chưa đăng nhập: app dùng phiên local email/password hoặc Google Sign-In qua Firebase.
-3. Đã đăng nhập: app resolve Building, hiển thị danh sách bài đã publish và cho chọn mode.
-4. App tải phần package còn thiếu, verify hash/schema/runtime và tạo session preparation; `POST /api/training/sessions/{sessionId}/start` mới kiểm tra dịch vụ Building/QR online và cấp launch grant để mở Unity qua native Android bridge.
+3. Đã đăng nhập: tòa public tham gia trực tiếp, private nhập mã chung; app chỉ trả bài/package được phép rồi cho chọn mode.
+4. App tải phần package còn thiếu, verify hash/schema/runtime và tạo session preparation; `POST /api/training/sessions/{sessionId}/start` mới kiểm tra quyền public/private, dịch vụ Building/QR và suất người online và cấp launch grant để mở Unity qua native Android bridge.
 5. Người học hoàn thành Learn, Guided Drill hoặc Assessment; Unity trả event/result qua bridge để Mobile đồng bộ backend.
 6. Người học hỏi AI trên web/Mobile ngoài gameplay và xem debrief của chính mình.
 
@@ -86,9 +94,9 @@ Learn web là thư viện bài viết, tip & trick và video PCCC theo tình hu�
 ### 5.1.1. Tài khoản và hồ sơ
 
 - Trainee đăng ký bằng email/username/password/confirm password; username được BE chuẩn hóa lowercase và unique không phân biệt hoa thường. OrganizationUser đăng ký email/password/confirm password cùng tên, địa chỉ và số điện thoại tổ chức; username cá nhân có thể bổ sung sau. Confirm password không được lưu.
-- Google mới sau khi xác minh Firebase được onboarding chọn Trainee hoặc OrganizationUser rồi nhập thông tin tương ứng; Google đã liên kết đăng nhập theo role/tenant cũ. Không có lựa chọn PlatformAdmin hoặc tự chọn organization có sẵn. Game start không còn hỏi username.
+- Local registration nhập form → OTP → proof → register → login; OTP chưa tạo account, register trả 201 account verified và chưa cấp JWT. Google UID đã link đăng nhập theo role/tenant cũ; identity mới trả OnboardingRequired, email local trùng trả 409 ACCOUNT_LINK_REQUIRED. Onboarding chọn Trainee/OrganizationUser và explicit link còn thiếu API hoàn tất. Game start không hỏi username.
 - Hồ sơ cho phép đổi username, tên hiển thị, mật khẩu và avatar; OrganizationUser có thể cập nhật tên/địa chỉ/điện thoại tổ chức. Không cho đổi role, tenant, email đăng nhập hoặc trạng thái qua profile API.
-- Avatar dùng private S3 object key do backend cấp upload intent; API tạo signed URL ngắn hạn để đọc. Firebase chỉ dùng Google Sign-In, FCM chỉ dùng push và Mailgun gửi reset password.
+- Avatar dùng private S3 object key do backend cấp upload intent; API tạo signed URL ngắn hạn để đọc. Firebase chỉ dùng Google Sign-In, FCM chỉ dùng push và Mailgun gửi OTP đăng ký và reset password.
 
 Mode Learn trong Unity vẫn là trải nghiệm tự do quan sát không gian và route đã mô hình hóa; nó không dùng kết quả như thước đo an toàn thực tế.
 
@@ -100,6 +108,9 @@ Mode Learn trong Unity vẫn là trải nghiệm tự do quan sát không gian v
 
 ### 5.3. Assessment
 
+Trainee tự chọn đọc Learn/blog, Learn trong Unity, Guided Drill hoặc vào Assessment ngay; không có prerequisite học/luyện. Assessment giảm/tắt gợi ý, chấm đạt/chưa đạt theo rubric đã duyệt và trả lý do/debrief. Lưu từng lần làm; thi lại không giới hạn và không bắt buộc luyện lại. Hoàn thành session không tự đồng nghĩa đạt; lỗi, hủy và chưa sync phải phân biệt với kết quả hợp lệ. Không cấp chứng nhận, không curriculum/module/sprint. Tiêu chí bắt buộc/tùy chọn, trọng số, ngưỡng điểm và lỗi khiến chưa đạt cần chốt theo từng loại bài, chưa hard-code con số.
+
+
 - Scenario cố định, giảm hoặc tắt gợi ý theo rubric.
 - Result/debrief chỉ xuất hiện sau khi nộp bài theo policy đã cấu hình.
 - Điểm là dữ liệu học tập trong mô phỏng, không là năng lực hay chứng nhận PCCC.
@@ -109,10 +120,10 @@ Mode Learn trong Unity vẫn là trải nghiệm tự do quan sát không gian v
 | Nhóm | Tính năng |
 | :--- | :--- |
 | Authoring | Building, IFC pipeline, geometry/connectivity QA, preview/editor 3D, revision và scenario. |
-| Readiness/release | `ConfirmForTraining`, payment dịch vụ, publish, manifest, package versioning và QR Building/list bài. |
+| Readiness/release | ConfirmForTraining kỹ thuật, Admin duyệt phiên bản/rubric, payment dịch vụ, publish, manifest, package versioning và QR Building/list bài. |
 | Runtime | React Native/Expo shell, native Android Unity bridge, Unity library, lửa/khói/gió/cháy lan, tương tác, hazard surrogate, risk-aware A*, online start và sync sau mất mạng. |
 | AI | RAG hướng dẫn organization, tạo scenario draft có nguồn, AI Trainee có quota ngày và debrief ngoài game. |
-| Billing/operations | Gói theo Building/tháng, PayOS, usage AI cuối kỳ, dashboard account/service/usage và audit. |
+| Billing/operations | Gói Building 6/12 tháng, hạn mức người/kỳ, nâng cấp gói, PayOS và mua quota AI trả trước. |
 | Dữ liệu | session, result, audit, analytics người duy nhất/lượt chơi/active session và usage billing. |
 
 Thứ tự triển khai có thể chia thành các đợt kỹ thuật; các tính năng trên là mục tiêu bản cuối. Session offline launch không được hỗ trợ, nhưng mất mạng giữa session phải được xử lý.
@@ -122,14 +133,18 @@ Thứ tự triển khai có thể chia thành các đợt kỹ thuật; các tí
 | Nhóm | Tính năng |
 | :--- | :--- |
 | AI organization | Hỏi đáp có nguồn, giải thích IFC/PCCC, draft scenario ở trạng thái `NeedsUserEdit`; người dùng tự edit và xác nhận. |
-| AI Trainee | Hỏi đáp kiến thức/bài học và giải thích kết quả cá nhân trên web/Mobile ngoài game; quota ngày riêng. |
-| Billing | Dịch vụ từng Building theo tháng; quota AI dùng chung organization; usage vượt mức thông báo và đối soát cuối kỳ. |
+| AI Trainee | Hỏi đáp kiến thức, mục tiêu/hướng dẫn của bài đã duyệt/phát hành có quyền chơi và kết quả cá nhân trên web/Mobile ngoài game; quota ngày riêng. |
+| Billing | Gói 6/12 tháng từng Building gồm phí game, hạn mức người và quota; quota AI cộng chung Organization, hết mua thêm trước. |
 | Runtime library | Hành vi di chuyển, camera, collider, cửa, vật phẩm, bình chữa cháy, khăn/nước theo rule đã kiểm tra, lửa/khói/gió/cháy lan và chấm điểm. Tác dụng khăn/nước/che mũi/khu vệ sinh không mặc định là đúng; phải có nội dung được duyệt. |
 | Vận hành | feedback/support, expanded analytics, filter/cohort/export và debrief aggregate. |
 
 Chủ tòa chọn/cấu hình hành vi đã có; không viết script Unity cho từng Building. Hiệu ứng hiển thị và trạng thái mô phỏng dùng cùng scenario state. Gió/khói là mô hình game, không phải mô phỏng CFD. Basic NPC chỉ là tác nhân mô phỏng; không đại diện cho hành vi con người thật. Expanded analytics chỉ dùng để xem hoạt động học tập/mô phỏng.
 
 PayOS request chỉ được tạo `Pending` qua function-only executor. Trusted webhook adapter xác thực `req.body` bằng SDK `webhooks.verify` hoặc canonicalize `data` theo thứ tự alphabet trước khi gọi database; database chỉ ghi attestation và đối soát, còn `returnUrl` không thể ghi `Paid`. Giá, quota, usage và quyền publish do backend quyết định; retry/webhook trùng không tạo usage hoặc quyền trùng.
+
+Gói từng Building có thời hạn 6 hoặc 12 tháng, gộp phí game, hạn mức người và quota AI. Hạn mức đếm Trainee khác nhau theo mã tài khoản đã start game tại Building trong kỳ; đăng nhập, xem bài, preparation và Organization playtest không tính suất. Chơi lại/nhiều kịch bản cùng tòa trong kỳ chỉ một suất; tòa khác tính riêng. Hết suất chặn người mới, người đã tính suất vẫn chơi lại trong quyền/dịch vụ còn hợp lệ; Organization nâng cấp gói nhiều người hơn. Kỳ gia hạn mới tính hạn mức theo kỳ mới. Giá, các mức người và cách tính nâng cấp giữa kỳ chưa chốt.
+
+Quota AI đi kèm các Building cộng chung cho Organization; hết quota phải mua thêm và thanh toán trước khi tiếp tục dùng AI tính phí. Không tự cho dùng vượt quota rồi đối soát cuối kỳ. Trainee giữ quota ngày miễn phí riêng, không trừ quỹ Organization. Đơn vị/lượng quota, hiệu lực và xử lý quota còn dư chưa chốt. Reserve/settle và retry phải chống trừ/cấp quota trùng; timeout reconcile bằng request ID trước khi hoàn hoặc gọi lại.
 
 ## 8. Analytics và debrief
 
@@ -146,7 +161,7 @@ Mô hình hazard dùng surrogate nhẹ, deterministic theo scenario và có gi�
 ### 9.1. Tính bất biến và retry
 
 - Package/artifact đã publish hoặc đã được phiên pin không được thay tại chỗ; thay nội dung tạo release/package mới.
-- Đóng kỳ AI tạo snapshot item bất biến; điều chỉnh late/uncertain usage dùng adjustment riêng và không tính lại theo policy mới.
+- Payment mua quota AI và nâng cấp hạn mức xử lý idempotent; snapshot giá/điều khoản/quota đã mua bất biến. Không tự dùng overage trả sau; lifecycle period/adjustment trong SQL cũ cần đồng bộ riêng.
 - Worker/AI retry dùng idempotency và provenance; retry stale hoặc khác input không được tạo charge, artifact, publication hay analytics trùng.
 
 ### 9.2. Event, cache và phục hồi
