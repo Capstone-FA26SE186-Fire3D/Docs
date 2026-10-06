@@ -34,6 +34,14 @@
 - Prepaid AI: `quotation_ai_quota_items`, v7 provenance on `ai_quota_grants`, `ai_usage_reservations` and allocation tables.
 - Learner-safe index: `scenario_knowledge_documents`.
 
+## Organization phone uniqueness
+
+`organizations.phone` (not `phone_number`) has a unique expression index `organizations_phone_normalized_key` on `regexp_replace(phone, '[^0-9+]', '', 'g')`, excluding only NULL. Valid input is trimmed, allows separators space/hyphen/parentheses, and retains an optional leading plus and 6–15 ASCII digits. No country-code inference: `0…` and `+84…` remain different. Inactive and soft-deleted organizations reserve their phone; legacy/admin NULL phones remain valid. Personal `users.phone_number` is independent.
+
+Email and Google organization registration return 409 `ORGANIZATION_PHONE_EXISTS` with `errors.organizationPhoneNumber`; organization PATCH uses `errors.phoneNumber`. Failed mutations do not consume proof, create owner/organization/receipt/session/audit, or increment profile revision. Corrected requests can reuse unexpired proofs. Keeping one's own number is valid; ETag semantics are unchanged.
+
+For an existing database, additive BE migration `20261006110000_AddOrganizationPhoneUniqueness` first checks all non-NULL legacy phones with a masked read-only preflight. Invalid or duplicate canonical data blocks deployment; no automatic merge/delete/reformat or ETag change is allowed. The migration locks writes, rechecks and creates the index in one transaction. Deploy constraint-aware error mapping before the index; do not grant the API extra organization visibility. The design schema and disposable tests do not prove Supabase or a deployed binary is upgraded. [BE rollout/manual tests](../BE/docs/organization-phone-manual-test.md).
+
 ## Verification boundary
 
 The schema has been syntax-loaded against a disposable PostgreSQL instance using a local stand-in type for `pgvector`; production still needs an environment with the actual extension and integration tests for payment webhook, session start, RAG retrieval and concurrent seat/quota reservations. The detailed design and unresolved policy values remain in [requirements](fire_evacuation_requirements.md) and [business decision analysis](phan_tich_khoang_cach_va_quyet_dinh_nghiep_vu.md).

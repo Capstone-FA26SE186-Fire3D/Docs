@@ -91,6 +91,8 @@ sequenceDiagram
     BE-->>Client: accessToken + refreshToken + user
 ```
 
+**Bổ sung contract phone tổ chức:** register organization và Google organization completion phải kiểm unique canonical giữa mọi tổ chức, gồm inactive/soft-deleted. `(070) 636-4866` trùng `0706364866`; `0…` không tự đồng nhất `+84…`. Hai route tạo trả409 `ORGANIZATION_PHONE_EXISTS`/`errors.organizationPhoneNumber`; không tạo owner/org, consume proof, receipt, session hoặc audit khi conflict. Sửa phone rồi dùng proof còn hạn để retry. PATCH organization trả cùng code ở `errors.phoneNumber`, giữ nguyên profile/revision/audit; giữ số của chính tổ chức hợp lệ. Legacy/admin NULL và phone cá nhân riêng vẫn được giữ. [Contract/index và bảo toàn dữ liệu](schema_v7_contract.md#organization-phone-uniqueness). Đây là contract bổ sung, không suy index Supabase hoặc binary đích đã triển khai từ baseline source ngày 03/10 ở trên.
+
 ### 2.2. Login, refresh và logout
 
 1. `POST /api/auth/login` nhận email/password; kiểm hash, account/organization và pending legacy. Sai credential trả 401; account/organization bị khóa trả 403. Thành công tạo family, lưu refresh hash và audit atomic; response gồm accessToken/refreshToken/user, không có expiresAt. TTL theo cấu hình Jwt.

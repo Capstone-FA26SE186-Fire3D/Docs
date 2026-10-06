@@ -211,6 +211,13 @@ CREATE TABLE organizations (
     CONSTRAINT check_organization_profile_revision CHECK (profile_revision_no > 0)
 );
 
+-- Canonical phone is reserved across every organization, including inactive/deleted.
+-- NULL legacy/admin phones remain valid. No 0.../+84... country-code equivalence.
+-- Existing deployments must use the guarded additive BE migration, not load this design schema.
+CREATE UNIQUE INDEX organizations_phone_normalized_key
+    ON organizations (regexp_replace(phone, '[^0-9+]', '', 'g'))
+    WHERE phone IS NOT NULL;
+
 CREATE TABLE users (
     -- Định danh và liên kết tổ chức
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Khóa chính định danh người dùng
