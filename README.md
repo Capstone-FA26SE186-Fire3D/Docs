@@ -43,7 +43,7 @@ FET3D hỗ trợ một Organization quản lý nhiều Building. Mỗi Building 
 | AI, RAG và IFC processing | Python + FastAPI; IfcOpenShell cho IFC khi phù hợp | Đã chốt |
 | Database | Supabase Database, dùng PostgreSQL | Đã chốt |
 | Vector database | `pgvector` trong PostgreSQL/Supabase | Đã chốt; thay cho hướng ChromaDB trong prototype cũ |
-| Cache/event transport | Redis cache-aside và Redis Streams | Kiến trúc đích, chưa triển khai; client không kết nối trực tiếp, PostgreSQL vẫn là nguồn sự thật |
+| Cache/event transport | Redis cache-aside và Redis Streams | Streams cho IFC/package-build có profile BE tùy chọn; cache chưa triển khai; client không kết nối trực tiếp, PostgreSQL vẫn là nguồn sự thật |
 | Authentication và push | BE email/password; Firebase Authentication cho Google Sign-In; Firebase Cloud Messaging (FCM) | Đã chốt; Mailgun dùng cho OTP đăng ký và reset password |
 | LLM | OpenAI API hoặc Google Gemini API (khóa/cấu hình qua Google AI Studio) | Chưa chọn nhà cung cấp cuối; chỉ triển khai một adapter production sau đánh giá |
 | Object storage | Amazon S3 (AWS S3) | Đã chốt |
@@ -109,10 +109,13 @@ Bảng nguồn chính về quyết định còn mở, tác động và mốc ph�
 - Checkpoint sau mốc đáng kể và trước bàn giao; ghi phần đã xong/còn dở, branch/commit, kiểm tra thực tế và bước tiếp theo. Không hứa ghi kịp trước khi hết quota hoặc phiên ngắt đột ngột; không lưu secrets/transcript.
 - Giữ nguyên thư mục `Mẫu report/` đang untracked, không stage, xóa hoặc tự chỉnh file mẫu. Kiểm tra danh sách stage cụ thể, không dùng `git add -A` mù quáng.
 - Task chỉ sửa tài liệu: kiểm tra liên kết, tính nhất quán và `git diff --check`, không chạy toàn bộ build/test ứng dụng. Không có test chạy không đồng nghĩa đã kiểm thử nghiệp vụ.
-- Stack đã chốt cho nhóm nằm ở bảng Tổng quan công nghệ: web Next.js, Mobile React Native/Expo với native Android bridge gọi Unity, backend C#/.NET, AI/IFC Python/FastAPI, AI/RAG trên Azure, Supabase PostgreSQL + `pgvector`, Redis cache/Streams ở kiến trúc đích, Firebase Auth/FCM và AWS S3. Không triển khai Flutter. Redis chưa triển khai; LLM và compute cho BE/worker vẫn phải qua bước chọn/benchmark trước khi gọi là production stack.
+- Stack đã chốt cho nhóm nằm ở bảng Tổng quan công nghệ: web Next.js, Mobile React Native/Expo với native Android bridge gọi Unity, backend C#/.NET, AI/IFC Python/FastAPI, AI/RAG trên Azure, Supabase PostgreSQL + `pgvector`, Redis cache/Streams ở kiến trúc đích, Firebase Auth/FCM và AWS S3. Không triển khai Flutter. Redis Streams có source/test cho IFC/package-build; cache và nghiệm thu production còn chờ. LLM và compute cho BE/worker vẫn phải qua bước chọn/benchmark trước khi gọi là production stack.
 
 ### Giới hạn sản phẩm
 
 FET3D phục vụ học tập, tập huấn và hoạt động đánh giá của đồ án. Kết quả mô phỏng, analytics và `ConfirmForTraining` không được dùng để kết luận công trình an toàn, đáp ứng quy chuẩn hay thay thế hướng dẫn khẩn cấp tại hiện trường.
 
 - [Hồ sơ triển khai API BE được chọn](selected-be-api-implementation.md): lựa chọn transport và giới hạn source/test/deployment.
+
+
+**Redis processing source:** BE có transport RedisStreams tùy chọn cho IFC/package-build; xem [hồ sơ triển khai](selected-be-api-implementation.md#redis-processing-implementation--07102026). Cache Redis vẫn là đích kiến trúc chưa triển khai; không coi transport/test Docker là production đã nghiệm thu.

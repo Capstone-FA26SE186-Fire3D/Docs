@@ -82,7 +82,7 @@ Backend là nguồn sự thật cho ownership scope, Building, revision, scenari
 | API/jobs | C# + ASP.NET Core trên .NET | Xác minh Firebase ID token, AuthZ, domain command, QR resolve, session, audit, billing webhook và job orchestration. |
 | Database | Supabase Database (PostgreSQL) | Dữ liệu tenant-scoped, revision, release, session/result, analytics, quotation/transaction/invoice metadata. Supabase Auth không được dùng. |
 | Vector database | `pgvector` trên cùng PostgreSQL/Supabase | Embedding, metadata-filtered retrieval và vector index cho RAG; thay thế ChromaDB của prototype cũ. |
-| Cache/event transport | Redis cache-aside + Redis Streams | Cache dữ liệu đọc và vận chuyển event/job sau transactional outbox; PostgreSQL vẫn là nguồn sự thật. Redis là kiến trúc đích, chưa triển khai; provider, version, retention và TTL còn mở. |
+| Cache/event transport | Redis cache-aside + Redis Streams | PostgreSQL vẫn là nguồn sự thật. BE đã có Redis Streams tùy chọn cho IFC/package-build sau transactional outbox, với receipt/recovery và retention 7 ngày có bảo vệ pending/unread; Http giữ mặc định. Cache chưa triển khai. Azure/worker thật và vận hành production chưa nghiệm thu. |
 | Authentication | BE email/password + Firebase Authentication cho Google Sign-In | BE hash password, refresh/reset token và cấp phiên Fire3D. Firebase chỉ xác minh Google ID token; Firebase không quyết định authorization nghiệp vụ. |
 | Push notification | Firebase Cloud Messaging (FCM) | Gửi notification đến installation đã đăng ký; token FCM phải được rotate/revoke và không dùng làm credential đăng nhập. |
 | Object storage | Amazon S3 (AWS S3) | Raw IFC, manifest, content package và avatar private qua object key server-side và signed URL TTL ngắn. |
@@ -626,4 +626,9 @@ Acceptance test triển khai cho contract Redis/outbox gồm: event đang leased
 
 ## Hồ sơ triển khai API BE được chọn
 
-[Selected BE API implementation](selected-be-api-implementation.md) ghi lựa chọn PostgreSQL outbox → HTTP worker của đợt triển khai, exact readiness/approval, Built/package/Training, account-bound Building access, playtest grant và support receipt/ETag/paging. Redis Streams vẫn là transport trong kiến trúc đích; nguồn/test/mock/schema rollout/binary/provider thật phải được phân biệt. Publish và learner start/sync/result chưa được đóng từ đợt này.
+[Selected BE API implementation](selected-be-api-implementation.md) ghi lựa chọn PostgreSQL outbox → HTTP worker của đợt triển khai, exact readiness/approval, Built/package/Training, account-bound Building access, playtest grant và support receipt/ETag/paging. RedisStreams đã có transport BE tùy chọn cho IFC/package-build, Http giữ mặc định; nguồn/test/mock/schema rollout/binary/provider thật phải được phân biệt. Publish và learner start/sync/result chưa được đóng từ đợt này.
+
+
+### Redis processing — lựa chọn triển khai BE 07/10/2026
+
+Kiến trúc đích Redis Streams đã có profile BE tùy chọn, bên cạnh Http mặc định. PostgreSQL vẫn giữ job/outbox/canonical event và receipt; Redis chỉ vận chuyển. Published → durable handoff/ACK → accepted processing output là ba mốc riêng. Recovery, retry và retention bảo vệ pending/unread được mô tả tại [hồ sơ triển khai](selected-be-api-implementation.md#redis-processing-implementation--07102026). Cache/rate-limit Redis chưa triển khai; migration Supabase/Azure/toolchain thật cần nghiệm thu riêng.

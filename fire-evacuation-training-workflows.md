@@ -359,4 +359,9 @@ Các ca trong bảng là tiêu chí cho đợt triển khai. Hiện mới có ki
 
 ## Hồ sơ triển khai API BE được chọn
 
-[Selected BE API implementation](selected-be-api-implementation.md) ghi lựa chọn PostgreSQL outbox → HTTP worker của đợt triển khai, exact readiness/approval, Built/package/Training, account-bound Building access, playtest grant và support receipt/ETag/paging. Redis Streams vẫn là transport trong kiến trúc đích; nguồn/test/mock/schema rollout/binary/provider thật phải được phân biệt. Publish và learner start/sync/result chưa được đóng từ đợt này.
+[Selected BE API implementation](selected-be-api-implementation.md) ghi lựa chọn PostgreSQL outbox → HTTP worker của đợt triển khai, exact readiness/approval, Built/package/Training, account-bound Building access, playtest grant và support receipt/ETag/paging. RedisStreams đã có transport BE tùy chọn cho IFC/package-build, Http giữ mặc định; nguồn/test/mock/schema rollout/binary/provider thật phải được phân biệt. Publish và learner start/sync/result chưa được đóng từ đợt này.
+
+
+### IFC/package-build delivery — Redis profile BE 07/10/2026
+
+Process/package-build202 xác nhận job/outbox đã commit. Deployment chọn Http hoặc RedisStreams. Với Redis: publisher claim outbox lease → XADD → mark Published → BE consumer đối chiếu PostgreSQL → worker claim/attempt/receipt commit → ACK. Worker output accept là bước sau, vẫn kiểm provenance/current attempt. Mất Redis/ACK replay cùng event; lease xử lý hết hạn tạo event recovery mới. Không dùng ACK để cấp readiness/approval/release hoặc gọi pipeline Unity đã hoàn tất. Chi tiết và giới hạn nằm tại [hồ sơ triển khai](selected-be-api-implementation.md#redis-processing-implementation--07102026).
