@@ -355,3 +355,8 @@ Các tiêu chí này là yêu cầu kiểm thử triển khai, chưa phải kế
 | Scenario/release | Review readiness đúng cặp revision–scenario version; release publish kiểm tra readiness | Reject scenario B không làm revision/Scenario A hỏng; revoke release cũ vẫn được phép | Requirements FR-COMPAT/FR-PROCESS và schema |
 
 Các ca trong bảng là tiêu chí cho đợt triển khai. Hiện mới có kiểm tra tĩnh tài liệu/schema; chưa gọi đây là pass concurrency, authorization hoặc recovery.
+
+
+## Hồ sơ triển khai API BE được chọn
+
+[Selected BE API implementation](selected-be-api-implementation.md) ghi lựa chọn PostgreSQL outbox → HTTP worker của đợt triển khai, exact readiness/approval, Built/package/Training, account-bound Building access, playtest grant và support receipt/ETag/paging. Redis Streams vẫn là transport trong kiến trúc đích; nguồn/test/mock/schema rollout/binary/provider thật phải được phân biệt. Publish và learner start/sync/result chưa được đóng từ đợt này.

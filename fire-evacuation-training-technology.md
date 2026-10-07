@@ -622,3 +622,8 @@ Acceptance test triển khai cho contract Redis/outbox gồm: event đang leased
 - Reset/change password mục tiêu thu hồi refresh-token family trong transaction user hiện có. BE main `0683d90` đã có khóa user, consume reset token, đổi hash, revoke family và audit cùng transaction trong LocalPasswordReset; cần nghiệm thu DB/provider riêng. Câu trạng thái handler chưa hoàn tất ở bản cũ đã lỗi thời.
 - Local email/password và Google UID đã liên kết là đường đăng nhập hợp lệ. Google mới trả OnboardingRequired; flow đích chỉ chọn Trainee/OrganizationUser nhưng chưa có API hoàn tất. Username Trainee nhập khi đăng ký/onboarding đích, không hỏi lại ở game start.
 - Các kiểm tra lần này là kiểm tra tĩnh tài liệu/schema/quyền; chưa chạy PostgreSQL, concurrency, auth revoke, payment provider, S3, email, RAG hoặc Redis recovery.
+
+
+## Hồ sơ triển khai API BE được chọn
+
+[Selected BE API implementation](selected-be-api-implementation.md) ghi lựa chọn PostgreSQL outbox → HTTP worker của đợt triển khai, exact readiness/approval, Built/package/Training, account-bound Building access, playtest grant và support receipt/ETag/paging. Redis Streams vẫn là transport trong kiến trúc đích; nguồn/test/mock/schema rollout/binary/provider thật phải được phân biệt. Publish và learner start/sync/result chưa được đóng từ đợt này.

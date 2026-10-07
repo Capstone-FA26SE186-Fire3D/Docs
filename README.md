@@ -114,3 +114,5 @@ Bảng nguồn chính về quyết định còn mở, tác động và mốc ph�
 ### Giới hạn sản phẩm
 
 FET3D phục vụ học tập, tập huấn và hoạt động đánh giá của đồ án. Kết quả mô phỏng, analytics và `ConfirmForTraining` không được dùng để kết luận công trình an toàn, đáp ứng quy chuẩn hay thay thế hướng dẫn khẩn cấp tại hiện trường.
+
+- [Hồ sơ triển khai API BE được chọn](selected-be-api-implementation.md): lựa chọn transport và giới hạn source/test/deployment.
