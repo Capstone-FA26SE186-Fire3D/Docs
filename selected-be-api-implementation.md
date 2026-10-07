@@ -8,7 +8,7 @@ Requirements/workflow/schema v7 tiếp tục là đích nghiệp vụ; tài li�
 
 ## Chuỗi tác giả và readiness
 
-Bound upload intent pin actor/tenant/revision/key/size/hash và source immutable đã xác minh. Scenario version/rubric/learner fields là snapshot bất biến; structural validation không thay geometry/package QA. ConfirmForTraining attests đúng revision–scenarioVersion–validationRun–annotation/artifact của current accepted attempt; technical rejection không thay approval nội dung.
+Bound upload intent pin actor/tenant/revision/key/size/hash và source immutable đã xác minh. Receipt replay đối chiếu Building ở SQL, giữ nguyên canonical hash cũ. Object anchors chỉ dùng current Geometry attempt Succeeded có matching validation Passed không Error/Critical; worker Succeeded không đồng nghĩa QA Passed. Scenario version/rubric/learner fields là snapshot bất biến; structural validation không thay geometry/package QA. ConfirmForTraining attests đúng revision–scenarioVersion–validationRun–annotation/artifact của current accepted attempt; technical rejection không thay approval nội dung.
 
 Submit pin server content/rubric hashes; chỉ active PlatformAdmin approve/reject đúng hash, rejection cần reason. Legacy version không tự có approval. Built release chỉ dùng accepted ReleasePackage/manifest, exact confirmation và Approved content/rubric; server derive package metadata, legacy input chỉ được khớp server. Built/package/Training/receipt/audit atomic; Built không chứng minh Unity thật. Publish tiếp tục bị chặn trong đợt này.
 
@@ -24,6 +24,6 @@ User chỉ đọc tài nguyên do mình tạo; admin filter platform. Create/mes
 
 ## Nghiệm thu và rollout
 
-BE có source/HTTP/actual-migration-history PostgreSQL tests với runtime roles hạn chế và provider/worker fake. Hai migration mới release/access và support phải triển khai trước binary; chưa áp Supabase ở Task7–9. Các migration Task1–6 đã có rollout schema riêng, không dùng đó để chứng minh binary hoặc provider thật. Không reset/backfill fabricated readiness/approval/provenance.
+BE có source/HTTP/actual-migration-history PostgreSQL tests với runtime roles hạn chế và provider/worker fake. Migration release/access, support và repair ACL đã áp Supabase ngày07/10/2026; áp tiếp forward repair20261007130000/20261007140000 cho receipt scope và geometry QA. Read-only postcheck xác nhận history/owner/ACL, giữ8user/6organization/2Building. Schema phải có trước binary khớp; không dùng rollout schema để chứng minh binary hoặc provider thật. Regression cuối API đã chọn36pass, IFC phù hợp105pass, build0warning/error; ba nhóm Docker-only legacy chưa chạy trong lượt này. Không reset/backfill fabricated readiness/approval/provenance.
 
 Đích ngoài phạm vi: publish hoàn chỉnh, learner start/heartbeat/offline sync/result, Library/Learn/AI/billing v7, training analytics, real IFC/Blender/Unity pipeline. PayOS GET200 DTO metadata thay đổi trong source; không đổi thanh toán. Auth/OTP/Google/Avatar giữ luồng hiện có.
