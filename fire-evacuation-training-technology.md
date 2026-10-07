@@ -626,6 +626,8 @@ Acceptance test triển khai cho contract Redis/outbox gồm: event đang leased
 
 ## Hồ sơ triển khai API BE được chọn
 
+Phone uniqueness bổ sung07/10/2026: runtime BE có hai expression index riêng `users_phone_normalized_key` và `organizations_phone_normalized_key`, chỉ loạiNULL, giữ số inactive/soft-deleted. Không uniqueness chéo hoặc suy mã quốc gia. Store chỉ map SQLSTATE23505 cùng đúng index thành lỗi field409; mutation/proof/receipt/audit rollback atomic. Migration kiểm invalid/duplicate dưới khóa trước DDL, không tự sửa dữ liệu legacy. [Policy, bằng chứng Supabase và giới hạn binary deployment](selected-be-api-implementation.md#phone-uniqueness--quyết-định-bổ-sung-07102026). SQL design v7 không tự thay migration runtime và không được áp đè DB.
+
 [Selected BE API implementation](selected-be-api-implementation.md) ghi lựa chọn PostgreSQL outbox → HTTP worker của đợt triển khai, exact readiness/approval, Built/package/Training, account-bound Building access, playtest grant và support receipt/ETag/paging. RedisStreams đã có transport BE tùy chọn cho IFC/package-build, Http giữ mặc định; nguồn/test/mock/schema rollout/binary/provider thật phải được phân biệt. Publish và learner start/sync/result chưa được đóng từ đợt này.
 
 

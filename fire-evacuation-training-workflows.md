@@ -104,6 +104,8 @@ sequenceDiagram
 
 `GET/PATCH /api/auth/me` sửa fullName/username/dob/gender/phoneNumber; `GET/PATCH /api/organizations/me` sửa hồ sơ organization. GET trả ETag, PATCH cần If-Match; không đổi role/tenant/email/status. Avatar dùng `/api/me/avatar` upload-intent/upload/complete/GET/delete với private S3; complete/upload/delete cần If-Match. Device dùng Bearer và X-Installation-Key, không dùng FCM token để login.
 
+Quyết định số điện thoại07/10/2026: số cá nhân unique giữa user, số tổ chức unique riêng giữa organization, gồm inactive/soft-deleted; không so chéo hai nhóm hoặc suy mã quốc gia. NhiềuNULL hợp lệ; số tổ chức vẫn bắt buộc lúc đăng ký. Cùng canonical sau trim/bỏ khoảng trắng ASCII/gạch/ngoặc trả409 với lỗi theo field; giữ số của chính profile được phép. Conflict rollback proof/account/session/audit, không consume proof thất bại; sửa số và retry proof còn hạn. [Contract và bằng chứng source/DB/deployment riêng](selected-be-api-implementation.md#phone-uniqueness--quyết-định-bổ-sung-07102026).
+
 ### 2.4. Forgot/reset và change password
 
 `POST /api/auth/forgot-password` nhận email, trả 202 chung; chỉ account hoạt động có password local được enqueue reset. Worker Mailgun gửi link token 64 ký tự hex, hạn 30 phút, dùng một lần. `POST /api/auth/reset-password` nhận token/newPassword, không cần Bearer; `POST /api/auth/change-password` cần Bearer và currentPassword/newPassword, không gửi email. Password mới 6–128 ký tự, không chỉ whitespace, không tự trim. Google-only không dùng reset để thêm password local.
