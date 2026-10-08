@@ -1,3 +1,5 @@
+> Commercial/publication decisions and current delivery boundaries: [billing-publish-v7-delivery.md](billing-publish-v7-delivery.md). This supplements the target v7 design; source/Docker evidence is not deployment acceptance.
+
 # Tài Liệu Yêu Cầu Dự Án
 
 **Dự án:** Fire Evacuation Training 3D (FET3D)

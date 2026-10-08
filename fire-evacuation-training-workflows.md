@@ -1,3 +1,5 @@
+> Commercial/publication decisions and current delivery boundaries: [billing-publish-v7-delivery.md](billing-publish-v7-delivery.md). This supplements the target v7 design; source/Docker evidence is not deployment acceptance.
+
 # Fire Evacuation Training 3D — Workflows
 
 **Đồng bộ thiết kế ngày 03/10/2026:** yêu cầu nghiệp vụ, SQL design v7, ERD Markdown và Word ý tưởng đã được đồng bộ. Tên bảng/function là contract thiết kế, không chứng minh migration/API/runtime đã triển khai. [Requirements](fire_evacuation_requirements.md) là nguồn yêu cầu sản phẩm; [ghi chú quyết định](phan_tich_khoang_cach_va_quyet_dinh_nghiep_vu.md) ghi lại lựa chọn và chi tiết còn mở.
