@@ -624,3 +624,6 @@ Acceptance test triển khai cho contract Redis/outbox gồm: event đang leased
 - Reset/change password mục tiêu thu hồi refresh-token family trong transaction user hiện có. BE main `0683d90` đã có khóa user, consume reset token, đổi hash, revoke family và audit cùng transaction trong LocalPasswordReset; cần nghiệm thu DB/provider riêng. Câu trạng thái handler chưa hoàn tất ở bản cũ đã lỗi thời.
 - Local email/password và Google UID đã liên kết là đường đăng nhập hợp lệ. Google mới trả OnboardingRequired; flow đích chỉ chọn Trainee/OrganizationUser nhưng chưa có API hoàn tất. Username Trainee nhập khi đăng ký/onboarding đích, không hỏi lại ở game start.
 - Các kiểm tra lần này là kiểm tra tĩnh tài liệu/schema/quyền; chưa chạy PostgreSQL, concurrency, auth revoke, payment provider, S3, email, RAG hoặc Redis recovery.
+# Selected BE worker/API implementation note
+
+The restricted cleanup, live mutation-family, preview HEAD and safe audit contracts are detailed in [worker/API corrections](worker-api-contract-corrections.md). They require schema-first rollout of forward gates followed by matching binary. PostgreSQL/Redis/fake-provider tests do not certify shared deployment or real Unity/S3. Training analytics remains dependent on learner lifecycle.

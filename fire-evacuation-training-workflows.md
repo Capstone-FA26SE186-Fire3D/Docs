@@ -357,3 +357,6 @@ Các tiêu chí này là yêu cầu kiểm thử triển khai, chưa phải kế
 | Scenario/release | Review readiness đúng cặp revision–scenario version; release publish kiểm tra readiness | Reject scenario B không làm revision/Scenario A hỏng; revoke release cũ vẫn được phép | Requirements FR-COMPAT/FR-PROCESS và schema |
 
 Các ca trong bảng là tiêu chí cho đợt triển khai. Hiện mới có kiểm tra tĩnh tài liệu/schema; chưa gọi đây là pass concurrency, authorization hoặc recovery.
+# Selected BE workflow correction
+
+Readiness/content decisions recheck the live session after locks and before receipt replay; approval/readiness audit exposes safe exact-pair changes. Preview readiness checks object existence/size but does not authorize publishing. Pending account and Avatar cleanup preserve referenced history/objects. See [worker/API corrections](worker-api-contract-corrections.md); learner start/sync/result and training analytics remain separate backlog.
