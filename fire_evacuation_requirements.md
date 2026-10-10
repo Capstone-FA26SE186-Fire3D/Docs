@@ -234,4 +234,21 @@ Các tiêu chí trên là contract thiết kế và acceptance criteria cho đ�
 
 ## 9. Chi tiết nghiệp vụ còn mở
 
-Giá/hạn mức gói, lượng/đơn vị/hiệu lực quota AI, nâng cấp giữa kỳ, rubric số cụ thể và vòng đời mã private theo [bảng quyết định mở](fire_evacuation_project_overview.md). Không tự đặt số người, giá hay điểm đạt. SQL/sơ đồ/report cần một đợt đồng bộ riêng trước triển khai.
+Giá/hạn mức gói, lượng/đơn vị/hiệu lực quota AI, rubric số cụ thể và vòng đời mã private theo [bảng quyết định mở](fire_evacuation_project_overview.md). Phí nâng cấp giữa kỳ đã chốt là phí một lần do PlatformAdmin ghi trong quotation, không tự tính prorata. Không tự đặt số người, giá hay điểm đạt. SQL/sơ đồ/report cần một đợt đồng bộ riêng trước triển khai.
+
+## 10. Trạng thái source BE cho #52, #54–#58
+
+Trạng thái dưới đây là **source** trên nhánh BE `feature/issues-52-58-completion` (commit `ca4f25d`, 2026-10-11), đã push để review. Nhánh chưa merge `develop/main`, migration chưa áp Supabase, Azure/AI provider/PayOS thật chưa bật và các feature mới mặc định tắt. Không dùng bảng này để kết luận deployment hoặc nghiệm thu Mobile/Unity.
+
+| Yêu cầu | Source BE đã có | Bằng chứng | Còn phải nghiệm thu |
+|---|---|---|---|
+| Duyệt nội dung (#52) | Admin list/detail review, đọc review theo version, field review trong response version | Test HTTP/PostgreSQL của nhánh review, tích hợp lại | Deploy và FE Admin |
+| FR-SCENARIO editor (#54) | Contract `fet3d.editor/1`, floors API, validator strict, fixture dùng chung | Test round-trip, unknown field, transform điểm mẫu | FE editor, worker metadata, Unity |
+| Playtest (#55) | Status, handoff Mobile, grant generation, launched/heartbeat/events/complete/cancel | Test handoff khác user/family, redeem race, không trừ Trial lại | Mobile redeem thật, Unity runtime |
+| FR-BILLING (#56) | Upgrade phí một lần, top-up AI, đọc entitlement/quota/usage, enterprise, nhắc hạn | Test upgrade race, giữ kỳ/suất, webhook trùng/trễ | PayOS thật, FE billing |
+| FR-TRAINING (Task 4) | Prepare/start, seat, sync offline, result server, QR Building | Test tranh suất cuối, event trùng/lệch hash, AwaitingSync, continuation hết hạn | Unity telemetry thật, Mobile |
+| FR-LEARN/FR-LIBRARY (#57) | CMS Learn version bất biến, bookmark, Library theo version | Test Hidden/Deleted, media không hợp lệ, phân quyền | FE public/CMS, provider embed |
+| FR-AI (#58) | Organization AI qua adapter FastAPI, reserve/settle/release, đối soát, registry nguồn | Test quota cuối, timeout sau commit, citation sai tenant, usage vượt reservation — chỉ với FastAPI giả lập | Provider/model, retrieval, indexing, Azure; Trainee AI quota ngày chưa làm |
+| FR-ANALYTICS (#58) | Training/revenue/AI usage analytics theo định nghĩa metric | Test cohort rỗng, biên UTC, offline đến muộn, tenant scope | Dashboard FE, dữ liệu learner thật |
+
+Kiểm thử của nhánh: toàn bộ Auth 550/550 và Ifc 147/147 trên PostgreSQL disposable bằng migration thật. Đây là kiểm thử BE, không phải kiểm thử end-to-end hay production. Không đóng toàn bộ #55/#58 chỉ bằng kết quả mock.
