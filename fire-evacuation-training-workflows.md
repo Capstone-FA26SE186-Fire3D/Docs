@@ -355,3 +355,15 @@ Các tiêu chí này là yêu cầu kiểm thử triển khai, chưa phải kế
 | Scenario/release | Review readiness đúng cặp revision–scenario version; release publish kiểm tra readiness | Reject scenario B không làm revision/Scenario A hỏng; revoke release cũ vẫn được phép | Requirements FR-COMPAT/FR-PROCESS và schema |
 
 Các ca trong bảng là tiêu chí cho đợt triển khai. Hiện mới có kiểm tra tĩnh tài liệu/schema; chưa gọi đây là pass concurrency, authorization hoặc recovery.
+
+## 16. Chi tiết workflow đã chốt trong source BE #54–#58
+
+Các bước dưới đây là contract trên nhánh BE `feature/issues-52-58-completion` (chưa merge/deploy). API chi tiết nằm trong docs của repo BE (`docs/learner-sessions.md`, `docs/learn-library.md`, `docs/organization-ai.md`, `docs/learner-analytics.md`, `docs/api-route-inventory.md`).
+
+**Playtest và handoff Mobile.** Web prepare/start như cũ; start chuyển `Launching`, `/launched` chuyển `Running`. Web tạo mã handoff ngẫu nhiên 32 byte, TTL 5 phút, dùng một lần; QR chỉ chứa mã và deep link cấu hình sẵn. Mobile redeem bằng phiên khác của **cùng** OrganizationUser và tenant; playtest được ràng buộc với family Mobile. Cấp lại grant (TTL 5 phút) tăng generation và vô hiệu grant cũ. Chỉ start thành công trừ Trial; handoff, redeem, cấp lại grant không trừ thêm. Sau launch, recovery chỉ là sync, không mở lượt mới.
+
+**Learner session.** Prepare pin Training, release, version, rubric, package và runtime nhưng chưa chiếm suất. Start online kiểm tra lại quyền, approval, entitlement và runtime, rồi cấp suất (Trainee + Building + kỳ) cùng start, grant và audit trong một transaction. Event có client ID, sequence và hash; trùng hash thì replay, khác hash thì conflict. Complete pin `lastEventSequence`; thiếu event trả `202 AwaitingSync`. Server tính rubric từ telemetry đã nhận: Assessment ra `Passed`/`NotPassed`/`Incomplete`, Learn/Guided ra `NotAssessed`. Continuation 7 ngày chỉ sync đúng phiên đã start; hết hạn phải đăng nhập lại.
+
+**Organization AI.** Request kiểm tra tenant, nguồn được phép và `Idempotency-Key`, pin policy rồi reserve quota trên ledger hiện có, commit, sau đó worker gọi FastAPI ngoài transaction với request ID ổn định. Kết quả hợp lệ (citation thuộc nguồn đã pin và còn hiệu lực, usage trong mức reserve) thì settle; chưa gửi được thì retry rồi release; timeout hoặc kết quả không hợp lệ chuyển `NeedsReconcile` và giữ reservation. Admin chỉ lên lịch đối soát (lookup theo request ID), không sửa số đã tiêu thụ và không gọi lại thành request thứ hai. AI chỉ trả draft/answer, không sửa scenario hay publish.
+
+**Analytics.** Khoảng UTC `[from,to)`, mặc định 30 ngày, tối đa 90, đọc trong một snapshot. Plays là session learner đã start (không tính prepare/playtest); active là Running có heartbeat server trong 120 giây; completion theo cohort start, result offline đến muộn cập nhật cohort cũ; revenue là giao dịch `Applied` theo thời điểm nhận tiền; AI usage là phần đã settle, reserved và `NeedsReconcile` báo riêng. Rate không có mẫu trả null.

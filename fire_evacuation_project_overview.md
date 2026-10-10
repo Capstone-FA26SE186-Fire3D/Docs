@@ -114,7 +114,7 @@ Dashboard dùng các định nghĩa cố định: `Trainee unique` là số Trai
 | Giá gói 6/12 tháng, mức người, quota AI đi kèm/mua thêm và hạn mức Trial | UI billing, entitlement, quota trả trước | Payment/quota production |
 | Redis provider/version, region, cache TTL/eviction, Streams retention và outbox recovery window | Retry, replay, chi phí, tải database và khả năng phục hồi | Trước triển khai event/cache production |
 | OneShield/OnePortal plan/SKU, DNS ownership, TLS termination, WAF/rate limits, logging, SLA, region, cost và failover | Edge protection, ingress, observability và chi phí vận hành | Trước public production ingress |
-| Đơn vị/hiệu lực/rollover quota AI, hoàn tiền/hủy; phí và thời hạn nâng cấp giữa kỳ | Mua thêm, provisioning và dữ liệu lịch sử | Billing lifecycle |
+| Đơn vị/hiệu lực/rollover quota AI, hoàn tiền/hủy; thời điểm hiệu lực nâng cấp (phí nâng cấp đã chốt: một lần do PlatformAdmin ghi trong quotation, không prorata, giữ kỳ và suất đã dùng) | Mua thêm, provisioning và dữ liệu lịch sử | Billing lifecycle |
 | Catalog runtime ưu tiên; tiêu chí, trọng số, ngưỡng và lỗi khiến chưa đạt | Thư viện Organization, editor, scoring và review | Runtime authoring |
 | Bộ IFC, Android mục tiêu và benchmark | QA support matrix, package budget | IFC/Mobile release |
 | Unity project/build worker, LLM/embedding, Azure SKU/region và compute cho BE/worker | Toolchain, vector dimension, chi phí và vận hành | Production deployment |
