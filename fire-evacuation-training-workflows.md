@@ -63,7 +63,7 @@ PlatformAdmin có hai khu riêng: thư viện hỗ trợ Organization (template,
 
 Đối chiếu [BE authentication](../BE/docs/authentication.md) và [API guide](../BE/docs/api-docs.md), BE main `0683d90` ngày 03/10/2026. Đây là hành vi source hiện tại; nghiệm thu client và gửi Mailgun thật được kiểm tra riêng.
 
-1. Trainee nhập email/username/password/confirmPassword; OrganizationUser nhập email/password/confirmPassword và tên/địa chỉ/điện thoại organization. Client giữ form/password trong bộ nhớ rồi chuyển sang OTP. Username Trainee lowercase, unique, pattern `[a-z0-9._-]{3,30}`; local login dùng email/password. Organization register chưa nhận username cá nhân; bổ sung qua profile sau.
+1. Trainee nhập email/username/password/confirmPassword; OrganizationUser nhập email/password/confirmPassword, tên/địa chỉ/điện thoại organization và username tùy chọn. Client giữ form/password trong bộ nhớ rồi chuyển sang OTP. Username Trainee lowercase, unique, pattern `[a-z0-9._-]{3,30}`; local login dùng email/password. Organization register nhận username tùy chọn cùng luật (bỏ trống là không có); có thể bổ sung qua profile sau.
 2. `POST /api/auth/registration/request-otp` nhận email. Email trim/lowercase đã có account, kể cả inactive/deleted, trả `409 EMAIL_EXISTS` và `errors.email`, không enqueue. Email mới trả 202, lưu challenge/job, chưa tạo user/organization. Mailgun worker gửi mã; 202 chưa chứng minh delivered.
 3. OTP sáu số giữ số 0 đầu, hạn 10 phút; verify sai đủ 5 lần vô hiệu challenge. `POST /api/auth/resend-verification` trong cooldown 60 giây trả 202 nhưng không tạo job mới; sau cooldown phát mã mới và vô hiệu mã/proof cũ. Hai route gửi mã chung quota 5/email/giờ, 20/IP/giờ; vượt trả `429 OTP_RATE_LIMITED` và `Retry-After`.
 4. Nút “Xác thực và đăng ký” gọi `POST /api/auth/registration/verify-otp` với email/otp để nhận registrationToken/expiresAt, rồi gửi toàn bộ form + registrationToken tới `/api/auth/register/trainee` hoặc `/api/auth/register/organization`. Proof gắn email, hạn 15 phút, dùng một lần; verify chưa tạo account hay kiểm password. `/api/auth/register` là alias Trainee.
@@ -106,7 +106,7 @@ sequenceDiagram
 
 ### 2.4. Forgot/reset và change password
 
-`POST /api/auth/forgot-password` nhận email, trả 202 chung; chỉ account hoạt động có password local được enqueue reset. Worker Mailgun gửi link token 64 ký tự hex, hạn 30 phút, dùng một lần. `POST /api/auth/reset-password` nhận token/newPassword, không cần Bearer; `POST /api/auth/change-password` cần Bearer và currentPassword/newPassword, không gửi email. Password mới 6–128 ký tự, không chỉ whitespace, không tự trim. Google-only không dùng reset để thêm password local.
+`POST /api/auth/forgot-password` nhận email, trả 202 chung; chỉ account hoạt động có password local được enqueue reset. Worker Mailgun gửi link token 64 ký tự hex, hạn 30 phút, dùng một lần. `POST /api/auth/reset-password` nhận token/newPassword, không cần Bearer; `POST /api/auth/change-password` cần Bearer và currentPassword/newPassword, không gửi email. Password mới 6–128 ký tự, không chỉ whitespace, không tự trim. Google-only không dùng reset để thêm password local; dùng `POST /api/me/password` với Google idToken đăng nhập trong 5 phút + newPassword, thành công 204 và đăng nhập lại.
 
 BE source đã khóa user, đổi hash, vô hiệu reset token, revoke family và audit trong transaction; lỗi rollback toàn bộ. Thành công trả 204, không cấp JWT mới; client login lại. Nghiệm thu DB/provider được xác nhận riêng.
 
