@@ -123,7 +123,7 @@ Không thêm certificate, curriculum/module/sprint hoặc role Visitor. V7 thêm
 | **Mục đích** | Lưu trạng thái ngắn hạn sau khi Firebase đã xác minh Google nhưng trước khi tạo/hoàn tất tài khoản FET3D |
 | **Cột quan trọng** | `firebase_uid`, `email`, `onboarding_token_hash`, `requested_role`, `organization_draft`, `expires_at`, `completed_at`, `completed_user_id`, `completed_input_hash` |
 | **Ràng buộc** | Chỉ nhận `Trainee` hoặc `OrganizationUser`; token chỉ lưu hash, có hạn và không tự cấp role/tenant; PlatformAdmin không đi qua onboarding này. Khi hoàn tất, lưu user đã tạo và hash input để retry trả kết quả cũ thay vì tạo user/tổ chức mới |
-| **Trạng thái** | Thiết kế đích; API Google onboarding và migration dữ liệu còn triển khai sau |
+| **Trạng thái** | API Google onboarding (`/api/auth/google/onboarding/complete`) và link (`/api/me/link-google`) đã có trong BE; schema v7 đầy đủ vẫn là thiết kế đích |
 
 ---
 
@@ -596,7 +596,7 @@ Gói từng Building 6/12 tháng gồm phí game, hạn mức người và quota
 | **Audit có provenance** | `audit_logs` giữ `user_id`, `organization_id`, `actor_type` và `correlation_id`; append-only, không ghi secret |
 
 ### 3. Workflow chưa có implementation
-- Google onboarding completion/link còn thiếu; BE main `0683d90` đã có profile/avatar và reset/change thu hồi family trong transaction, cần đối chiếu schema và nghiệm thu DB/S3/Mailgun
+- Google onboarding completion/link đã có API; BE main `0683d90` đã có profile/avatar và reset/change thu hồi family trong transaction, cần đối chiếu schema và nghiệm thu DB/S3/Mailgun
 - IFC geometry validator (worker ngoài DB)
 - Object storage integration (DB chỉ lưu key, không lưu bytes)
 - React Native/Expo native Android bridge–Unity launch protocol

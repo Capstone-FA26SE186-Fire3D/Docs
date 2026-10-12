@@ -1,6 +1,6 @@
 # Fire3D — đặc tả UX web và hướng hình ảnh
 
-**Đồng bộ auth BE 03/10/2026:** theo [authentication](../BE/docs/authentication.md) và [API guide](../BE/docs/api-docs.md), source BE main `0683d90`. Local registration dùng form → OTP → registrationToken → register → login; register trả account, chưa cấp JWT. Google UID đã link đăng nhập được; onboarding/link mới còn thiếu API hoàn tất. Các quy tắc đầy đủ và sơ đồ nằm tại [workflows mục 2.1–2.4](fire-evacuation-training-workflows.md#21-đăng-ký-local-form--otp--account--login). Source không chứng minh client/provider/deployment đã nghiệm thu.
+**Đồng bộ auth BE 03/10/2026:** theo [authentication](../BE/docs/authentication.md) và [API guide](../BE/docs/api-docs.md), source BE main `0683d90`. Local registration dùng form → OTP → registrationToken → register → login; register trả account, chưa cấp JWT. Google UID đã link đăng nhập được; `POST /api/auth/google/onboarding/complete` (proof 15 phút, chọn Trainee hoặc OrganizationUser, tổ chức mới + owner atomic) và `POST /api/me/link-google` (link vào tài khoản local đã đăng nhập) đã có trong BE (đồng bộ 12/10/2026). Các quy tắc đầy đủ và sơ đồ nằm tại [workflows mục 2.1–2.4](fire-evacuation-training-workflows.md#21-đăng-ký-local-form--otp--account--login). Source không chứng minh client/provider/deployment đã nghiệm thu.
 
 **Trạng thái:** thiết kế và prototype FE đã triển khai; chưa nghiệm thu đầy đủ chất lượng hình ảnh/hiệu năng
 
@@ -153,7 +153,7 @@ Phân biệt rõ Learn web (blog kiến thức cộng đồng) với mode Learn 
 
 - Đăng ký Trainee dùng email/username/password/confirm password; username được chuẩn hóa lowercase và kiểm tra không trùng ngay trong form/backend. OrganizationUser đăng ký email/password/confirm password cùng tên, địa chỉ và số điện thoại tổ chức; username cá nhân có thể bổ sung sau.
 - Form local giữ trong bộ nhớ, tiếp tục sang OTP; “Xác thực và đăng ký” verify mã rồi register toàn bộ form + registrationToken. Sau 201 AccountResponse, login riêng để lấy phiên. Đổi email xác minh lại, reload quay về form; không lưu password vào URL/web storage. Email trùng hiển thị errors.email, OTP/quota lỗi theo BE và Retry-After.
-- Google UID đã link đăng nhập theo role cũ; OnboardingRequired và ACCOUNT_LINK_REQUIRED chưa có API hoàn tất. Thiết kế đích onboarding chọn Trainee/OrganizationUser còn cần triển khai. Hồ sơ dùng GET/PATCH /api/auth/me và /api/organizations/me với ETag/If-Match; reset/change thành công đưa về login. Game start không hỏi username.
+- Google UID đã link đăng nhập theo role cũ. OnboardingRequired hoàn tất bằng `POST /api/auth/google/onboarding/complete` (chọn Trainee/OrganizationUser); ACCOUNT_LINK_REQUIRED xử lý bằng đăng nhập local rồi `POST /api/me/link-google`. Hồ sơ dùng GET/PATCH /api/auth/me và /api/organizations/me với ETag/If-Match; reset/change thành công đưa về login. Game start không hỏi username.
 - Avatar dùng upload intent tới S3 private và signed URL ngắn hạn; không nhận URL ảnh tùy ý. Google Sign-In dùng Firebase, FCM chỉ là push, Mailgun gửi OTP đăng ký và reset password.
 
 AI Trainee hoạt động ngoài lượt đánh giá, dùng quota ngày riêng; truy cập Learn/Common hợp lệ, mục tiêu/hướng dẫn bài đã duyệt/phát hành có quyền chơi và kết quả của chính mình. AI tổ chức dùng corpus riêng theo tenant và dữ liệu BIM được cấp quyền; hai nhóm không dùng chung phạm vi truy xuất.

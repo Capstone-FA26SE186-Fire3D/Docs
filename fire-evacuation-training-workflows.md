@@ -100,7 +100,7 @@ sequenceDiagram
 
 ### 2.3. Google và hồ sơ
 
-`POST /api/auth/login-firebase` nhận Firebase ID token dạng JSON string. UID đã link trả `200 Authenticated` kèm authentication; UID/email mới trả `200 OnboardingRequired`, chưa tạo account; email local trùng trả `409 ACCOUNT_LINK_REQUIRED`. Chưa có API/proof hoàn tất onboarding hoặc explicit link. Yêu cầu đích vẫn là chọn Trainee/OrganizationUser cho identity mới và chứng minh local account trước khi link; không cấp PlatformAdmin hoặc tự gia nhập tenant.
+`POST /api/auth/login-firebase` nhận Firebase ID token dạng JSON string. UID đã link trả `200 Authenticated` kèm authentication; UID/email mới trả `200 OnboardingRequired`, chưa tạo account; email local trùng trả `409 ACCOUNT_LINK_REQUIRED`. Identity mới hoàn tất bằng `POST /api/auth/google/onboarding/complete` với `onboarding.token` (chọn Trainee/OrganizationUser); explicit link dùng `POST /api/me/link-google` sau khi đăng nhập local; không cấp PlatformAdmin hoặc tự gia nhập tenant.
 
 `GET/PATCH /api/auth/me` sửa fullName/username/dob/gender/phoneNumber; `GET/PATCH /api/organizations/me` sửa hồ sơ organization. GET trả ETag, PATCH cần If-Match; không đổi role/tenant/email/status. Avatar dùng `/api/me/avatar` upload-intent/upload/complete/GET/delete với private S3; complete/upload/delete cần If-Match. Device dùng Bearer và X-Installation-Key, không dùng FCM token để login.
 

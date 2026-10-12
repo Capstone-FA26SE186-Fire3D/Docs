@@ -2,7 +2,7 @@
 
 Cập nhật 2026-09-16. Đây là báo cáo prototype, không phải biên bản nghiệm thu toàn bộ sản phẩm. Thiết kế chuẩn ở [UX web](fire3d-web-ux-design.md). Tài liệu mục tiêu hiện mở rộng website từ landing/Learn/RAG mẫu thành khu editor Three.js, billing/AI usage và QR landing; các năng lực này chưa được coi là đã triển khai chỉ vì đã có trong thiết kế.
 
-**Đồng bộ auth BE 03/10/2026:** theo [authentication](../BE/docs/authentication.md) và [API guide](../BE/docs/api-docs.md), source BE main `0683d90`. Local registration dùng form → OTP → registrationToken → register → login; register trả account, chưa cấp JWT. Google UID đã link đăng nhập được; onboarding/link mới còn thiếu API hoàn tất. Các quy tắc đầy đủ và sơ đồ nằm tại [workflows mục 2.1–2.4](fire-evacuation-training-workflows.md#21-đăng-ký-local-form--otp--account--login). Source không chứng minh client/provider/deployment đã nghiệm thu.
+**Đồng bộ auth BE 03/10/2026:** theo [authentication](../BE/docs/authentication.md) và [API guide](../BE/docs/api-docs.md), source BE main `0683d90`. Local registration dùng form → OTP → registrationToken → register → login; register trả account, chưa cấp JWT. Google UID đã link đăng nhập được; `POST /api/auth/google/onboarding/complete` (proof 15 phút, chọn Trainee hoặc OrganizationUser, tổ chức mới + owner atomic) và `POST /api/me/link-google` (link vào tài khoản local đã đăng nhập) đã có trong BE (đồng bộ 12/10/2026). Các quy tắc đầy đủ và sơ đồ nằm tại [workflows mục 2.1–2.4](fire-evacuation-training-workflows.md#21-đăng-ký-local-form--otp--account--login). Source không chứng minh client/provider/deployment đã nghiệm thu.
 
 ## Khác biệt với yêu cầu đồng bộ ngày 03/10/2026
 

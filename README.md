@@ -1,6 +1,6 @@
 # Danh Mục Tài Liệu Dự Án (Docs)
 
-**Đồng bộ auth BE 03/10/2026:** theo [authentication](../BE/docs/authentication.md) và [API guide](../BE/docs/api-docs.md), source BE main `0683d90`. Local registration dùng form → OTP → registrationToken → register → login; register trả account, chưa cấp JWT. Google UID đã link đăng nhập được; onboarding/link mới còn thiếu API hoàn tất. Các quy tắc đầy đủ và sơ đồ nằm tại [workflows mục 2.1–2.4](fire-evacuation-training-workflows.md#21-đăng-ký-local-form--otp--account--login). Source không chứng minh client/provider/deployment đã nghiệm thu.
+**Đồng bộ auth BE 03/10/2026:** theo [authentication](../BE/docs/authentication.md) và [API guide](../BE/docs/api-docs.md), source BE main `0683d90`. Local registration dùng form → OTP → registrationToken → register → login; register trả account, chưa cấp JWT. Google UID đã link đăng nhập được; `POST /api/auth/google/onboarding/complete` (proof 15 phút, chọn Trainee hoặc OrganizationUser, tổ chức mới + owner atomic) và `POST /api/me/link-google` (link vào tài khoản local đã đăng nhập) đã có trong BE (đồng bộ 12/10/2026). Các quy tắc đầy đủ và sơ đồ nằm tại [workflows mục 2.1–2.4](fire-evacuation-training-workflows.md#21-đăng-ký-local-form--otp--account--login). Source không chứng minh client/provider/deployment đã nghiệm thu.
 
 Thư mục này chứa tài liệu sản phẩm và kiến trúc cho **Fire Evacuation Training 3D (FET3D)**, một đồ án hỗ trợ tập huấn và đánh giá trải nghiệm sơ tán trong môi trường 3D của công trình.
 
