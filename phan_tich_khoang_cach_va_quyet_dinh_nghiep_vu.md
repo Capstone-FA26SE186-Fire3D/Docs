@@ -12,6 +12,12 @@ FET3D tiếp tục dùng luồng IFC → 3D → Unity Android → QR → Trainin
 
 Building có quyền chơi public/private. Mọi người chơi đều đăng nhập bằng tài khoản Trainee; tòa private cần thêm mã tham gia. Gói mua theo từng tòa trong 6 hoặc 12 tháng, gồm phí game, số người giới hạn và quota AI. Quota AI các tòa cộng chung cho Organization; hết quota phải mua thêm trước khi tiếp tục dùng AI tính phí.
 
+## Quyết định camera gameplay — 14/10/2026
+
+Gameplay Unity dùng 3D góc nhìn thứ ba (third-person), thay định hướng camera cố định 2.5D trước đây. Camera bám theo nhân vật, orbit/zoom có giới hạn và xử lý va chạm/che khuất trong không gian BIM. Pipeline giữ cấu trúc, kích thước, semantic IDs và provenance; không sửa công trình để camera vừa. Chi tiết và nghiệm thu tại [technology §1.2](fire-evacuation-training-technology.md#12-gameplay-third-person-và-biểu-diễn-bim), yêu cầu FR-TRAINING-07 và [Unity #8](https://github.com/Capstone-FA26SE186-Fire3D/Unity/issues/8).
+
+Phiếu `GFA26SE133_Phieu-dang-ky_v2.docx` quy định 3D/Unity nhưng không khóa góc nhìn; người dùng quyết định giữ nguyên phiếu. Landing web vẫn là POV góc nhìn thứ nhất, editor/preview phục vụ authoring. Quyết định này không tự thêm cameraMode vào contract API/bridge hoặc chứng minh runtime đã hoàn thành.
+
 ## Đối chiếu với Docs trước đợt đồng bộ
 
 | Chủ đề | Docs hiện tại trước khi đồng bộ | Quyết định đã chốt |

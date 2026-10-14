@@ -15,7 +15,19 @@ Kiến trúc phục vụ mô phỏng và tập huấn của đồ án. Nó khôn
 - Mỗi `Building` có một QR canonical ổn định để mở danh sách bài đã publish của tòa nhà. Session mới pin bài/release/scenario mà Trainee chọn; QR không bị buộc vào một Training duy nhất.
 - QR chỉ chứa mã opaque hoặc deep link công khai để backend resolve `Building`/`TrainingRelease`; không nhúng model BIM, access token, credential hay APK.
 - Mobile app được cài một lần. Sau khi quét, backend kiểm tra entitlement online, trả danh sách bài và khi Trainee chọn bài thì trả manifest/URL ngắn hạn để app tải, xác minh và cache content package; không tải/cài một game APK hoặc Unity runtime mới cho từng QR.
-- FE dùng Three.js cho hiệu ứng landing và editor/preview 3D của organization. Gameplay BIM 3D với góc nhìn 2.5D chạy trong Unity runtime của Mobile, không phải game Three.js trên web. Nếu chưa cài app, landing chỉ dẫn tới đăng nhập/tải app và người dùng có thể quét lại QR.
+- FE dùng Three.js cho hiệu ứng landing và editor/preview 3D của organization. Gameplay BIM 3D với góc nhìn thứ ba (third-person) chạy trong Unity runtime của Mobile. Nếu chưa cài app, landing chỉ dẫn tới đăng nhập/tải app và người dùng có thể quét lại QR.
+
+### 1.2. Gameplay third-person và biểu diễn BIM
+
+Quyết định ngày 14/10/2026: Unity dùng camera góc nhìn thứ ba bám theo nhân vật, nhìn thấy nhân vật trong môi trường BIM; orbit/zoom có giới hạn cấu hình và xử lý camera collision với tường/trần. Player, camera, UI và bridge dùng GameObject/MonoBehaviour; hazard/NPC giữ hướng ECS. Đây là đặc tả đích, chưa là bằng chứng runtime đã triển khai.
+
+- IFC nguồn giữ nguyên. Pipeline tạo mesh tối ưu, LOD, collider, navigation data và hazard data; bảo toàn kích thước, cấu trúc tầng/phòng/cửa/cầu thang/lối thoát, semantic IFC IDs và coordinate transform có provenance. Không nới hành lang hoặc di chuyển tường để camera vừa; dữ liệu thiếu phải tạo QA issue.
+- Camera xử lý hành lang hẹp, góc tường, trần thấp, cửa và đổi tầng; thu khoảng cách theo vật cản rồi phục hồi khi đủ khoảng trống. Fade/cutaway nếu dùng chỉ ảnh hưởng hiển thị, không thay collider/navigation/hazard; trong Assessment không được làm lộ mục tiêu hoặc hazard qua tường.
+- Mobile sở hữu launch và native lifecycle; Unity sở hữu input gameplay và camera. Đợt đầu third-person là hành vi runtime; không thêm `cameraMode` vào API/scenario/manifest hoặc tăng `protocolVersion` chỉ vì đổi góc nhìn. Tương thích vẫn theo runtime catalog/version và package đã pin.
+- Web landing tiếp tục hành trình góc nhìn thứ nhất; editor/preview dùng orbit để authoring. Preview third-person trên web chưa nằm trong yêu cầu này.
+- Nghiệm thu PlayMode và Android với BIM đại diện: hành lang hẹp, cửa, trần thấp, cầu thang/liên tầng, multitouch di chuyển/xoay camera/tương tác, pause/resume và mở/đóng phiên. Đo FPS/frame time/RAM/nhiệt trong phiên 15 phút có camera collision/occlusion, theo mục tiêu tối thiểu 30 FPS trên Android tầm trung.
+
+Theo dõi: [Unity gameplay #8](https://github.com/Capstone-FA26SE186-Fire3D/Unity/issues/8), [Unity pipeline #6](https://github.com/Capstone-FA26SE186-Fire3D/Unity/issues/6), [Mobile bridge #12](https://github.com/Capstone-FA26SE186-Fire3D/Mobile/issues/12), [AI/IFC worker #8](https://github.com/Capstone-FA26SE186-Fire3D/AI/issues/8) và [benchmark Unity #12](https://github.com/Capstone-FA26SE186-Fire3D/Unity/issues/12).
 
 ## 2. Ba loại tài khoản và ownership
 

@@ -10,7 +10,7 @@
 
 FET3D biến mô hình **IFC** của một Building thành content package Unity dùng cho tập huấn sơ tán 3D trên Android. Người học cài ứng dụng một lần, đăng nhập và quét QR canonical của Building để xem danh sách bài đã publish, chọn một bài và tải package còn thiếu. Package đã xác minh được Unity dùng để chạy scenario, ghi nhận quyết định và trả result về React Native/Expo qua native Android bridge.
 
-Mỗi Building có QR canonical để mở danh sách training của tòa nhà. Three.js được dùng cho landing và editor/preview 3D của organization; gameplay BIM 3D/2.5D đầy đủ chạy trong Unity của Mobile. Landing và Learn là nội dung web công khai; không có guest account hoặc guest training không định danh. Xem [đặc tả UX web](fire3d-web-ux-design.md) để biết storyboard POV, editor, nhận diện, motion và hai hướng nhu cầu.
+Mỗi Building có QR canonical để mở danh sách training của tòa nhà. Three.js được dùng cho landing và editor/preview 3D của organization; gameplay BIM 3D góc nhìn thứ ba (third-person) chạy trong Unity của Mobile, camera bám theo nhân vật và xử lý vật cản trong cấu trúc BIM. Landing và Learn là nội dung web công khai; không có guest account hoặc guest training không định danh. Xem [đặc tả UX web](fire3d-web-ux-design.md) để biết storyboard POV, editor, nhận diện, motion và hai hướng nhu cầu.
 
 Luồng cốt lõi: **IFC → 3D → Unity Android → QR → Training → Result**.
 
