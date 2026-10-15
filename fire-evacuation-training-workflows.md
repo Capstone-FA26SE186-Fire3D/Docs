@@ -146,6 +146,8 @@ OrganizationUser tạo Building
 6. Nếu lỗi, hệ thống lưu issue, log và trạng thái `NeedsFix`. `OrganizationUser` cập nhật IFC hoặc xác nhận mapping, tạo revision mới và chạy lại pipeline.
 7. Nếu đạt, revision chuyển `ReadyForScenario`. Không publish partial package hoặc source chưa qua QA.
 
+Hướng dẫn xuất IFC từ Revit/ArchiCAD, danh sách thiết bị cần OrganizationUser xác nhận, mã issue và quy trình đặt thiết bị PCCC/vật dụng trong editor được đề xuất tại [IFC ingestion, hiển thị và tương tác](ifc_ingestion_visual_interaction.md).
+
 ## 4. Workflow scenario và readiness
 
 Organization tự soạn hoặc dùng template tùy chọn, có thể kết hợp mục tiêu sơ tán, nhận biết nguy cơ, dùng thiết bị và hỗ trợ người khác trong capability runtime. Admin cung cấp tiêu chí mẫu; Organization điều chỉnh rồi gửi duyệt cùng kịch bản. PlatformAdmin duyệt mọi phiên bản trước phát hành hoặc từ chối kèm lý do. Sửa nội dung/rubric phải tạo phiên bản mới và gửi duyệt lại. IFC QA/ConfirmForTraining là readiness kỹ thuật, không thay bước duyệt nội dung; release chỉ publish khi cả hai đạt. Phiên và kết quả cũ giữ phiên bản đã pin.

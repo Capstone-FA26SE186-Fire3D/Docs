@@ -209,6 +209,7 @@ IFC upload
 - Blender/Unity xử lý tự động theo pipeline dùng chung; chủ tòa chỉ upload, kiểm tra preview và xác nhận issue. Không cam kết mọi IFC bất kỳ đều dùng được nếu thiếu semantic/geometry.
 - QA yêu cầu floor hợp lệ, stable IDs, door endpoint chạm vùng điều hướng, stair/portal đúng tầng, spawn có route hoặc lỗi rõ ràng, collider không chặn nhầm đường và budget geometry/texture phù hợp Android.
 - Raw IFC chỉ có ở backend/workstation private. Runtime nhận geometry/metadata tối thiểu cần cho package.
+- Chi tiết chọn representation `Body`, nhận diện thiết bị PCCC/nguồn nước, lọc MEP, thư viện vật liệu PBR với UV box theo mét, ngân sách hình học, mã issue QA và metadata cho Unity nằm ở [IFC ingestion, hiển thị và tương tác](ifc_ingestion_visual_interaction.md). Đây là đề xuất có bằng chứng spike cục bộ, chưa phải worker production.
 
 ## 7. Scenario, hazard và route
 
