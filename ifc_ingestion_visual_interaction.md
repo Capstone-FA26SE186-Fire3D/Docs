@@ -275,7 +275,7 @@ Ví dụ rút gọn `building_metadata.json` trong package (đề xuất, field 
 | IFC worker (Python, repo AI/BE tùy chốt) | Mục 5.1–5.3, từ điển từ khóa có version, xuất facts + ứng viên + issue; test bằng fixture local ở mục 2.1 |
 | Blender worker | UV0/UV1, ánh xạ thư viện vật liệu, thay asset theo bbox, LOD, chia tầng, GLB; ghi provenance và số tam giác từng chunk |
 | Unity build worker | Import GLB, URP Lit, collider/NavMesh, bake ánh sáng, gắn component theo `catalogKey`, đóng package theo tầng |
-| BE | Lưu revision/sources/issues, API danh sách thiết bị cần xác nhận, lưu xác nhận của OrganizationUser, validate `ScenarioVersion.interactions` theo catalog và runtime capability |
+| BE | Lưu revision/sources/issues, API danh sách thiết bị cần xác nhận, lưu xác nhận của OrganizationUser, validate object `Equipment`/`Hazard` trong state `fet3d.editor/1` của `ScenarioVersion` theo capability `{id,version}` và schema tham số từ catalog (mục 7); không thêm trường `interactions` riêng |
 | FE editor | Checklist xuất IFC, màn hình xác nhận thiết bị, đặt vật dụng/thiết bị PCCC bám bề mặt, dòng thời gian sự kiện, cảnh báo thiếu nguồn nước/báo cháy |
 | Mobile | Tải package theo tầng, kiểm tra hash, báo dung lượng; không xử lý IFC |
 | Unity runtime | `Interactable`, `InteractionDetector`, `ActionBar`, HUD, gửi event; đọc tham số hiệu ứng từ scenario |
