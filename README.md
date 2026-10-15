@@ -21,6 +21,7 @@ Thư mục này chứa tài liệu sản phẩm và kiến trúc cho **Fire Evac
 | `fire_evacuation_bim_rag_pccc.md` | Thiết kế RAG Python dùng BIM để tạo gợi ý PCCC cần chuyên gia thẩm tra. |
 | `fire3d-web-ux-design.md` | Đặc tả UX web, landing POV 3D, hai hướng nhu cầu, Learn, Góc học tập và ranh giới Android/Unity. |
 | `fire3d-web-implementation.md` | Prototype đã triển khai, khác biệt so với thiết kế đầu, lỗi, giải pháp và giới hạn kiểm chứng. |
+| `ifc_ingestion_visual_interaction.md` | Spike 12 file IFC, hướng dẫn xuất IFC, chọn Body, nhận diện thiết bị, thư viện vật liệu PBR, mã issue QA, catalog vật thể tương tác, luật tương tác theo ngữ cảnh và trách nhiệm từng worker/repo. |
 
 Requirements là nguồn yêu cầu sản phẩm; technology mô tả service/transaction boundary và contract kỹ thuật. SQL và ERD đã có overlay/hợp đồng thiết kế v7 cho các quyết định ngày 03/10/2026, nhưng chưa là bằng chứng migration, API hay vận hành production. `Mẫu report/` là tài sản mẫu độc lập và không thuộc phạm vi đồng bộ này.
 
