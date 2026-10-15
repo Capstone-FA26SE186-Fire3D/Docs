@@ -265,7 +265,7 @@ Ví dụ rút gọn `building_metadata.json` trong package (đề xuất, field 
 }
 ```
 
-- `interactables` từ IFC chỉ là ứng viên; vật đặt trong editor nằm trong `ScenarioVersion` (mục 7), không sửa artifact revision.
+- `interactables` từ IFC chỉ là ứng viên; sau khi OrganizationUser xác nhận, chúng thành object `Equipment` trong state `fet3d.editor/1` của `ScenarioVersion` (mục 7), không sửa artifact revision.
 - Unity không nhận raw IFC; mọi định danh dùng `ifcGlobalId` để truy vết giữa editor, runtime, event và kết quả.
 
 ### 5.8. Trách nhiệm theo thành phần
@@ -342,7 +342,9 @@ Catalog do PlatformAdmin quản lý trong Organization Library (FR-LIBRARY-01/02
 - **Bẫy vẫn hiện nút bình thường** để đánh giá được hành vi.
 - Guided Drill làm nổi bật nút nên bấm và có gợi ý; Assessment hiện đủ nút, không làm nổi bật, không gợi ý (technology mục 1.2).
 
-Dạng dữ liệu đề xuất trong `ScenarioVersion.interactions`:
+**Ánh xạ với contract editor hiện có:** BE/FE đã có contract `fet3d.editor/1` (BE `contracts/editor/v1`) với sáu loại object `Spawn`, `Hazard`, `Goal`, `Npc`, `BlockedElement`, `Equipment`; `Equipment`/`Hazard` mang capability `{id,version}` lấy từ `GET /api/scenario-interactions/catalog`. **`catalogKey` trong tài liệu này chính là capability id đó**; vật tương tác và sprinkler là object `Equipment`, nguồn lửa là `Hazard`. Không thêm trường `interactions` riêng: luật hành động bên dưới là metadata của capability trong catalog, tham số đặt trên từng object theo schema tham số của capability.
+
+Ví dụ metadata capability (minh họa, field cuối cùng chốt cùng catalog):
 
 ```json
 {
