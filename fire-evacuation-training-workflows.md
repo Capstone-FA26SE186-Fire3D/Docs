@@ -143,7 +143,9 @@ OrganizationUser tạo Building
 3. Worker Python đọc spatial hierarchy, tách tầng, giữ GlobalId/provenance, tạo geometry/GLB, semantic graph, door/stair/exit mapping và manifest nháp.
 4. Blender script giảm polygon/gộp vật liệu theo quy tắc đã kiểm thử; Unity build worker dùng asset input để tạo collider, NavMesh/link tầng và runtime package. Chủ tòa không cần chạy các công cụ này.
 5. QA kiểm tra unit, origin, floor order, portal liên tầng, spawn-to-exit route, collision, object identity và budget package.
-6. Nếu lỗi, hệ thống lưu issue, log và trạng thái `NeedsFix`. `OrganizationUser` cập nhật IFC hoặc xác nhận mapping, tạo revision mới và chạy lại pipeline.
+6. Nếu lỗi, hệ thống lưu issue, log và trạng thái `NeedsFix`. Có hai đường ra:
+   - Lỗi geometry/cấu trúc (thiếu Body, thiếu `IfcSpace`, file không phải kiến trúc…): `OrganizationUser` sửa IFC, tải revision mới và pipeline chạy lại.
+   - Chỉ thiếu cửa thoát (`IFC_EXIT_UNKNOWN`): geometry vẫn được accept; `OrganizationUser` xác nhận một `IfcDoor` có sẵn là `door.exit` trong màn xác nhận thiết bị, revision tự chuyển `ReadyForScenario` mà không cần upload lại.
 7. Nếu đạt, revision chuyển `ReadyForScenario`. Không publish partial package hoặc source chưa qua QA.
 
 Hướng dẫn xuất IFC từ Revit/ArchiCAD, danh sách thiết bị cần OrganizationUser xác nhận, mã issue và quy trình đặt thiết bị PCCC/vật dụng trong editor được đề xuất tại [IFC ingestion, hiển thị và tương tác](ifc_ingestion_visual_interaction.md).

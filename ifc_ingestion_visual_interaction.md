@@ -266,6 +266,7 @@ Ví dụ rút gọn `building_metadata.json` trong package (đề xuất, field 
 ```
 
 - `interactables` từ IFC chỉ là ứng viên; sau khi OrganizationUser xác nhận, chúng thành object `Equipment` trong state `fet3d.editor/1` của `ScenarioVersion` (mục 7), không sửa artifact revision.
+- Quyết định thiết bị (`Confirmed`, `Retyped` kèm `catalogKey`, `Rejected`) được BE lưu theo revision với ETag, có thể được gợi ý lại ở revision sau. Đây là nguồn để Unity gắn component theo `catalogKey` và để giải quyết `IFC_EXIT_UNKNOWN` (mục 5.9). Màn xác nhận thiết bị mở được ngay khi geometry đã accept, kể cả khi revision còn `NeedsFix`.
 - Unity không nhận raw IFC; mọi định danh dùng `ifcGlobalId` để truy vết giữa editor, runtime, event và kết quả.
 
 ### 5.8. Trách nhiệm theo thành phần
@@ -288,7 +289,7 @@ Ví dụ rút gọn `building_metadata.json` trong package (đề xuất, field 
 | `IFC_BODY_NONSTANDARD_CONTEXT` | Thông tin | Body trong context khác `Model` | Không cần |
 | `IFC_NO_SPACES` | Chặn | Không có `IfcSpace` | Bật xuất rooms/zones |
 | `IFC_SPACE_UNNAMED` | Cảnh báo | Phòng thiếu `Name`/`LongName` | Đặt tên phòng hoặc phân loại trong editor |
-| `IFC_EXIT_UNKNOWN` | Chặn trước ReadyForScenario | Không xác định được cửa ra ngoài | Xác nhận cửa thoát hiểm trong editor |
+| `IFC_EXIT_UNKNOWN` | Cảnh báo, giữ `NeedsFix` tới khi có cửa thoát | Không xác định được cửa ra ngoài | Xác nhận một `IfcDoor` có sẵn là `door.exit` trong màn xác nhận thiết bị; không cần upload lại IFC |
 | `IFC_NO_FIRE_EQUIPMENT` | Cảnh báo | Không có thiết bị báo cháy/chữa cháy | Đặt trong editor |
 | `IFC_NO_WATER_SOURCE` | Cảnh báo | Không có nguồn nước | Đặt trong editor nếu kịch bản cần |
 | `IFC_LOW_CONFIDENCE_DEVICE` | Cảnh báo | Ứng viên dưới ngưỡng tin cậy | Xác nhận hoặc bỏ |
@@ -299,6 +300,8 @@ Ví dụ rút gọn `building_metadata.json` trong package (đề xuất, field 
 | `IFC_TRIANGLE_BUDGET_EXCEEDED` | Cảnh báo | Chunk vượt ngân sách sau thay thế | Xuất lại ở mức chi tiết thấp hơn |
 | `IFC_DEFAULT_MASS_PRESENT` | Thông tin | Có khối nháp quy hoạch | Không cần, đã loại |
 | `IFC_UNSUPPORTED_FORMAT` | Chặn | Upload không phải IFC | Xuất IFC theo mục 3 |
+
+Quy tắc riêng cho `IFC_EXIT_UNKNOWN` (chốt 16/10/2026, phương án B): worker vẫn accept geometry và báo mức cảnh báo, nhưng revision đứng ở `NeedsFix` cho tới khi OrganizationUser xác nhận ít nhất một cửa thoát qua quyết định thiết bị. Bằng chứng duy nhất là một ứng viên `IfcDoor` đã có `ifcGlobalId` được quyết định Confirmed hoặc Retyped với `catalogKey = door.exit` (capability kind `Equipment`, nên API equipment-decisions không phải nhận kind khác); không tạo cửa mới, không sửa geometry. Khi có ít nhất một `door.exit` như vậy, revision tự chuyển `ReadyForScenario`; nếu sau đó mọi `door.exit` bị Rejected, revision quay lại `NeedsFix`. `exit.final`/`exit.stair` vẫn là object `Goal` do OrganizationUser đặt trong editor của từng `ScenarioVersion`, không đi qua equipment-decisions. Kiểm tra "còn route từ spawn tới Goal thoát" vẫn thuộc validation scenario (mục 9 bước 8), không thuộc bước này.
 
 ## 6. Danh mục vật thể tương tác (catalog)
 
@@ -374,8 +377,8 @@ Ví dụ metadata capability (minh họa, field cuối cùng chốt cùng catalo
 
 Bổ sung cho [workflows mục 4](fire-evacuation-training-workflows.md#4-workflow-scenario-và-readiness):
 
-1. Sau `ReadyForScenario`, xem **Danh sách thiết bị phát hiện được** kèm độ tin cậy; xác nhận, sửa loại hoặc bỏ.
-2. Chọn template (ví dụ cháy bếp giờ hành chính, cháy điện ban đêm) hoặc trang trắng.
+1. Ngay khi geometry đã accept (revision `NeedsFix` chỉ vì thiếu cửa thoát hoặc đã `ReadyForScenario`), xem **Danh sách thiết bị phát hiện được** kèm độ tin cậy; xác nhận, sửa loại hoặc bỏ. Nếu có issue `IFC_EXIT_UNKNOWN`, chọn cửa thoát trong bước này để revision chuyển `ReadyForScenario`.
+2. Khi revision đã `ReadyForScenario`, chọn template (ví dụ cháy bếp giờ hành chính, cháy điện ban đêm) hoặc trang trắng.
 3. Đặt spawn người chơi, NPC theo loại và số lượng trong budget.
 4. Đặt nguồn lửa (loại điện/dầu/chất rắn, tốc độ lan, thời điểm), khói, gió.
 5. Lập **dòng thời gian sự kiện**: đầu báo kích hoạt hoặc bị vô hiệu, mất điện, cầu thang bị khói chặn.
