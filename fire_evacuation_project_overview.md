@@ -79,7 +79,7 @@ IFC private storage on AWS S3
 - AWS S3 lưu raw IFC riêng tư, manifest và content package bất biến.
 - React Native/Expo xử lý local email/password hoặc Google Sign-In, QR, danh sách bài, download/cache/verify, kiểm tra dịch vụ, FCM và handoff qua native Android bridge; Unity thực hiện scene, hazard surrogate, routing, hành vi tương tác và kết quả training.
 
-LLM production sẽ chọn **một** trong OpenAI API hoặc Google Gemini API (cấu hình qua Google AI Studio) sau đánh giá. Azure đã được chọn cho AI/RAG service; compute cho BE, IFC worker và Unity worker, cùng SKU/region/cost, vẫn là quyết định mở.
+LLM production sẽ chọn **một** trong OpenAI API hoặc Google Gemini API (cấu hình qua Google AI Studio) sau đánh giá. Azure đã được chọn cho AI/RAG service; compute cho BE và IFC worker, cùng SKU/region/cost, vẫn là quyết định mở; Unity build worker chạy trên server của team.
 
 ## Mô hình thương mại và AI
 
