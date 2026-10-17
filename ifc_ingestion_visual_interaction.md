@@ -241,7 +241,7 @@ Thứ tự lấy vật liệu: `IfcStyledItem` → `IfcRelAssociatesMaterial` (l
 
 - Đèn: ưu tiên `IfcLightFixture` (vị trí thật); nếu không có, đặt đèn area theo `IfcSpace` với công suất chuẩn hóa theo diện tích. Spike cho thấy công suất không chuẩn hóa làm cháy sáng ảnh.
 - Bake lightmap (URP), light probe theo phòng, reflection probe cho hành lang/kính; ánh sáng mặt trời theo hướng công trình nếu có `TrueNorth`. Light probe bắt buộc để player và NPC (đối tượng động) nhận đúng ánh sáng đã bake.
-- Worker chạy Unity Editor 6000.6.3f1 ở chế độ batch trên server của team, đầu ra là AssetBundle theo tầng (lightmap đi kèm bundle) và manifest có hash từng bundle.
+- Worker chạy Unity Editor 6000.6.3f1 ở chế độ batch trên Azure VM Windows do BE vận hành (BE#110), đầu ra là AssetBundle theo tầng (lightmap đi kèm bundle) và manifest có hash từng bundle.
 - Biến thể "mất điện": tắt đèn thường, bật đèn sự cố và biển EXIT phát sáng; phục vụ kịch bản có sự kiện mất điện.
 - Khói/lửa là VFX đọc trạng thái hazard (technology mục 7), không bake. Hậu kỳ URP ở runtime: tonemapping ACES, bloom cho đèn EXIT/lửa, SSAO nhẹ; đo lại trên Android tầm trung.
 
