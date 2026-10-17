@@ -214,6 +214,7 @@ Thứ tự lấy vật liệu: `IfcStyledItem` → `IfcRelAssociatesMaterial` (l
 | `glass.clear` / `glass.frosted` | glas, glass, klart / frosted, matt | không texture, shader kính | — |
 
 - Tên không khớp: dùng màu gốc của surface style nếu có, ghi `IFC_UNMAPPED_MATERIAL` mức thông tin để PlatformAdmin bổ sung từ điển.
+- **Nơi giữ texture (chốt 17/10/2026):** file ảnh PBR chỉ nằm trong project Unity dưới dạng thư viện material URP đã tuyển chọn (Git LFS). GLB từ Blender worker chỉ mang `libraryKey`, biến thể và màu nhuộm, không nhúng texture; BE, IFC worker và Blender worker không lưu file ảnh. Unity build worker gán material theo `libraryKey` trước khi bake, nên mọi tòa dùng chung bộ texture mà không tải trùng.
 - **Tránh đơn điệu giữa các tòa.** IFC không mang texture (0/25 file có `IfcImageTexture`); spike dùng một bộ 12 texture cho mọi tòa nên các tòa trông giống nhau. Thiết kế đích:
   - Mỗi khóa thư viện có 5–10 **biến thể**; chọn biến thể xác định bằng hash (`buildingId` + tên vật liệu IFC) để mỗi tòa khác nhau nhưng build lại cho kết quả giống hệt.
   - **Nhuộm texture bằng màu surface style gốc** khi IFC có màu (ví dụ "Verputz blau", "Farbe braun") để giữ ý đồ kiến trúc.
@@ -239,9 +240,10 @@ Thứ tự lấy vật liệu: `IfcStyledItem` → `IfcRelAssociatesMaterial` (l
 ### 5.6. Ánh sáng (Unity build worker)
 
 - Đèn: ưu tiên `IfcLightFixture` (vị trí thật); nếu không có, đặt đèn area theo `IfcSpace` với công suất chuẩn hóa theo diện tích. Spike cho thấy công suất không chuẩn hóa làm cháy sáng ảnh.
-- Bake lightmap (URP), light probe theo phòng, reflection probe cho hành lang/kính; ánh sáng mặt trời theo hướng công trình nếu có `TrueNorth`.
+- Bake lightmap (URP), light probe theo phòng, reflection probe cho hành lang/kính; ánh sáng mặt trời theo hướng công trình nếu có `TrueNorth`. Light probe bắt buộc để player và NPC (đối tượng động) nhận đúng ánh sáng đã bake.
+- Worker chạy Unity Editor 6000.6.3f1 ở chế độ batch trên server của team, đầu ra là AssetBundle theo tầng (lightmap đi kèm bundle) và manifest có hash từng bundle.
 - Biến thể "mất điện": tắt đèn thường, bật đèn sự cố và biển EXIT phát sáng; phục vụ kịch bản có sự kiện mất điện.
-- Khói/lửa là VFX đọc trạng thái hazard (technology mục 7), không bake.
+- Khói/lửa là VFX đọc trạng thái hazard (technology mục 7), không bake. Hậu kỳ URP ở runtime: tonemapping ACES, bloom cho đèn EXIT/lửa, SSAO nhẹ; đo lại trên Android tầm trung.
 
 ### 5.7. Artifact và metadata cho Unity/BE/FE
 
