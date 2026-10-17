@@ -532,10 +532,10 @@ Các ca sau là tiêu chí cho đầu việc code tiếp theo, chưa phải kế
 | `Nginx` | Reverse proxy tại điểm vào HTTP(S), chuyển request API tới .NET | Đã chốt công nghệ; chưa triển khai |
 | `AI/RAG FastAPI` | Retrieval, generation, citations, safety và usage kỹ thuật; không tự tính tiền, sửa editor hoặc publish | Đã chốt chạy riêng trên Azure |
 | `IFC/Blender worker` | Job xử lý nặng, facts, geometry, artifact và QA; retry theo logical job/attempt/lease/hash | Thiết kế đề xuất |
-| `Unity build worker` | Unity Editor/toolchain, collider/NavMesh, runtime package và manifest | Thiết kế đề xuất |
+| `Unity build worker` | Unity Editor/toolchain, collider/NavMesh, bake ánh sáng, runtime package và manifest | Agent pull-mode đã có (Unity `Tools/PackageWorker`), VM Azure đã cài; chờ BE sửa lease 500 (BE#118) để chạy job thật |
 | Notification/reconcile | Background task của BE, retry và audit | Chưa tách service riêng |
 
-Azure là provider đã chốt cho AI/RAG service. Azure Container Apps là phương án triển khai đề xuất cho FastAPI; Container Apps Jobs là ứng viên cho tác vụ hữu hạn như IFC/Blender. SKU, region, giá, máy Unity và cách cấp license còn mở. Không thêm Kubernetes/service mesh/database riêng cho từng module trong phạm vi tài liệu này.
+Azure là provider đã chốt cho AI/RAG service. Azure Container Apps là phương án triển khai đề xuất cho FastAPI; Container Apps Jobs là ứng viên cho tác vụ hữu hạn như IFC/Blender. SKU, region và giá của các service khác còn mở. Máy Unity đã chốt 17/10/2026: Azure VM Windows Server 2022, Standard D4s v4, Malaysia West (Azure for Students), license Unity của tài khoản team kích hoạt qua Unity Hub; VM tắt (deallocate) khi không dùng. Không thêm Kubernetes/service mesh/database riêng cho từng module trong phạm vi tài liệu này.
 
 Luồng production mục tiêu là:
 
