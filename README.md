@@ -49,7 +49,7 @@ FET3D hỗ trợ một Organization quản lý nhiều Building. Mỗi Building 
 | LLM | OpenAI API hoặc Google Gemini API (khóa/cấu hình qua Google AI Studio) | Chưa chọn nhà cung cấp cuối; chỉ triển khai một adapter production sau đánh giá |
 | Object storage | Amazon S3 (AWS S3) | Đã chốt |
 | AI compute | Azure (AI/RAG); Container Apps là phương án triển khai đề xuất | Đã chốt provider Azure cho AI/RAG; SKU, region và chi phí còn cần spike |
-| BE/worker compute | BE và IFC/Blender worker chưa chọn; Unity build worker chạy trên server của team | Không suy ra BE hoặc IFC/Blender worker chạy Azure chỉ vì AI đã chọn Azure |
+| BE/worker compute | BE và IFC/Blender worker chưa chọn; Unity build worker chạy trên Azure VM do BE vận hành | Không suy ra BE hoặc IFC/Blender worker chạy Azure chỉ vì AI đã chọn Azure |
 
 OneShield thuộc hệ thống OnePortal của iNET là lớp edge/bảo vệ phía trước Nginx theo kiến trúc đích; capability, gói/SKU, DNS, TLS termination, WAF/rate limit, logging, SLA, region và chi phí phải xác minh trước production. OneShield không cấp quyền nghiệp vụ và không thay thế kiểm tra identity, tenant hoặc authorization của .NET/PostgreSQL.
 
