@@ -277,13 +277,50 @@ Ví dụ rút gọn `building_metadata.json` trong package (đề xuất, field 
 
 | Thành phần | Việc cần làm |
 | :--- | :--- |
-| IFC worker (Python, repo AI/BE tùy chốt) | Mục 5.1–5.3, từ điển từ khóa có version, xuất facts + ứng viên + issue; test bằng fixture local ở mục 2.1 |
+| IFC worker (Python/IfcOpenShell, `Unity/Tools/GeometryWorker`, chạy pull trên VM worker — mục 5.10) | Mục 5.1–5.3, từ điển từ khóa có version, xuất facts + ứng viên + issue; test bằng fixture local ở mục 2.1 |
 | Blender worker | UV0/UV1, ánh xạ thư viện vật liệu, thay asset theo bbox, LOD, chia tầng, GLB; ghi provenance và số tam giác từng chunk |
 | Unity build worker | Import GLB, URP Lit, collider/NavMesh, bake ánh sáng, gắn component theo `catalogKey`, đóng package theo tầng |
 | BE | Lưu revision/sources/issues, API danh sách thiết bị cần xác nhận, lưu xác nhận của OrganizationUser, validate object `Equipment`/`Hazard` trong state `fet3d.editor/1` của `ScenarioVersion` theo capability `{id,version}` và schema tham số từ catalog (mục 7); không thêm trường `interactions` riêng |
 | FE editor | Checklist xuất IFC, màn hình xác nhận thiết bị, đặt vật dụng/thiết bị PCCC bám bề mặt, dòng thời gian sự kiện, cảnh báo thiếu nguồn nước/báo cháy |
 | Mobile | Tải package theo tầng, kiểm tra hash, báo dung lượng; không xử lý IFC |
 | Unity runtime | `Interactable`, `InteractionDetector`, `ActionBar`, HUD, gửi event; đọc tham số hiệu ứng từ scenario |
+
+### 5.10. Triển khai đợt 1 — IFC → GLB → Unity (19/10/2026)
+
+Phần đã có code và kiểm thử. Phần còn lại của mục 5 vẫn là thiết kế đích.
+
+- **Vị trí và cách chạy.** Worker ở `Unity/Tools/GeometryWorker`, viết bằng Python 3.11 + IfcOpenShell 0.9 (không dùng LLM/RAG).
+  - Agent `Fire3DGeometryWorker.ps1` chạy cạnh Unity package worker trên VM `UNITY-WORKER`, dùng chung `X-Worker-Key`.
+  - Mỗi lần xử lý một job, theo pull mode của BE:
+    1. lease `POST /internal/processing/geometry-jobs/lease`;
+    2. tải IFC qua signed URL và kiểm SHA-256;
+    3. renew trong lúc chạy bộ chuyển đổi;
+    4. xin `upload-urls` rồi PUT kèm header checksum;
+    5. gọi `outputs` cho `preview_glb` (`fet3d.editor/1`) và `building_metadata` (`fet3d.building/1`);
+    6. gọi `complete`, hoặc `fail` nếu lỗi.
+  - Không cấp credential S3 cho worker.
+  - Cờ `ProcessingWorker:GeometryPullEnabled` mặc định tắt; khi bật, dispatcher HTTP không gửi job Geometry.
+- **Blender chưa dùng ở đợt 1.** Bộ chuyển đổi tự tạo lưới Body, UV0 chiếu hộp theo mét và GLB không nhúng texture. Unity build worker sinh UV lightmap khi thiếu. Thay asset theo bbox và LOD (mục 5.4) để sau.
+- **GLB.** Mỗi node gốc là một tầng, id `L1..Ln` theo cao độ (`floors[].id` của metadata trùng với id này).
+  - Mọi phần tử nằm dưới đúng node tầng của nó, giữ cao độ tuyệt đối; node phần tử đặt tên bằng IFC GlobalId (`semanticMapping.nodeId`).
+  - Tên material là `FET3D_<libraryKey>` (ví dụ `FET3D_wall_plaster`) và được ánh xạ trong `building_metadata.materials`.
+  - Phần tử ngoài cây không gian được gán vào tầng ngay bên dưới theo cao độ.
+- **Hệ tọa độ chuẩn của mọi hợp đồng** (`coordinateTransform`, metadata, vị trí đặt trong scenario) là hệ của GLB: mét, trục Y hướng lên, hệ tay phải. Đây cũng là hệ mà editor web dùng để đặt vật.
+  - `g = (x − ox, z − oz, −(y − oy))` từ tọa độ thế giới IFC (đơn vị mét, trục Z hướng lên). `o` là tâm ngang của công trình; giữ cao độ gốc trừ khi lệch xa 0.
+  - Unity đổi sang hệ tay trái bằng cách đảo dấu X, đúng như glTFast làm khi import (`ContractFrame`).
+  - Trong placement, `y` là độ cao so với sàn tầng `floorId`.
+- **Metadata.**
+  - `spaces[].bbox` là tọa độ tuyệt đối.
+  - `portals` gồm cửa (`external`, `fireExit`, `fireRating` chỉ khi có số) và cầu thang (`type: "stair"`, từ IfcStair/IfcStairFlight/IfcRamp). Unity dựng `StairVolume` cho các portal cầu thang.
+  - `interactables` lấy từ PredefinedType hoặc tên, gồm bình chữa cháy, báo cháy, sprinkler, nguồn nước, thang máy và cửa (`door.exit` khi `Pset_DoorCommon.FireExit/IsExternal`). Vị trí theo hệ của tầng (đáy, tâm), kèm `confidence`.
+- **Không tự sửa mô hình.**
+  - Không tự sinh sàn, tường hay cửa thoát.
+  - Cửa có phòng ở một phía và trống ở phía kia chỉ được đưa làm gợi ý trong `ifcGlobalIds` của `IFC_EXIT_UNKNOWN`. Nó không được ghi `exitInferred`, vì Unity sẽ treo biển exit lên cửa đó.
+  - Phòng không có sàn bên dưới chỉ được báo `IFC_NO_FLOOR_UNDER_SPACE`.
+- **Kiểm thử.**
+  - `pytest` dùng một fixture IFC4 đơn vị mm, 2 tầng, tọa độ biết trước, để kiểm đơn vị, trục, GlobalId, cách chia tầng và schema của BE.
+  - `Test/Run-LocalTest.ps1` chạy agent với fake backend theo 3 đường: thành công, ký lại URL hết hạn, và IFC hỏng.
+  - Đã chạy bộ chuyển đổi trên 9 file thật: KIT, Revit ARC, dental clinic, FZK-Haus, duplex, kleine Wohnung, BuildingBIMModel, TallBuilding và LargeBuilding. Metadata của 8 file trong số đó đã qua bước kiểm schema của BE.
 
 ### 5.9. Mã issue QA đề xuất
 
