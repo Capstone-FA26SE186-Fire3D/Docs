@@ -135,6 +135,7 @@ Nguồn đồng bộ auth: [BE authentication](../BE/docs/authentication.md) và
 | FR-TRAINING-06 | Mỗi session mới kiểm tra online ở bước start kể cả package đã cache; sau khi launch grant/gameplay đã bắt đầu, mất mạng hoặc entitlement hết hạn không dừng gameplay, event/result được xếp hàng và đồng bộ khi có mạng. `training`, `release`, `scenario`, tenant và QR đã pin không được đổi. Gate event/result dùng actor sở hữu session, event ID/sequence hoặc result key/hash để replay an toàn; không kiểm tra lại entitlement hay trạng thái active hiện tại để chặn sync phiên đã bắt đầu. | 1 |
 | FR-TRAINING-07 | Unity runtime cung cấp thư viện dùng chung cho movement, camera 3D góc nhìn thứ ba (third-person) bám theo nhân vật, collision, cửa, vật phẩm, lửa/khói/gió/cháy lan và chấm điểm. Camera hỗ trợ orbit/zoom có giới hạn và xử lý vật cản trong không gian BIM; dùng chung cho training/playtest, giữ cấu trúc và kích thước công trình. Organization chỉ cấu hình capability đã có. | 1 |
 | FR-TRAINING-08 | Assessment chấm đạt/chưa đạt theo rubric đã duyệt/version hóa, trả lý do và lưu từng lần. Hoàn thành khác với đạt. Thi lại không giới hạn; không chứng nhận, module/sprint hoặc điều kiện luyện trước. Ngưỡng và trọng số cụ thể chưa chốt. | 1 |
+| FR-TRAINING-09 | Khói trong runtime đọng dưới trần và hạ dần, chuyển từ trắng sang đen theo thời gian, không xuyên tường và chỉ rò qua khe cửa. Người chơi đứng, cúi hoặc bò; phơi nhiễm khói tính theo độ cao đầu so với lớp khói. Thông số là mô hình game, không phải mô phỏng CFD. | 1 |
 
 ### FR-ANALYTICS: analytics
 
