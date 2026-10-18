@@ -229,6 +229,8 @@ cost(edge) = distance
 
 Hazard runtime là surrogate nhẹ: grid lưu fire, smoke, visibility, wind influence và risk proxy. Lửa, khói, gió và cháy lan có lớp hiệu ứng hiển thị cùng trạng thái mô phỏng dùng cho visibility, exposure, route và scoring. Gió theo vùng/cửa/cửa sổ là mô hình game có thể kiểm thử, không phải CFD hoặc mô phỏng thông gió kỹ thuật.
 
+**Khói và tư thế người chơi (Unity, 18/10/2026).** Khói bắt đầu tại đám cháy, màu trắng rồi chuyển đen dần sau khoảng 1 phút. Khói bốc lên, đọng dưới trần thành một lớp và lớp này dày dần xuống phía sàn khi phòng còn khói; khi phòng sạch khói thì lớp rút lên lại. Khói không đi xuyên tường; khói qua cửa mở và chỉ rò rất ít qua khe cửa đóng. Hiển thị khói lấy hình dạng trực tiếp từ grid mô phỏng nên phần người chơi thấy trùng với phần được tính phơi nhiễm. Người chơi có ba tư thế đứng, cúi và bò; lượng khói hít vào tính theo vị trí đầu so với đáy lớp khói, vì vậy cúi hoặc bò dưới lớp khói giảm phơi nhiễm. Chế độ Guided nhắc người chơi cúi hoặc bò khi lớp khói xuống tới đầu. Các thông số (trần 3 m, lớp dày tối đa 2,6 m, đầu đứng 1,55 m, cúi 1,0 m, bò 0,5 m) là giá trị game cho graybox, chưa hiệu chỉnh theo dữ liệu cháy thực tế và chưa đo trên thiết bị Android.
+
 Runtime có thư viện dùng chung cho movement, camera, collision, cửa và item interaction, lửa/khói/gió/cháy lan, event và scoring. Organization chỉ đặt/chọn/cấu hình capability; không viết script Unity cho từng Building. Basic NPC state machine/flow được triển khai theo budget thiết bị; analytics NPC chỉ mô tả scenario mô phỏng.
 
 ## 8. Runtime package, QR và Android handoff
