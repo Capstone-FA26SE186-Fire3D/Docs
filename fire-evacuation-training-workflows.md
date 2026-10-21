@@ -1,5 +1,7 @@
 # Fire Evacuation Training 3D — Workflows
 
+> Hiện trạng implementation và giới hạn nghiệm thu: xem [đối chiếu source 21/10/2026](implementation-status.md). Các thiết kế và bằng chứng lịch sử bên dưới không thay thế kiểm chứng deployment hiện hành.
+
 **Đồng bộ thiết kế ngày 03/10/2026:** yêu cầu nghiệp vụ, SQL design v7, ERD Markdown và Word ý tưởng đã được đồng bộ. Tên bảng/function là contract thiết kế, không chứng minh migration/API/runtime đã triển khai. [Requirements](fire_evacuation_requirements.md) là nguồn yêu cầu sản phẩm; [ghi chú quyết định](phan_tich_khoang_cach_va_quyet_dinh_nghiep_vu.md) ghi lại lựa chọn và chi tiết còn mở.
 
 ## 1. Nguyên tắc chung
@@ -100,7 +102,7 @@ sequenceDiagram
 
 ### 2.3. Google và hồ sơ
 
-`POST /api/auth/login-firebase` nhận Firebase ID token dạng JSON string. UID đã link trả `200 Authenticated` kèm authentication; UID/email mới trả `200 OnboardingRequired`, chưa tạo account; email local trùng trả `409 ACCOUNT_LINK_REQUIRED`. Chưa có API/proof hoàn tất onboarding hoặc explicit link. Yêu cầu đích vẫn là chọn Trainee/OrganizationUser cho identity mới và chứng minh local account trước khi link; không cấp PlatformAdmin hoặc tự gia nhập tenant.
+`POST /api/auth/login-firebase` nhận Firebase ID token dạng JSON string. UID đã link trả `200 Authenticated` kèm authentication; UID/email mới trả `200 OnboardingRequired`, chưa tạo account; email local trùng trả `409 ACCOUNT_LINK_REQUIRED`. Đã có proof và `/api/auth/google/onboarding/complete` (201 Authenticated); mất response/receipt replay cần xác minh Google và exchange lại. `/api/me/link-google` dùng currentPassword + Firebase idToken, `/api/me/password` đặt mật khẩu đầu tiên cho Google-only. Chỉ onboarding Trainee/OrganizationUser và chứng minh local account trước khi link; không cấp PlatformAdmin hoặc tự gia nhập tenant.
 
 `GET/PATCH /api/auth/me` sửa fullName/username/dob/gender/phoneNumber; `GET/PATCH /api/organizations/me` sửa hồ sơ organization. GET trả ETag, PATCH cần If-Match; không đổi role/tenant/email/status. Avatar dùng `/api/me/avatar` upload-intent/upload/complete/GET/delete với private S3; complete/upload/delete cần If-Match. Device dùng Bearer và X-Installation-Key, không dùng FCM token để login.
 

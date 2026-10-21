@@ -1,5 +1,7 @@
 # Thiết Kế RAG Python Hỗ Trợ Gợi Ý Thiết Bị PCCC Từ BIM
 
+> Hiện trạng implementation và giới hạn nghiệm thu: xem [đối chiếu source 21/10/2026](implementation-status.md). Các thiết kế và bằng chứng lịch sử bên dưới không thay thế kiểm chứng deployment hiện hành.
+
 **Đồng bộ thiết kế ngày 03/10/2026:** yêu cầu nghiệp vụ, SQL design v7, ERD Markdown và Word ý tưởng đã được đồng bộ. Tên bảng/function là contract thiết kế, không chứng minh migration/API/runtime đã triển khai. [Requirements](fire_evacuation_requirements.md) là nguồn yêu cầu sản phẩm; [ghi chú quyết định](phan_tich_khoang_cach_va_quyet_dinh_nghiep_vu.md) ghi lại lựa chọn và chi tiết còn mở.
 
 ## 1. Mục tiêu và ranh giới an toàn
@@ -68,11 +70,11 @@ Approved documents -> parser/OCR -> chunker -> Supabase PostgreSQL + pgvector
 | `scenario_draft_service` | Tạo cấu hình kịch bản có schema; OrganizationUser phải chỉnh/xác nhận trong editor trước khi lưu hoặc publish. |
 | `ai_usage_service` | Trả usage kỹ thuật/request status cho backend; backend reserve/chốt quota có sẵn và cấp quota mua thêm qua payment riêng; không để AI/frontend tự tính tiền hoặc cho dùng overage trả sau. |
 
-AI/RAG service chạy Python/FastAPI riêng trên Azure; Container Apps là phương án triển khai đề xuất. IFC/Blender worker dùng Python/IfcOpenShell nhưng chạy job/process độc lập với chat. Dữ liệu quan hệ, chunk metadata và embedding nằm trong Supabase PostgreSQL; `pgvector` là vector store chuẩn, không dùng ChromaDB trong kiến trúc đích. Pipeline package 3D/Unity vẫn tách biệt và chỉ đọc revision facts đã kiểm soát quyền.
+AI/RAG service chạy Python/FastAPI riêng trên Azure; hướng dẫn AI hiện dùng Azure App Service Linux code deploy; Container Apps là phương án thay thế. IFC/Blender worker dùng Python/IfcOpenShell nhưng chạy job/process độc lập với chat. Dữ liệu quan hệ, chunk metadata và embedding nằm trong Supabase PostgreSQL; `pgvector` là vector store chuẩn, không dùng ChromaDB trong kiến trúc đích. Pipeline package 3D/Unity vẫn tách biệt và chỉ đọc revision facts đã kiểm soát quyền.
 
 Production client gọi `.NET API`, không gọi trực tiếp AI service. Backend gửi request ID, idempotency key, canonical input hash, audience, scope, source/revision version và context tối thiểu; AI trả status, citations, model/version và usage kỹ thuật. Timeout được tra cứu theo request ID; retry cùng idempotency key không tạo response/usage thứ hai. AI service không có quyền sửa editor, publish, entitlement hoặc billing ledger.
 
-LLM production chưa chọn giữa OpenAI API và Google Gemini API (khóa/cấu hình qua Google AI Studio). `recommendation_service` phải gọi qua provider adapter, giữ cùng output schema/safety gate và chỉ bật một provider production sau evaluation. Không tự fallback sang provider còn lại nếu chưa có cấu hình và phê duyệt dữ liệu tương ứng. ChromaDB là hiện trạng/prototype cũ, không phải vector store đích.
+LLM production chưa chọn giữa OpenAI API và Google Gemini API (khóa/cấu hình qua Google AI Studio). `recommendation_service` phải gọi qua provider adapter, giữ cùng output schema/safety gate và chỉ bật một provider production sau evaluation. Không tự fallback sang provider còn lại nếu chưa có cấu hình và phê duyệt dữ liệu tương ứng. ChromaDB thuộc legacy; RAG v2 đã có PgVectorIndex và provider adapters, nhưng migration dữ liệu/provider production cần nghiệm thu riêng.
 
 ## 5. Quy trình tạo khuyến nghị
 

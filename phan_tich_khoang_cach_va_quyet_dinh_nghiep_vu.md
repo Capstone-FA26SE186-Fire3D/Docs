@@ -1,5 +1,7 @@
 # Phân tích khoảng cách và quyết định nghiệp vụ FET3D
 
+> Hiện trạng implementation và giới hạn nghiệm thu: xem [đối chiếu source 21/10/2026](implementation-status.md). Các thiết kế và bằng chứng lịch sử bên dưới không thay thế kiểm chứng deployment hiện hành.
+
 ## Mục đích và trạng thái
 
 Tài liệu đối chiếu bộ Docs hiện tại với các quyết định nghiệp vụ đã chốt về kịch bản, quyền chơi, đánh giá học viên, gói dịch vụ và AI/RAG. Các note đã được chuẩn hóa thành quyết định và bốn flow; các tài liệu Markdown liên quan đã được đồng bộ theo quyết định này.

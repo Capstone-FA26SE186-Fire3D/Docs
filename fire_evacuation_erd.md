@@ -1,8 +1,10 @@
 # Fire Evacuation Training 3D — PostgreSQL ERD
 
+> Hiện trạng implementation và giới hạn nghiệm thu: xem [đối chiếu source 21/10/2026](implementation-status.md). Các thiết kế và bằng chứng lịch sử bên dưới không thay thế kiểm chứng deployment hiện hành.
+
 This ERD mirrors the design target in `fire_evacuation_schema.sql` version 7.0. SQL is authoritative for defaults and check-constraint expressions. This is a design document, not a database migration.
 
-**Authentication alignment (2026-10-03):** v7 adds OTP challenge/proof/job records and normalized-email uniqueness for the BE `0683d90` flow: form → OTP challenge → single-use proof → verified account → login. Refresh rotation/session-family checks, profile/organization ETags and transactional reset/change are implementation concerns; Google onboarding completion/link endpoints remain missing. See [BE authentication](../BE/docs/authentication.md) and [workflows](fire-evacuation-training-workflows.md).
+**Authentication alignment (2026-10-03):** v7 adds OTP challenge/proof/job records and normalized-email uniqueness for the BE `0683d90` flow: form → OTP challenge → single-use proof → verified account → login. Refresh rotation/session-family checks, profile/organization ETags and transactional reset/change are implementation concerns; Google onboarding completion/link endpoints now exist in BE source; real Firebase/client acceptance remains separate. See [BE authentication](../BE/docs/authentication.md) and [workflows](fire-evacuation-training-workflows.md).
 
 ## Product decisions represented by v7.0
 

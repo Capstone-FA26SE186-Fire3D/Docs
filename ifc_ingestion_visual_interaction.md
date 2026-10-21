@@ -1,5 +1,7 @@
 # IFC ingestion, chất lượng hiển thị và tương tác runtime — FET3D
 
+> Hiện trạng implementation và giới hạn nghiệm thu: xem [đối chiếu source 21/10/2026](implementation-status.md). Các thiết kế và bằng chứng lịch sử bên dưới không thay thế kiểm chứng deployment hiện hành.
+
 Tài liệu này bổ sung cho [technology mục 6–8](fire-evacuation-training-technology.md#6-ifc-pipeline-tự-động) và [workflows mục 3–4](fire-evacuation-training-workflows.md#3-workflow-building-và-ifc). Nó gom kết quả spike ngày 14/10/2026 với 25 file IFC công khai thành contract đề xuất cho IFC/Blender worker, Unity build worker, BE, FE editor, Mobile và Unity runtime.
 
 **Trạng thái:** thiết kế đích + bằng chứng spike cục bộ. Chưa có migration, API, worker production, Unity code hay benchmark Android. Mọi mục ghi "đề xuất" cần team chốt trước khi triển khai. Tài liệu không thay đổi quyết định đã chốt: IFC là source duy nhất, chủ tòa không làm thủ công trong Blender/Unity, kích thước và cấu trúc công trình được bảo toàn.

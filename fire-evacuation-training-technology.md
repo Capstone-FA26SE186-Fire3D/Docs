@@ -1,5 +1,7 @@
 # Fire Evacuation Training 3D — Technology & Architecture
 
+> Hiện trạng implementation và giới hạn nghiệm thu: xem [đối chiếu source 21/10/2026](implementation-status.md). Các thiết kế và bằng chứng lịch sử bên dưới không thay thế kiểm chứng deployment hiện hành.
+
 **Đồng bộ thiết kế ngày 03/10/2026:** yêu cầu nghiệp vụ, SQL design v7, ERD Markdown và file Word ý tưởng đã được đồng bộ trong đợt này. Tên bảng/function mô tả contract thiết kế, không chứng minh migration/API/runtime đã triển khai. [Requirements](fire_evacuation_requirements.md) là nguồn yêu cầu sản phẩm; [schema v7 contract](schema_v7_contract.md) tóm tắt entity/gate; [ghi chú quyết định](phan_tich_khoang_cach_va_quyet_dinh_nghiep_vu.md) ghi lại lựa chọn và chi tiết còn mở.
 
 ## 1. Mục tiêu kỹ thuật
@@ -94,29 +96,29 @@ Backend là nguồn sự thật cho ownership scope, Building, revision, scenari
 | API/jobs | C# + ASP.NET Core trên .NET | Xác minh Firebase ID token, AuthZ, domain command, QR resolve, session, audit, billing webhook và job orchestration. |
 | Database | Supabase Database (PostgreSQL) | Dữ liệu tenant-scoped, revision, release, session/result, analytics, quotation/transaction/invoice metadata. Supabase Auth không được dùng. |
 | Vector database | `pgvector` trên cùng PostgreSQL/Supabase | Embedding, metadata-filtered retrieval và vector index cho RAG; thay thế ChromaDB của prototype cũ. |
-| Cache/event transport | Redis cache-aside + Redis Streams | Cache dữ liệu đọc và vận chuyển event/job sau transactional outbox; PostgreSQL vẫn là nguồn sự thật. Redis là kiến trúc đích, chưa triển khai; provider, version, retention và TTL còn mở. |
+| Cache/event transport | Redis cache-aside + Redis Streams | Cache dữ liệu đọc và vận chuyển event/job sau transactional outbox; PostgreSQL vẫn là nguồn sự thật. BE đã có source Redis cache/Streams/recovery; triển khai/nghiệm thu phải kiểm riêng; provider, version, retention và TTL còn mở. |
 | Authentication | BE email/password + Firebase Authentication cho Google Sign-In | BE hash password, refresh/reset token và cấp phiên Fire3D. Firebase chỉ xác minh Google ID token; Firebase không quyết định authorization nghiệp vụ. |
 | Push notification | Firebase Cloud Messaging (FCM) | Gửi notification đến installation đã đăng ký; token FCM phải được rotate/revoke và không dùng làm credential đăng nhập. |
 | Object storage | Amazon S3 (AWS S3) | Raw IFC, manifest, content package và avatar private qua object key server-side và signed URL TTL ngắn. |
-| AI/RAG service | Python + FastAPI trên Azure; Container Apps là phương án triển khai đề xuất | Service nội bộ cho retrieval, grounded generation, citations, safety gate và usage kỹ thuật; client không gọi trực tiếp. Prototype hiện vẫn gọi API riêng. |
+| AI/RAG service | Python + FastAPI trên Azure; hướng dẫn AI hiện dùng Azure App Service Linux code deploy; Container Apps là phương án thay thế | Service nội bộ cho retrieval, grounded generation, citations, safety gate và usage kỹ thuật; client không gọi trực tiếp. AI nghiệp vụ FE gọi .NET; direct FastAPI demo chỉ development. |
 | IFC/Blender worker | Python + IfcOpenShell (đợt 1 đã triển khai ở `Unity/Tools/GeometryWorker`, pull mode trên VM worker); Blender script khi cần LOD/thay asset | Nhận job qua lease bền vững, parse IFC, geometry, GlobalId/facts và QA; xuất `preview_glb` + `building_metadata` (xem [IFC ingestion mục 5.10](ifc_ingestion_visual_interaction.md#510-triển-khai-đợt-1--ifc--glb--unity-19102026)); worker không phục vụ chat đồng thời. |
 | Unity build worker | Unity Editor 6000.6.6f1 chạy batch trên Azure VM Windows (BE vận hành, BE#110) | Import GLB, gán material URP từ thư viện theo `libraryKey`, tạo collider, bake lightmap + light probe + reflection probe (bộ ánh sáng bình thường và mất điện), đóng AssetBundle theo tầng và manifest; không coi Python/GLB là AssetBundle nếu thiếu Unity Editor worker. |
 | LLM provider | OpenAI API hoặc Google Gemini API qua Google AI Studio | Chưa chọn nhà cung cấp cuối; dùng provider adapter và chỉ bật một provider production sau đánh giá chất lượng, chi phí và quota. |
 | Android shell | React Native/Expo + native Android bridge | Login, QR/list bài, download/verify/cache, local queue sau khi session bắt đầu và Unity handoff. |
 | Native Android bridge | Thành phần tích hợp Mobile–Unity | Nhận yêu cầu launch từ Mobile, truyền dữ liệu cho Unity và chuyển callback/event/result về Mobile. |
 | 3D runtime | Unity 6000.6.6f1 + URP + Entities (ECS); nạp AssetBundle trực tiếp, không dùng Addressables | Scene, navigation, hazard surrogate, A*, reusable NPC/interaction behaviors và event emission. Lửa/khói/nhiệt và NPC là Entities tạo lúc runtime từ metadata + scenario; player, camera, tương tác, UI và bridge dùng MonoBehaviour. Hậu kỳ URP: tonemapping, bloom, SSAO nhẹ. |
-| Compute/VPS | Azure cho AI/RAG; BE và worker còn lại chưa chốt | Azure là quyết định cho AI service. Container Apps là phương án triển khai đề xuất; SKU, region và chi phí vẫn cần spike. Unity build worker chạy trên Azure VM Windows do BE vận hành (quyết định 17/10/2026, BE#110). Không tự suy ra toàn bộ hệ thống chạy Azure. |
+| Compute/VPS | Azure cho AI/RAG; BE và worker còn lại chưa chốt | Azure là quyết định cho AI service. hướng dẫn AI hiện dùng Azure App Service Linux code deploy; Container Apps là phương án thay thế; SKU, region và chi phí vẫn cần spike. Unity build worker chạy trên Azure VM Windows do BE vận hành (quyết định 17/10/2026, BE#110). Không tự suy ra toàn bộ hệ thống chạy Azure. |
 | Payments | PayOS production | Gói Building 6/12 tháng, entitlement/hạn mức người, nâng cấp gói và mua quota AI trả trước; webhook idempotent. |
 
 LLM vẫn là decision gate giữa OpenAI và Gemini; Azure cho AI service không có nghĩa đã chọn LLM. Code không được phụ thuộc trực tiếp vào SDK LLM hay hạ tầng provider ngoài adapter/configuration boundary.
 
-Hiện trạng code chưa đồng nhất hoàn toàn với kiến trúc đích: AI prototype còn ChromaDB/OpenAI và backend đã có nhánh triển khai password/JWT. Tài liệu này không tuyên bố các phần đó đã migrate sang `pgvector`/Firebase; migration code, dữ liệu và rollback phải được thiết kế, review và kiểm thử trong task riêng.
+Source AI hiện có **RAG v2** tại `AI/rag-api/app/v2`, request store/recovery, `PgVectorIndex`/`MemoryIndex`, OpenAI/Gemini/fake adapters, safety gate và eval offline. ChromaDB cùng `/chat`, `/documents`, `/pccc/*` thuộc legacy (routes tắt mặc định), không đại diện toàn bộ implementation. FE gọi .NET cho AI nghiệp vụ; backend cấp scope/quota rồi mới gọi FastAPI. Có source không chứng minh dữ liệu đã migrate hoặc provider/pgvector/deployment production đã nghiệm thu.
 
 ### 4.1. Ranh giới motion và runtime web
 
 - Scene landing giữ một camera path và presentation state riêng. Scroll progress điều khiển camera/copy; khói, lửa và ánh sáng môi trường có animation nhẹ độc lập, dừng khi tab ẩn.
 - WebGL không khả dụng hoặc `prefers-reduced-motion` phải chuyển sang ảnh tĩnh/fade ngắn nhưng giữ menu, nội dung và hai nhánh.
-- ThreeUI (`@designcodeio/threeui@1.2.0`) là thư viện component React phụ trợ ở FE; component phải được kiểm tra trước khi dùng. Không đưa ThreeUI/Three.js vào BE hoặc Mobile và không dùng component có sẵn để giả định gameplay.
+- Three.js là renderer FE; ThreeUI chỉ là reference cũ, không có trong dependencies hiện hành. Không đưa renderer web vào BE/Mobile hoặc coi component web là gameplay Unity.
 - `motion/react` chỉ xử lý UI/scroll transition; Remotion chỉ là công cụ tùy chọn cho storyboard/teaser dùng `useCurrentFrame()`, không phải dependency runtime đã chốt.
 
 ### 4.2. Cấu trúc source FE theo feature
@@ -136,7 +138,7 @@ src/
 └─ hooks/ · layouts/ · services/ · store/ · utils/
 ```
 
-`features/<name>` sở hữu logic nghiệp vụ và type riêng; `components/ui` là UI dùng chung; `services` là client/interceptor và adapter cross-feature; `configs` parse route/env không nhạy cảm; `store` chỉ giữ state liên route; `app/` và `layouts` chỉ composition. Landing scene và asset 3D được lazy-load theo route. FE hiện dùng Next.js App Router; không tạo lại `pages/`, root `App.tsx` hoặc cấu hình Vite. RAG/auth trong FE vẫn là tích hợp prototype cho tới khi nối Firebase và API production.
+`features/<name>` sở hữu logic nghiệp vụ và type riêng; `components/ui` là UI dùng chung; `services` là client/interceptor và adapter cross-feature; `configs` parse route/env không nhạy cảm; `store` chỉ giữ state liên route; `app/` và `layouts` chỉ composition. Landing scene và asset 3D được lazy-load theo route. FE hiện dùng Next.js App Router; không tạo lại `pages/`, root `App.tsx` hoặc cấu hình Vite. Auth và AI nghiệp vụ FE đã có API client .NET; /demo/rag là legacy chỉ development. Nghiệm thu Firebase/provider/deployment tách khỏi source/mock tests.
 
 ### 4.3. Kinh nghiệm triển khai Mobile Expo/React Native và bảo trì
 
@@ -144,7 +146,7 @@ Prototype Mobile dùng Expo Router nhưng giữ route mỏng: `app/` chỉ khai 
 
 Ranh giới runtime phải được giữ rõ:
 
-- React Native/Expo chịu login, QR, cache metadata, điều hướng và trạng thái phiên. Three.js/ThreeUI là phụ thuộc DOM/CSS của FE, không đưa vào native UI.
+- React Native/Expo chịu login, QR, cache metadata, điều hướng và trạng thái phiên. Three.js phục vụ renderer FE (ThreeUI là reference cũ), không đưa vào native UI.
 - Hình low-poly ở lobby là PNG sprite tĩnh để tải nhanh và có fallback; 3D gameplay, hazard, A* và event vẫn thuộc Unity qua native bridge. Không dựng mesh Unity trong Expo để mô phỏng tính năng gameplay.
 - Demo chỉ dùng allowlist QR và `AsyncStorage` cho session giả. Bản production phải resolve QR opaque qua API, kiểm tra `TrainingRelease`/`Training` đang active và xác minh quyền trước khi tải content; token đăng nhập phải dùng SecureStore, không lưu secret trong AsyncStorage hoặc deep link.
 
@@ -385,7 +387,7 @@ Local registration theo form → request-otp → verify-otp → register(form + 
 
 Login/refresh cấp accessToken/refreshToken/user, không có expiresAt; TTL theo cấu hình Jwt. Refresh rotate, giữ hạn tuyệt đối family; replay token consume/revoke thu hồi family. API kiểm account/organization và family trong DB. Logout revoke family hiện tại, logout-all revoke mọi family và tắt push bindings; refresh quota 10/IP/phút mỗi instance trả 429 AUTH_REFRESH_RATE_LIMITED/Retry-After.
 
-Google `/api/auth/login-firebase` nhận Firebase ID token dạng JSON string. UID đã link trả 200 Authenticated kèm authentication; UID/email mới trả 200 OnboardingRequired; email local trùng trả 409 ACCOUNT_LINK_REQUIRED. Onboarding completion/explicit link còn thiếu endpoint/proof; các tên `/api/auth/google/onboarding/complete`, `/api/me/link-google` và set-password từng đề xuất không phải API hiện có.
+`POST /api/auth/login-firebase` nhận Firebase ID token dạng JSON string, trả Authenticated hoặc OnboardingRequired. Completion dùng proof qua `/api/auth/google/onboarding/complete` trả 201 Authenticated; explicit link qua `/api/me/link-google`, đặt mật khẩu local đầu tiên qua `/api/me/password`. Đã có source/API theo [BE authentication](../BE/docs/authentication.md); mất response hoặc receipt replay thì Google exchange lại, không tự nhận session từ proof. Nghiệm thu provider/client riêng.
 
 Profile dùng GET/PATCH `/api/auth/me`, organization dùng GET/PATCH `/api/organizations/me`; GET trả ETag, PATCH cần If-Match. Avatar upload-intent/upload/complete/GET/delete dưới `/api/me/avatar`; upload/complete/delete cần If-Match. Device ngoài Bearer cần X-Installation-Key.
 
@@ -406,7 +408,7 @@ Forgot trả 202 chung, enqueue chỉ cho account có password local hoạt đ�
 | AI/RAG và usage | Organization draft/BIM thuộc mình; Trainee Learn/Common hợp lệ và bài đã duyệt/phát hành có quyền chơi ngoài Assessment | requestId, scope/source version, evidence, policy, reservation allocation và usage; scenario chỉ index `name`, `objectives`, `instructions`, Learn luôn pin cả post và published version | Idempotent, thiếu quota chặn trước LLM; timeout reconcile cùng request; evidence thiếu trả InsufficientEvidence; không truy draft tenant khác |
 | Learn CMS/public | Public đọc Published; chỉ `PlatformAdmin` quản trị editorial; Trainee bookmark/hỏi AI; Hidden chỉ dùng RAG, Deleted bị loại | `postId`, `versionId`, slug, kind, situation IDs, content schema/hash, source IDs, media provider/canonical URL, audit actor | ETag/revision và idempotency cho draft/publish/bookmark/delete/restore; `409` version conflict, `422` content/media/source sai, `404/410` bài không public; cache không trả Draft/Hidden/Deleted |
 
-### 9.1. Bảng thiết kế đích và hiện trạng code
+### 9.1. Bảng đối chiếu thiết kế lịch sử (03/10/2026)
 
 | Năng lực | Thiết kế đích/SQL/ERD | Hiện trạng code đã đối chiếu | Việc còn thiếu |
 |---|---|---|---|
@@ -422,7 +424,7 @@ Forgot trả 202 chung, enqueue chỉ cho account có password local hoạt đ�
 
 Đây là bảng truy vết thiết kế, không phải tuyên bố code đã khớp hoặc database đã được migrate.
 
-### 9.2. Nguồn chính của field và mapping triển khai
+### 9.2. Nguồn chính của field và mapping thiết kế (đối chiếu lịch sử)
 
 | Chủ đề | Nguồn chính trong thiết kế đích | Field giữ lại/loại bỏ | Hiện trạng code và phần còn thiếu |
 |---|---|---|---|
@@ -537,7 +539,7 @@ Các ca sau là tiêu chí cho đầu việc code tiếp theo, chưa phải kế
 | `Unity build worker` | Unity Editor/toolchain, collider/NavMesh, bake ánh sáng, runtime package và manifest | Agent pull-mode đã có (Unity `Tools/PackageWorker`), VM Azure đã cài; chờ BE sửa lease 500 (BE#118) để chạy job thật |
 | Notification/reconcile | Background task của BE, retry và audit | Chưa tách service riêng |
 
-Azure là provider đã chốt cho AI/RAG service. Azure Container Apps là phương án triển khai đề xuất cho FastAPI; Container Apps Jobs là ứng viên cho tác vụ hữu hạn như IFC/Blender. SKU, region và giá của các service khác còn mở. Máy Unity đã chốt 17/10/2026: Azure VM Windows Server 2022, Standard D4s v4, Malaysia West (Azure for Students), license Unity của tài khoản team kích hoạt qua Unity Hub; VM tắt (deallocate) khi không dùng. Không thêm Kubernetes/service mesh/database riêng cho từng module trong phạm vi tài liệu này.
+Azure là provider đã chốt cho AI/RAG service. Hướng dẫn AI hiện dùng Azure App Service Linux code deploy cho FastAPI; Container Apps là phương án thay thế; Container Apps Jobs là ứng viên cho tác vụ hữu hạn như IFC/Blender. SKU, region và giá của các service khác còn mở. Máy Unity đã chốt 17/10/2026: Azure VM Windows Server 2022, Standard D4s v4, Malaysia West (Azure for Students), license Unity của tài khoản team kích hoạt qua Unity Hub; VM tắt (deallocate) khi không dùng. Không thêm Kubernetes/service mesh/database riêng cho từng module trong phạm vi tài liệu này.
 
 Luồng production mục tiêu là:
 
@@ -635,5 +637,5 @@ Acceptance test triển khai cho contract Redis/outbox gồm: event đang leased
 - `quotations` không còn ba field header `building_id`, `service_package_id`, `service_duration_months`; mọi BuildingService scope và duration nằm ở `quotation_building_items`. `quantity`/`unit_price` header chỉ là tổng hợp hiển thị, không phải nguồn danh sách Building hay giá dòng.
 - `application_command_receipts` là receipt bền vững cho các command Learn cần replay kết quả; nó lưu actor, operation, idempotency key, canonical input hash và result đã commit, không lưu secret. Audit/outbox/state vẫn commit trong cùng transaction.
 - Reset/change password mục tiêu thu hồi refresh-token family trong transaction user hiện có. BE main `0683d90` đã có khóa user, consume reset token, đổi hash, revoke family và audit cùng transaction trong LocalPasswordReset; cần nghiệm thu DB/provider riêng. Câu trạng thái handler chưa hoàn tất ở bản cũ đã lỗi thời.
-- Local email/password và Google UID đã liên kết là đường đăng nhập hợp lệ. Google mới trả OnboardingRequired; flow đích chỉ chọn Trainee/OrganizationUser nhưng chưa có API hoàn tất. Username Trainee nhập khi đăng ký/onboarding đích, không hỏi lại ở game start.
+- Local email/password và Google UID đã liên kết là đường đăng nhập hợp lệ. Google mới trả OnboardingRequired; completion đã có API, chỉ cho chọn Trainee/OrganizationUser; nghiệm thu Firebase/client riêng. Username Trainee nhập khi đăng ký/onboarding đích, không hỏi lại ở game start.
 - Các kiểm tra lần này là kiểm tra tĩnh tài liệu/schema/quyền; chưa chạy PostgreSQL, concurrency, auth revoke, payment provider, S3, email, RAG hoặc Redis recovery.

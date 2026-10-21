@@ -1,5 +1,7 @@
 # FET3D Schema v7.0 — Product Contract
 
+> Hiện trạng implementation và giới hạn nghiệm thu: xem [đối chiếu source 21/10/2026](implementation-status.md). Các thiết kế và bằng chứng lịch sử bên dưới không thay thế kiểm chứng deployment hiện hành.
+
 `fire_evacuation_schema.sql` is the design schema for this contract. It is not evidence that a production migration has run. No commercial amount, quota unit, expiry/rollover rule, rubric threshold, or certificate rule is seeded or inferred here.
 
 ## What v7 locks down

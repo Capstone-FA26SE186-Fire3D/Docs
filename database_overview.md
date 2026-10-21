@@ -1,6 +1,8 @@
 # FET3D v7 — Database Overview (Họp nhóm)
 
-**Đối chiếu auth BE 03/10/2026:** v7 biểu diễn flow main `0683d90`: form → OTP challenge → proof một lần → account verified → login, gồm challenge/proof/job và unique email trim/lowercase. Refresh rotation/family check, profile/organization ETag và reset/change transaction vẫn cần nghiệm thu trong DB/provider/deployment thực tế; Google onboarding/link còn thiếu API hoàn tất. [BE authentication](../BE/docs/authentication.md) và [workflows](fire-evacuation-training-workflows.md) là nguồn flow đối chiếu.
+> Hiện trạng implementation và giới hạn nghiệm thu: xem [đối chiếu source 21/10/2026](implementation-status.md). Các thiết kế và bằng chứng lịch sử bên dưới không thay thế kiểm chứng deployment hiện hành.
+
+**Đối chiếu auth BE 03/10/2026:** v7 biểu diễn flow main `0683d90`: form → OTP challenge → proof một lần → account verified → login, gồm challenge/proof/job và unique email trim/lowercase. Refresh rotation/family check, profile/organization ETag và reset/change transaction vẫn cần nghiệm thu trong DB/provider/deployment thực tế; Google onboarding/link đã có API; xem BE authentication hiện hành và nghiệm thu provider/client riêng. [BE authentication](../BE/docs/authentication.md) và [workflows](fire-evacuation-training-workflows.md) là nguồn flow đối chiếu.
 
 > **Dự án:** Fire Evacuation Training 3D | **DB:** PostgreSQL | **Schema version:** v7.0
 > **Đối chiếu:** SQL v7 là nguồn thiết kế cho cấu trúc/field/FK/gate của quyết định 03/10/2026. Requirements là nguồn hành vi đích; schema không chứng minh migration, API hay worker đã chạy production.
@@ -12,7 +14,7 @@
 
 **Thư viện hỗ trợ Organization** gồm template kịch bản tùy chọn, bộ tiêu chí chấm mẫu và danh mục thiết bị game đã được runtime hỗ trợ. PlatformAdmin duy trì các nội dung chuẩn; OrganizationUser dùng để soạn/cấu hình bài trong khu quản lý đã đăng nhập. Thư viện này tách khỏi **Learn công khai** trên web: bài viết, mẹo và video cho mọi người đọc không cần đăng nhập; lưu bài/hỏi AI cần đăng nhập. Learn giữ quy trình biên tập hiện tại và không có bước duyệt bài riêng. Mode Learn trong Unity là trải nghiệm làm quen không gian, không phải blog. IFC, mô hình và kịch bản riêng của Organization không tự được chia sẻ vào thư viện.
 
-| Nghiệp vụ đích | Representation v7; API/runtime chưa triển khai |
+| Nghiệp vụ đích | Representation thiết kế v7; đối chiếu API/runtime và deployment riêng |
 | --- | --- |
 | Template/rubric/thiết bị cho Organization | Catalog/version riêng, quyền PlatformAdmin; không dùng learn_posts làm bảng template hoặc thiết bị |
 | Admin duyệt mọi phiên bản | `scenario_content_reviews` lưu submit/approve/reject đúng scenario version/rubric và lý do; readiness revision_reviews không thay review nội dung |
@@ -448,7 +450,7 @@ Created ──► Launching ──► Running ──► Completed
 | **Media** | `content_blocks` JSONB có schema; video chỉ lưu provider/URL/ID đã chuẩn hóa và được allowlist YouTube/Facebook/TikTok; không nhận iframe/script tùy ý |
 | **Vòng đời** | Version `Draft → Published`; bài `Unpublished → Published`, `Published ↔ Hidden` hoặc soft-delete `Deleted`. Hidden giữ `published_version_id` và vẫn đủ điều kiện RAG; Deleted giữ lịch sử nhưng không retrieval; bản Published bất biến. Restore không tự public |
 | **Ràng buộc** | Public API/cache chỉ trả bài Published với pointer đúng version; Hidden/Unpublished/Deleted không public; Hidden có thể vào RAG; bookmark unique theo Trainee–post; AI loại Deleted/draft |
-| **Trạng thái** | Thiết kế mục tiêu; prototype Learn hiện chưa chứng minh CMS, embed provider hoặc indexing production |
+| **Trạng thái** | Thiết kế dữ liệu; BE/FE đã có CMS source/API, nghiệm thu embed provider/indexing/deployment riêng |
 
 ---
 
@@ -596,7 +598,7 @@ Gói từng Building 6/12 tháng gồm phí game, hạn mức người và quota
 | **Audit có provenance** | `audit_logs` giữ `user_id`, `organization_id`, `actor_type` và `correlation_id`; append-only, không ghi secret |
 
 ### 3. Workflow chưa có implementation
-- Google onboarding completion/link còn thiếu; BE main `0683d90` đã có profile/avatar và reset/change thu hồi family trong transaction, cần đối chiếu schema và nghiệm thu DB/S3/Mailgun
+- Google onboarding completion/link và set-password đã có source/API; BE cũng có profile/avatar và reset/change thu hồi family trong transaction, cần đối chiếu schema và nghiệm thu DB/S3/Mailgun
 - IFC geometry validator (worker ngoài DB)
 - Object storage integration (DB chỉ lưu key, không lưu bytes)
 - React Native/Expo native Android bridge–Unity launch protocol
