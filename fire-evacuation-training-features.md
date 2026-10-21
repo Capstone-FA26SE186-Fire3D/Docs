@@ -1,6 +1,8 @@
 # Fire Evacuation Training 3D — Tổng Hợp Tính Năng
 
-**Đồng bộ auth BE 03/10/2026:** theo [authentication](../BE/docs/authentication.md) và [API guide](../BE/docs/api-docs.md), source BE main `0683d90`. Local registration dùng form → OTP → registrationToken → register → login; register trả account, chưa cấp JWT. Google UID đã link đăng nhập được; onboarding/link mới còn thiếu API hoàn tất. Các quy tắc đầy đủ và sơ đồ nằm tại [workflows mục 2.1–2.4](fire-evacuation-training-workflows.md#21-đăng-ký-local-form--otp--account--login). Source không chứng minh client/provider/deployment đã nghiệm thu.
+> Hiện trạng implementation và giới hạn nghiệm thu: xem [đối chiếu source 21/10/2026](implementation-status.md). Các thiết kế và bằng chứng lịch sử bên dưới không thay thế kiểm chứng deployment hiện hành.
+
+**Đối chiếu auth hiện hành — 21/10/2026:** theo [BE authentication](../BE/docs/authentication.md) và [API guide](../BE/docs/api-docs.md). Local registration: form → OTP → registrationToken → register trả account → login riêng. Google mới nhận proof `OnboardingRequired`; `POST /api/auth/google/onboarding/complete` tạo account/phiên và trả 201 Authenticated. Đã có `POST /api/me/link-google` (mật khẩu local hiện tại + Firebase ID token) và `POST /api/me/password` (đặt mật khẩu local đầu tiên cho Google-only). Mất response hoặc proof đã dùng phải xác minh Google/exchange lại; không tự phát lại JWT từ receipt. Firebase thật, database và client/deployment vẫn cần nghiệm thu riêng.
 
 **Đồng bộ thiết kế ngày 03/10/2026:** yêu cầu nghiệp vụ, SQL design v7, ERD Markdown và Word ý tưởng đã được đồng bộ. Tên bảng/function là contract thiết kế, không chứng minh migration/API/runtime đã triển khai. [Requirements](fire_evacuation_requirements.md) là nguồn yêu cầu sản phẩm; [ghi chú quyết định](phan_tich_khoang_cach_va_quyet_dinh_nghiep_vu.md) ghi lại lựa chọn và chi tiết còn mở.
 
@@ -77,7 +79,7 @@ Mọi session mới phải kiểm tra online ở bước start, kể cả packag
 - Landing mở bằng hành trình góc nhìn thứ nhất cuộn qua công trình đang cháy. Cuối hành trình, **Tôi muốn tập huấn** dẫn tới cảnh thu vào điện thoại rồi đăng nhập/Góc học tập; **Tôi muốn tổ chức tập huấn** dẫn tới mặt cắt tòa nhà và trang Dành cho tổ chức.
 - Góc học tập của Trainee đã đăng nhập gồm hỏi AI, bài đã lưu, lịch sử và kết quả cá nhân. Hỏi AI, hỏi về bài đang đọc và lưu bài yêu cầu đăng nhập.
 - Trang Dành cho tổ chức công khai giải thích năng lực sản phẩm; thao tác quản lý Building, IFC, scenario, publish, QR, analytics và billing vẫn yêu cầu `OrganizationUser` đúng ownership.
-- Learn web (blog kiến thức cộng đồng có nguồn) là luồng riêng với mode Learn trong Unity (làm quen không gian/runtime). Learn web là thiết kế mục tiêu; prototype hiện có chưa chứng minh CMS, video provider hoặc indexing production.
+- Learn web (blog kiến thức cộng đồng có nguồn) là luồng riêng với mode Learn trong Unity (làm quen không gian/runtime). FE đã có Learn CMS/public reader/search, bookmark, Hỏi đáp AI Trainee và lịch sử/kết quả gọi .NET API. Test mock và smoke API thật là các mức bằng chứng riêng; không coi source UI là nghiệm thu CMS/provider embed hoặc indexing production. Xem [tracker FE](../FE/docs/fet3d-operations-ui-tracker.md).
 
 ## 5. Nội dung training
 
@@ -94,7 +96,7 @@ Learn web là thư viện bài viết, tip & trick và video PCCC theo tình hu�
 ### 5.1.1. Tài khoản và hồ sơ
 
 - Trainee đăng ký bằng email/username/password/confirm password; username được BE chuẩn hóa lowercase và unique không phân biệt hoa thường. OrganizationUser đăng ký email/password/confirm password cùng tên, địa chỉ và số điện thoại tổ chức; username cá nhân có thể bổ sung sau. Confirm password không được lưu.
-- Local registration nhập form → OTP → proof → register → login; OTP chưa tạo account, register trả 201 account verified và chưa cấp JWT. Google UID đã link đăng nhập theo role/tenant cũ; identity mới trả OnboardingRequired, email local trùng trả 409 ACCOUNT_LINK_REQUIRED. Onboarding chọn Trainee/OrganizationUser và explicit link còn thiếu API hoàn tất. Game start không hỏi username.
+- Local registration nhập form → OTP → proof → register → login; OTP chưa tạo account, register trả 201 account verified và chưa cấp JWT. Google UID đã link đăng nhập theo role/tenant cũ; identity mới trả OnboardingRequired, email local trùng trả 409 ACCOUNT_LINK_REQUIRED. Onboarding chọn Trainee/OrganizationUser và explicit link đã có API; xem BE authentication hiện hành. Game start không hỏi username.
 - Hồ sơ cho phép đổi username, tên hiển thị, mật khẩu và avatar; OrganizationUser có thể cập nhật tên/địa chỉ/điện thoại tổ chức. Không cho đổi role, tenant, email đăng nhập hoặc trạng thái qua profile API.
 - Avatar dùng private S3 object key do backend cấp upload intent; API tạo signed URL ngắn hạn để đọc. Firebase chỉ dùng Google Sign-In, FCM chỉ dùng push và Mailgun gửi OTP đăng ký và reset password.
 
