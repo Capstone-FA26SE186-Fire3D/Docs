@@ -1,6 +1,8 @@
 # Fire3D — đặc tả UX web và hướng hình ảnh
 
-**Đồng bộ auth BE 03/10/2026:** theo [authentication](../BE/docs/authentication.md) và [API guide](../BE/docs/api-docs.md), source BE main `0683d90`. Local registration dùng form → OTP → registrationToken → register → login; register trả account, chưa cấp JWT. Google UID đã link đăng nhập được; onboarding/link mới còn thiếu API hoàn tất. Các quy tắc đầy đủ và sơ đồ nằm tại [workflows mục 2.1–2.4](fire-evacuation-training-workflows.md#21-đăng-ký-local-form--otp--account--login). Source không chứng minh client/provider/deployment đã nghiệm thu.
+> Hiện trạng implementation và giới hạn nghiệm thu: xem [đối chiếu source 21/10/2026](implementation-status.md). Các thiết kế và bằng chứng lịch sử bên dưới không thay thế kiểm chứng deployment hiện hành.
+
+**Đối chiếu auth hiện hành — 21/10/2026:** theo [BE authentication](../BE/docs/authentication.md) và [API guide](../BE/docs/api-docs.md). Local registration: form → OTP → registrationToken → register trả account → login riêng. Google mới nhận proof `OnboardingRequired`; `POST /api/auth/google/onboarding/complete` tạo account/phiên và trả 201 Authenticated. Đã có `POST /api/me/link-google` (mật khẩu local hiện tại + Firebase ID token) và `POST /api/me/password` (đặt mật khẩu local đầu tiên cho Google-only). Mất response hoặc proof đã dùng phải xác minh Google/exchange lại; không tự phát lại JWT từ receipt. Firebase thật, database và client/deployment vẫn cần nghiệm thu riêng.
 
 **Trạng thái:** thiết kế và prototype FE đã triển khai; chưa nghiệm thu đầy đủ chất lượng hình ảnh/hiệu năng
 
@@ -147,13 +149,13 @@ Trong khu Organization đã đăng nhập, tách thư viện thành template, ti
 - **Hỏi về bài này** mở chat mang theo `postId` và `versionId`; backend chỉ cho nguồn Published/Hidden hợp lệ, loại Deleted/Unpublished, rồi kiểm tra quota trước khi trả lời.
 - **Lưu bài** đưa bài vào Góc học tập và yêu cầu đăng nhập. Đây là bookmark cá nhân, không phải enrollment hoặc tiến độ khóa học.
 
-Phân biệt rõ Learn web (blog kiến thức cộng đồng) với mode Learn trong Unity (làm quen không gian/runtime). FE đã có prototype Learn và chat mẫu; CMS, provider embed, bookmark backend và tích hợp AI kiến thức cộng đồng vẫn pending implementation, nhưng thuộc mục tiêu bản cuối.
+Phân biệt Learn web (blog kiến thức cộng đồng) với mode Learn Unity. FE đã có Learn CMS/public reader/search, bookmark, Hỏi đáp AI Trainee và lịch sử/kết quả gọi .NET API. Test mock và smoke API thật là các mức bằng chứng riêng; không coi source UI là nghiệm thu CMS/provider embed hoặc indexing production. Xem [tracker FE](../FE/docs/fet3d-operations-ui-tracker.md).
 
 ### Tài khoản và hồ sơ
 
 - Đăng ký Trainee dùng email/username/password/confirm password; username được chuẩn hóa lowercase và kiểm tra không trùng ngay trong form/backend. OrganizationUser đăng ký email/password/confirm password cùng tên, địa chỉ và số điện thoại tổ chức; username cá nhân có thể bổ sung sau.
 - Form local giữ trong bộ nhớ, tiếp tục sang OTP; “Xác thực và đăng ký” verify mã rồi register toàn bộ form + registrationToken. Sau 201 AccountResponse, login riêng để lấy phiên. Đổi email xác minh lại, reload quay về form; không lưu password vào URL/web storage. Email trùng hiển thị errors.email, OTP/quota lỗi theo BE và Retry-After.
-- Google UID đã link đăng nhập theo role cũ; OnboardingRequired và ACCOUNT_LINK_REQUIRED chưa có API hoàn tất. Thiết kế đích onboarding chọn Trainee/OrganizationUser còn cần triển khai. Hồ sơ dùng GET/PATCH /api/auth/me và /api/organizations/me với ETag/If-Match; reset/change thành công đưa về login. Game start không hỏi username.
+- Google UID đã link đăng nhập theo role cũ; OnboardingRequired có proof cho API completion (201 Authenticated); ACCOUNT_LINK_REQUIRED cần đăng nhập local rồi explicit link. Source đã có onboarding/link/set-password, chỉ cho chọn Trainee/OrganizationUser; Firebase/client thật nghiệm thu riêng. Hồ sơ dùng GET/PATCH /api/auth/me và /api/organizations/me với ETag/If-Match; reset/change thành công đưa về login. Game start không hỏi username.
 - Avatar dùng upload intent tới S3 private và signed URL ngắn hạn; không nhận URL ảnh tùy ý. Google Sign-In dùng Firebase, FCM chỉ là push, Mailgun gửi OTP đăng ký và reset password.
 
 AI Trainee hoạt động ngoài lượt đánh giá, dùng quota ngày riêng; truy cập Learn/Common hợp lệ, mục tiêu/hướng dẫn bài đã duyệt/phát hành có quyền chơi và kết quả của chính mình. AI tổ chức dùng corpus riêng theo tenant và dữ liệu BIM được cấp quyền; hai nhóm không dùng chung phạm vi truy xuất.
@@ -213,7 +215,7 @@ RAG được tổ chức trong `features/rag` và route `/demo/rag`; giữ `POST
 | Storyboard/video | `remotion-best-practices` | Dùng `useCurrentFrame()` để dựng teaser hoặc kiểm tra storyboard. Không bắt buộc runtime dependency và không thay thế scene Three.js tương tác |
 | Handoff | `fire3d-fe-handoff` | Ghi checkpoint, bằng chứng và giới hạn; local notes không push |
 
-FE hiện tại dùng Next.js App Router, TypeScript strict, Tailwind 4, Radix/shadcn và Three.js. Learn, đăng nhập/Góc học tập là dữ liệu demo với sessionStorage; chat định sẵn có nguồn, không đồng nghĩa AI/backend nghiệp vụ đã tích hợp. QR/APK chưa phát hành thì hiển thị chưa khả dụng. Xem [báo cáo triển khai và bài học](fire3d-web-implementation.md) để phân biệt thay đổi, kiểm chứng và hạn chế.
+FE hiện dùng Next.js App Router, TypeScript, Tailwind/Radix và Three.js. Auth, Learn/bookmark, Hỏi đáp AI và lịch sử/kết quả đã dùng API .NET; RAG direct demo chỉ development. Token được lưu bằng cookie first-party `fire3d_session` do JavaScript quản lý, dùng chung giữa các tab; fallback `localStorage` khi cookie không ghi được hoặc payload quá lớn, và đọc `sessionStorage` cũ để tương thích. Đây không phải cookie HttpOnly hay phiên xác thực phía server. Client gửi Bearer token tới .NET; backend vẫn quyết định authorization. Xem `FE/src/features/auth/session-store.ts` và `auth-session.tsx`. QR/APK/provider/thiết bị thật cần nghiệm thu riêng theo [hiện trạng source](implementation-status.md).
 
 ## 9. Tiêu chí nghiệm thu thiết kế
 

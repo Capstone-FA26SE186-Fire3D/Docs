@@ -1,6 +1,8 @@
 # Danh Mục Tài Liệu Dự Án (Docs)
 
-**Đồng bộ auth BE 03/10/2026:** theo [authentication](../BE/docs/authentication.md) và [API guide](../BE/docs/api-docs.md), source BE main `0683d90`. Local registration dùng form → OTP → registrationToken → register → login; register trả account, chưa cấp JWT. Google UID đã link đăng nhập được; onboarding/link mới còn thiếu API hoàn tất. Các quy tắc đầy đủ và sơ đồ nằm tại [workflows mục 2.1–2.4](fire-evacuation-training-workflows.md#21-đăng-ký-local-form--otp--account--login). Source không chứng minh client/provider/deployment đã nghiệm thu.
+> Hiện trạng implementation và giới hạn nghiệm thu: xem [đối chiếu source 21/10/2026](implementation-status.md). Các thiết kế và bằng chứng lịch sử bên dưới không thay thế kiểm chứng deployment hiện hành.
+
+**Đối chiếu auth hiện hành — 21/10/2026:** theo [BE authentication](../BE/docs/authentication.md) và [API guide](../BE/docs/api-docs.md). Local registration: form → OTP → registrationToken → register trả account → login riêng. Google mới nhận proof `OnboardingRequired`; `POST /api/auth/google/onboarding/complete` tạo account/phiên và trả 201 Authenticated. Đã có `POST /api/me/link-google` (mật khẩu local hiện tại + Firebase ID token) và `POST /api/me/password` (đặt mật khẩu local đầu tiên cho Google-only). Mất response hoặc proof đã dùng phải xác minh Google/exchange lại; không tự phát lại JWT từ receipt. Firebase thật, database và client/deployment vẫn cần nghiệm thu riêng.
 
 Thư mục này chứa tài liệu sản phẩm và kiến trúc cho **Fire Evacuation Training 3D (FET3D)**, một đồ án hỗ trợ tập huấn và đánh giá trải nghiệm sơ tán trong môi trường 3D của công trình.
 
@@ -27,9 +29,9 @@ Requirements là nguồn yêu cầu sản phẩm; technology mô tả service/tr
 
 **Thư viện hỗ trợ Organization** gồm template kịch bản tùy chọn, bộ tiêu chí chấm mẫu và danh mục thiết bị game đã được runtime hỗ trợ. PlatformAdmin duy trì các nội dung chuẩn; OrganizationUser dùng để soạn/cấu hình bài trong khu quản lý đã đăng nhập. Thư viện này tách khỏi **Learn công khai** trên web: bài viết, mẹo và video cho mọi người đọc không cần đăng nhập; lưu bài/hỏi AI cần đăng nhập. Learn giữ quy trình biên tập hiện tại và không có bước duyệt bài riêng. Mode Learn trong Unity là trải nghiệm làm quen không gian, không phải blog. IFC, mô hình và kịch bản riêng của Organization không tự được chia sẻ vào thư viện.
 
-Learn là blog công khai theo tình huống, gồm bài viết, tip & trick và video. `PlatformAdmin` quản trị draft, có thể phát hành ngay, ẩn/hiện hoặc xóa mềm/khôi phục bài; Learn không có bước duyệt riêng. `learn_posts`/`learn_post_versions` cùng các bảng liên quan trong SQL/ERD là thiết kế mục tiêu. Learn không phải khóa học có lesson bắt buộc, quiz, chứng chỉ hoặc tiến độ. Published là nội dung công khai; Hidden không công khai nhưng vẫn có thể làm nguồn RAG; Deleted giữ lịch sử nhưng bị loại khỏi public/RAG. Video provider embed và CMS production chưa được triển khai.
+Learn là blog công khai theo tình huống, gồm bài viết, tip & trick và video. `PlatformAdmin` quản trị draft, có thể phát hành ngay, ẩn/hiện hoặc xóa mềm/khôi phục bài; Learn không có bước duyệt riêng. `learn_posts`/`learn_post_versions` cùng các bảng liên quan trong SQL/ERD là thiết kế mục tiêu. Learn không phải khóa học có lesson bắt buộc, quiz, chứng chỉ hoặc tiến độ. Published là nội dung công khai; Hidden không công khai nhưng vẫn có thể làm nguồn RAG; Deleted giữ lịch sử nhưng bị loại khỏi public/RAG. FE/BE đã có CMS và media renderer; nghiệm thu provider embed/indexing/deployment riêng theo hiện trạng source.
 
-FET3D hỗ trợ một Organization quản lý nhiều Building. Mỗi Building phải có tên và địa chỉ trước khi đưa vào quotation. Gói chuẩn mua theo từng Building với thời hạn 6 hoặc 12 tháng, phí game, hạn mức người và quota AI; quotation BuildingService có dòng riêng cho từng Building, discount do PlatformAdmin cấu hình và snapshot tại thời điểm phát hành. Header quotation không lặp Building scope; `quotation_building_items` là nguồn chính. Số lượng lớn hoặc công trình ngoài phạm vi chuẩn dùng yêu cầu báo giá Liên hệ. Entitlement vẫn độc lập theo Building; trước hạn 5 ngày có thông báo web/email theo kỳ. Các quyết định billing trên còn cần đối chiếu triển khai riêng. BE đã có profile/avatar source; Google onboarding completion/link vẫn thiếu API, nghiệm thu DB/provider/client theo tài liệu BE.
+FET3D hỗ trợ một Organization quản lý nhiều Building. Mỗi Building phải có tên và địa chỉ trước khi đưa vào quotation. Gói chuẩn mua theo từng Building với thời hạn 6 hoặc 12 tháng, phí game, hạn mức người và quota AI; quotation BuildingService có dòng riêng cho từng Building, discount do PlatformAdmin cấu hình và snapshot tại thời điểm phát hành. Header quotation không lặp Building scope; `quotation_building_items` là nguồn chính. Số lượng lớn hoặc công trình ngoài phạm vi chuẩn dùng yêu cầu báo giá Liên hệ. Entitlement vẫn độc lập theo Building; trước hạn 5 ngày có thông báo web/email theo kỳ. Các quyết định billing trên còn cần đối chiếu triển khai riêng. BE đã có profile/avatar source; Google onboarding completion/link và đặt mật khẩu local đầu tiên đã có API, nghiệm thu DB/provider/client theo tài liệu BE.
 
 ## Tổng quan công nghệ
 
@@ -44,18 +46,18 @@ FET3D hỗ trợ một Organization quản lý nhiều Building. Mỗi Building 
 | AI, RAG và IFC processing | Python + FastAPI; IfcOpenShell cho IFC khi phù hợp | Đã chốt |
 | Database | Supabase Database, dùng PostgreSQL | Đã chốt |
 | Vector database | `pgvector` trong PostgreSQL/Supabase | Đã chốt; thay cho hướng ChromaDB trong prototype cũ |
-| Cache/event transport | Redis cache-aside và Redis Streams | Kiến trúc đích, chưa triển khai; client không kết nối trực tiếp, PostgreSQL vẫn là nguồn sự thật |
+| Cache/event transport | Redis cache-aside và Redis Streams | Có source BE cache/Streams/recovery, deployment phải kiểm riêng; client không kết nối trực tiếp, PostgreSQL vẫn là nguồn sự thật |
 | Authentication và push | BE email/password; Firebase Authentication cho Google Sign-In; Firebase Cloud Messaging (FCM) | Đã chốt; Mailgun dùng cho OTP đăng ký và reset password |
 | LLM | OpenAI API hoặc Google Gemini API (khóa/cấu hình qua Google AI Studio) | Chưa chọn nhà cung cấp cuối; chỉ triển khai một adapter production sau đánh giá |
 | Object storage | Amazon S3 (AWS S3) | Đã chốt |
-| AI compute | Azure (AI/RAG); Container Apps là phương án triển khai đề xuất | Đã chốt provider Azure cho AI/RAG; SKU, region và chi phí còn cần spike |
+| AI compute | Azure (AI/RAG); hướng dẫn AI hiện dùng Azure App Service Linux code deploy; Container Apps là phương án thay thế | Đã chốt provider Azure cho AI/RAG; SKU, region và chi phí còn cần spike |
 | BE/worker compute | BE và IFC/Blender worker chưa chọn; Unity build worker chạy trên Azure VM do BE vận hành | Không suy ra BE hoặc IFC/Blender worker chạy Azure chỉ vì AI đã chọn Azure |
 
 OneShield thuộc hệ thống OnePortal của iNET là lớp edge/bảo vệ phía trước Nginx theo kiến trúc đích; capability, gói/SKU, DNS, TLS termination, WAF/rate limit, logging, SLA, region và chi phí phải xác minh trước production. OneShield không cấp quyền nghiệp vụ và không thay thế kiểm tra identity, tenant hoặc authorization của .NET/PostgreSQL.
 
 Supabase chỉ cung cấp PostgreSQL/`pgvector` trong kiến trúc này, không thay Firebase Authentication. BE quản lý email/password và FET3D session; Firebase chỉ xác minh Google Sign-In, FCM chỉ gửi push, Mailgun gửi OTP đăng ký và reset password. Redis chỉ phục vụ cache-aside và vận chuyển event/job qua backend; FE/Mobile không kết nối Redis và cache không cấp quyền. PostgreSQL outbox là nguồn event/replay, dispatcher có lease riêng, còn worker claim attempt/lease sau khi nhận message; consumer ACK chỉ sau transaction ghi tác động và receipt thành công. Backend vẫn là nơi ánh xạ Firebase UID sang ba vai trò FET3D, kiểm tra `organizationId` và thực thi authorization. Azure đã được chọn cho AI/RAG service; LLM, BE/worker compute và các thông số production khác vẫn qua decision gate.
 
-Đây là kiến trúc đích. Prototype AI hiện còn ChromaDB/OpenAI và backend đã có phần xác thực mật khẩu/JWT; các phần đó chưa tự động trở thành Firebase/`pgvector` chỉ vì tài liệu được cập nhật. Việc chuyển code, dữ liệu và migration phải là task triển khai riêng có kiểm thử.
+Source AI hiện có **RAG v2** tại `AI/rag-api/app/v2`, request store/recovery, `PgVectorIndex`/`MemoryIndex`, OpenAI/Gemini/fake adapters, safety gate và eval offline. ChromaDB cùng `/chat`, `/documents`, `/pccc/*` thuộc legacy (routes tắt mặc định), không đại diện toàn bộ implementation. FE gọi .NET cho AI nghiệp vụ; backend cấp scope/quota rồi mới gọi FastAPI. Có source không chứng minh dữ liệu đã migrate hoặc provider/pgvector/deployment production đã nghiệm thu.
 
 ## Phạm vi thống nhất
 
@@ -110,7 +112,7 @@ Bảng nguồn chính về quyết định còn mở, tác động và mốc ph�
 - Checkpoint sau mốc đáng kể và trước bàn giao; ghi phần đã xong/còn dở, branch/commit, kiểm tra thực tế và bước tiếp theo. Không hứa ghi kịp trước khi hết quota hoặc phiên ngắt đột ngột; không lưu secrets/transcript.
 - Giữ nguyên thư mục `Mẫu report/` đang untracked, không stage, xóa hoặc tự chỉnh file mẫu. Kiểm tra danh sách stage cụ thể, không dùng `git add -A` mù quáng.
 - Task chỉ sửa tài liệu: kiểm tra liên kết, tính nhất quán và `git diff --check`, không chạy toàn bộ build/test ứng dụng. Không có test chạy không đồng nghĩa đã kiểm thử nghiệp vụ.
-- Stack đã chốt cho nhóm nằm ở bảng Tổng quan công nghệ: web Next.js, Mobile React Native/Expo với native Android bridge gọi Unity, backend C#/.NET, AI/IFC Python/FastAPI, AI/RAG trên Azure, Supabase PostgreSQL + `pgvector`, Redis cache/Streams ở kiến trúc đích, Firebase Auth/FCM và AWS S3. Không triển khai Flutter. Redis chưa triển khai; LLM và compute cho BE/worker vẫn phải qua bước chọn/benchmark trước khi gọi là production stack.
+- Stack đã chốt cho nhóm nằm ở bảng Tổng quan công nghệ: web Next.js, Mobile React Native/Expo với native Android bridge gọi Unity, backend C#/.NET, AI/IFC Python/FastAPI, AI/RAG trên Azure, Supabase PostgreSQL + `pgvector`, Redis cache/Streams ở kiến trúc đích, Firebase Auth/FCM và AWS S3. Không triển khai Flutter. Redis có source cache/Streams/recovery ở BE, nghiệm thu deployment riêng; LLM và compute cho BE/worker vẫn phải qua bước chọn/benchmark trước khi gọi là production stack.
 
 ### Giới hạn sản phẩm
 
