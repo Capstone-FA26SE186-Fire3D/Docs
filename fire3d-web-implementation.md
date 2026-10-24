@@ -33,6 +33,17 @@ Learn tiếp tục đọc công khai, auth cho bookmark/hỏi AI, Admin biên t�
 - Sụp là hoạt cảnh dựng sẵn: bốn khu lệch 7 giây, tầng dưới lệch 3 giây; không phải solver kết cấu. Việc nhóm geometry theo khu giúp giữ phần chưa sụp đứng nguyên.
 - Reduced motion bỏ WebGL; lỗi WebGL chuyển poster và nội dung đọc thông thường. Pause khi tab ẩn/ngoài viewport và dispose khi rời route.
 
+## Console Organization và PlatformAdmin v2 (24/10/2026)
+
+FE #123 (bộ component v2) và #124 (console v2) code theo Figma `bmEp9L3tQSjxTrrrU3WmCR`, trang 02b, 04b, 05b:
+
+- Mọi form mở trong modal; bản ghi mở trong drawer; trường có danh sách cố định dùng combobox tìm được không dấu. Danh sách là DataTable: bấm hàng để mở, menu "···", dưới 640px chuyển sang dạng thẻ.
+- Organization: chi tiết công trình có 5 tab (Hành trình, IFC, Kịch bản, Truy cập, Dịch vụ); một lối vào "Tải IFC"; bong bóng Trợ lý AI ở mọi trang; tìm nhanh ⌘K; tour spotlight thay cho checklist bắt đầu.
+- PlatformAdmin: tổng quan dạng ô số và biểu đồ; duyệt kịch bản trong drawer; tài khoản, tổ chức, Learn, thư viện, AI, thương mại và hỗ trợ cùng một mẫu bảng + drawer.
+- Chỉ hiện trường và hành động mà API BE có. Cố ý chưa làm vì BE chưa trả dữ liệu: chênh lệch theo kỳ, histogram thời lượng, tìm trong lịch sử AI, tỉnh/huyện ở hồ sơ tổ chức.
+
+Bằng chứng: Playwright với mock route trên bản build production (995 test đạt; các lỗi còn lại đã có trước trên develop). Đây không phải nghiệm thu với BE, dữ liệu hoặc thiết bị thật.
+
 ## Lỗi, nguyên nhân và bài học
 
 | Triệu chứng | Nguyên nhân/bằng chứng | Khắc phục và cách kiểm tra |
@@ -50,6 +61,8 @@ Learn tiếp tục đọc công khai, auth cho bookmark/hỏi AI, Admin biên t�
 | Kéo xong phím không hoạt động | preventDefault ở pointerdown ngăn focus | focus({preventScroll:true}); giữ Arrow/Home; bỏ outline riêng theo yêu cầu |
 | Hydration class mdl-js | Screenshot có class trên html nhưng source không khai báo | Chưa xác định extension cụ thể; cần browser sạch để đối chứng. Không thêm suppressHydrationWarning để che chưa rõ nguyên nhân |
 | Build lỗi spawn EPERM | Subprocess bị môi trường sandbox chặn | Chạy lệnh đã được cấp quyền; không bỏ TypeScript check để làm xanh build |
+| Dropdown trong modal/drawer v2 không bấm được | Dialog và Popover dùng hai bản `@radix-ui/react-dismissable-layer` (1.1.20 và 1.2.1), không chung danh sách layer; body bị `pointer-events: none` | Nâng `@radix-ui/react-dialog` 1.3.1 để chỉ còn một bản; kiểm bằng `pnpm why @radix-ui/react-dismissable-layer` |
+| Popover của chip lọc bị cắt trong bảng | `contain: content` (gồm paint containment) trên khung DataTable | Đổi sang `contain: layout style` |
 
 ## Kiểm chứng và giới hạn
 
