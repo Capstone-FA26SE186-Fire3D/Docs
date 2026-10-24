@@ -44,6 +44,18 @@ FE #123 (bộ component v2) và #124 (console v2) code theo Figma `bmEp9L3tQSjxT
 
 Bằng chứng: Playwright với mock route trên bản build production (995 test đạt; các lỗi còn lại đã có trước trên develop). Đây không phải nghiệm thu với BE, dữ liệu hoặc thiết bị thật.
 
+## Kịch bản, phiên bản và trình soạn theo Figma v3 (24/10/2026)
+
+Trang Figma `04b Organization v2` có thêm các khung từ "Kịch bản" trở vào (bản tối và sáng). FE code theo đó:
+
+- Trang phiên bản: tiêu đề là tên kịch bản; thẻ "Hành trình" gồm 8 bước trên một hàng, thanh "Bước tiếp theo" và ba cổng độc lập (kết quả kỹ thuật, duyệt nội dung, release). Tab ngang: Tổng quan, Package build, Kết quả kỹ thuật, Gửi duyệt, Release, Playtest.
+- Gửi duyệt có dòng thời gian ba mốc và nút gửi ở chân thẻ; chỉ hiện hai hash BE trả (nội dung, rubric). Release hiện dịch vụ của công trình và trạng thái Built/Published do máy chủ trả. Tạo phiên bản là modal.
+- Tạo kịch bản chỉ nhập tên vì API tạo kịch bản chỉ nhận tên; revision IFC được chọn khi tạo bản nháp đầu tiên.
+- Trình soạn 3D: một thanh trên với trạng thái lưu và các nút Kiểm tra, Lưu, Playtest, Phiên bản; công cụ và thanh "thêm đối tượng" nổi trên khung nhìn.
+- Hiệu năng: năm panel tab và modal tạo phiên bản tải theo nhu cầu; first-load gzip trang phiên bản giảm từ 317 KB xuống 289 KB.
+
+Bằng chứng: Playwright với mock route trên bản build production. Chưa nghiệm thu với BE thật cho các trạng thái QA/release.
+
 ## Lỗi, nguyên nhân và bài học
 
 | Triệu chứng | Nguyên nhân/bằng chứng | Khắc phục và cách kiểm tra |
@@ -63,6 +75,7 @@ Bằng chứng: Playwright với mock route trên bản build production (995 te
 | Build lỗi spawn EPERM | Subprocess bị môi trường sandbox chặn | Chạy lệnh đã được cấp quyền; không bỏ TypeScript check để làm xanh build |
 | Dropdown trong modal/drawer v2 không bấm được | Dialog và Popover dùng hai bản `@radix-ui/react-dismissable-layer` (1.1.20 và 1.2.1), không chung danh sách layer; body bị `pointer-events: none` | Nâng `@radix-ui/react-dialog` 1.3.1 để chỉ còn một bản; kiểm bằng `pnpm why @radix-ui/react-dismissable-layer` |
 | Popover của chip lọc bị cắt trong bảng | `contain: content` (gồm paint containment) trên khung DataTable | Đổi sang `contain: layout style` |
+| Hàng bảng đang chọn có mảng tối ở ô đầu | `.ops-cell-primary` đặt `display: inline-block`; khi class này nằm trên `<td>`, ô không còn là table cell nên màu hàng và viền dừng giữa chừng, lộ nền bảng | Chỉ áp inline-block cho phần tử không phải `td`; kiểm bằng ảnh chụp hàng đang chọn ở cả hai theme. Bản sửa đầu (đổi màu hàng sang đục) chỉ che triệu chứng |
 
 ## Kiểm chứng và giới hạn
 
