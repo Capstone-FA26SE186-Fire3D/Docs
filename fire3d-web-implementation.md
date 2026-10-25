@@ -56,6 +56,15 @@ Trang Figma `04b Organization v2` có thêm các khung từ "Kịch bản" trở
 
 Bằng chứng: Playwright với mock route trên bản build production. Chưa nghiệm thu với BE thật cho các trạng thái QA/release.
 
+## Chữ dễ hiểu trên mọi màn (25/10/2026)
+
+Người dùng tổ chức và học viên không đọc được từ ngữ của dev, nên web đổi toàn bộ chữ hiển thị sang tiếng Việt thường dùng (chưa làm song ngữ VI/EN).
+
+- Lỗi từ máy chủ luôn là câu tiếng Việt: FE dịch theo mã lỗi, rồi theo trạng thái HTTP; câu tiếng Anh của BE không bao giờ hiện ra. Mã lỗi và định danh nằm trong mục gập "Thông tin cho bộ phận hỗ trợ".
+- Bộ từ thống nhất: bản IFC (revision), máy xử lý / lượt xử lý (worker / job), kiểm tra tự động (QA), gói, dựng gói, bản phát hành, chạy thử (playtest), quản trị FET3D (PlatformAdmin), tài khoản tổ chức (OrganizationUser), học viên (Trainee), đường dẫn rút gọn (slug), bài học (Learn). Tên thương hiệu là FET3D.
+- Giữ nguyên từ chuyên ngành người dùng đã quen hoặc khó dịch gọn: IFC, BIM, QR, PayOS, token, rubric, GLB.
+- Tab IFC: nút xác nhận là "Xác nhận mô hình dùng được cho huấn luyện".
+
 ## Lỗi, nguyên nhân và bài học
 
 | Triệu chứng | Nguyên nhân/bằng chứng | Khắc phục và cách kiểm tra |
