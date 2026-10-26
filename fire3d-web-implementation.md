@@ -116,3 +116,11 @@ Test tổng hợp chuyển cảnh từng vượt 90 giây sau khi qua bước b�
 RAG giữ contract thử nghiệm; dữ liệu học tập/tài khoản/chat mẫu không đại diện backend nghiệp vụ. Không nhập IFC thật hoặc gameplay Unity trên web.
 
 Danh sách tích hợp cần nghiệm thu sau prototype (không phải trạng thái thiếu source hiện tại): IFC pipeline IfcOpenShell/IfcConvert → Blender optimization → Unity build worker, editor/thư viện Organization, review phiên bản, PayOS/gói 6/12 tháng/hạn mức người, quyền private qua mã, QR Building và quota AI trả trước. Những phần này là thiết kế mục tiêu; báo cáo prototype chỉ là bằng chứng cho những gì đã chạy trong FE, không phải bằng chứng tích hợp end-to-end hay benchmark Android/Unity.
+
+## Bài học v2 (26/10/2026)
+
+- Danh sách `/learn`: trang đầu không lọc mở bằng bài mới nhất làm bài nổi bật (ảnh bìa lớn, loại bài, tiêu đề, tóm tắt, ngày, Lưu bài viết) và cột "Mới đăng" 4 bài; lưới thẻ giữ phần còn lại. Khi lọc hoặc sang trang sau chỉ còn lưới. Chỉ dùng trường API có (không tác giả, danh sách không có tình huống).
+- Đọc bài `/learn/[slug]`: tiêu đề lớn, thời gian đọc ước tính từ khối nội dung, ảnh bìa rộng, thân bài cạnh cột dính (mục lục từ tiêu đề cấp 2, nguồn tham khảo, gợi ý AI), Bài liên quan 3 thẻ. Video là thẻ xem trước mở trang nhà cung cấp, không nhúng iframe.
+- Học viên hỏi Trợ lý AI về bài trong bong bóng nổi (cùng bong bóng của thư viện cá nhân), mở kèm bài đang đọc làm ngữ cảnh; khách được mời đăng nhập. Thay cho liên kết sang trang Hỏi đáp AI.
+- Ảnh bìa và khối Ảnh vẫn chỉ nhận đường dẫn https; tải ảnh từ máy chờ BE (BE#171).
+- Figma `03 Trainee` y=12400 (tối/sáng). FE PR #163 → develop, #164 → main.
