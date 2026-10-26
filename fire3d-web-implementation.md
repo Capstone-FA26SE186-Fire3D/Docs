@@ -64,6 +64,18 @@ Người dùng tổ chức và học viên không đọc được từ ngữ c�
 - Bộ từ thống nhất: bản IFC (revision), máy xử lý / lượt xử lý (worker / job), kiểm tra tự động (QA), gói, dựng gói, bản phát hành, chạy thử (playtest), quản trị FET3D (PlatformAdmin), tài khoản tổ chức (OrganizationUser), học viên (Trainee), đường dẫn rút gọn (slug), bài học (Learn). Tên thương hiệu là FET3D.
 - Giữ nguyên từ chuyên ngành người dùng đã quen hoặc khó dịch gọn: IFC, BIM, QR, PayOS, token, rubric, GLB.
 - Tab IFC: nút xác nhận là "Xác nhận mô hình dùng được cho huấn luyện".
+- Đợt 2 (26/10/2026) cho tab IFC và các trang quản trị FET3D:
+  - Thiết bị hiện bằng tên và tầng ("Cửa thoát", "Cửa · tầng 2"), không hiện mã danh mục (`door.exit`), lớp IFC hay GlobalId.
+  - Thông tin BIM gọi phòng bằng tên của nó.
+  - Câu tiếng Anh của máy xử lý, mã lạ, danh sách GlobalId, mã nội dung (hash) và định danh 36 ký tự chuyển vào mục gập "Thông tin cho bộ phận hỗ trợ".
+  - Bỏ ETag, "bất biến", "xóa mềm", "UTC", "Top 8", "ticket".
+  - Tổ chức hoặc gói không tìm thấy hiện "không còn tồn tại" thay cho mã.
+  - Tên năng lực runtime dùng chung một bảng (`src/configs/capability-labels.ts`).
+  - FE PR #157 → develop, #158 → main.
+
+## Báo cáo: phiên theo ngày (26/10/2026)
+
+Máy chủ chỉ trả nhóm số liệu cho những ngày có phiên. Vì vậy FE điền 0 cho mọi ngày, tuần (bắt đầu thứ Hai) hoặc tháng trong khoảng `[from, to)` của báo cáo, rồi vẽ "Phiên theo ngày" thành cột lồng nhau: Lượt chơi ⊃ Có kết quả ⊃ Đạt. Đường xu hướng nhỏ trên ô chỉ số dùng cùng dãy đã điền 0. FE PR #155 → develop, #156 → main.
 
 ## Thư viện tổ chức: dữ liệu mẫu và popup (26/10/2026)
 
