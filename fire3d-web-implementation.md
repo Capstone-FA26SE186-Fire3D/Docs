@@ -124,3 +124,11 @@ Danh sách tích hợp cần nghiệm thu sau prototype (không phải trạng t
 - Học viên hỏi Trợ lý AI về bài trong bong bóng nổi (cùng bong bóng của thư viện cá nhân), mở kèm bài đang đọc làm ngữ cảnh; khách được mời đăng nhập. Thay cho liên kết sang trang Hỏi đáp AI.
 - Ảnh bìa và khối Ảnh vẫn chỉ nhận đường dẫn https; tải ảnh từ máy chờ BE (BE#171).
 - Figma `03 Trainee` y=12400 (tối/sáng). FE PR #163 → develop, #164 → main.
+
+## Video trong bài và trình soạn bài học kiểu Docs (26/10/2026)
+
+- Video trong bài phát ngay trong trang: trước khi bấm phát chỉ có ảnh tĩnh, không tải gì từ nhà cung cấp; bấm phát mới tải trình phát dựng từ allowlist của máy chủ (YouTube không cookie, TikTok khung dọc, Facebook plugin), có sandbox. Tóm tắt và liên kết mở trang gốc vẫn giữ cho video bị tắt nhúng. FE PR #165 → #166.
+- Trình soạn của quản trị FET3D là một trang giấy: ảnh bìa, tiêu đề lớn, tóm tắt, rồi các khối liền mạch. Thanh định dạng dính (hoàn tác/làm lại, kiểu đoạn, danh sách chấm/số, khung lưu ý, chèn ảnh/video), gõ "/" để chèn khối, Enter tạo đoạn mới, Backspace ở đoạn trống xóa đoạn, Ctrl+S lưu. "Xem như người đọc" dựng trang chưa lưu bằng trình đọc công khai; cột bên có "Sẵn sàng xuất bản".
+- Hộp "Bài mới": chọn loại bài bằng thẻ có hình, đường dẫn rút gọn tự tạo từ tiêu đề, xem trước thẻ bài, nút "Tạo và mở trình soạn".
+- Chưa làm được với API hiện có: in đậm, in nghiêng, gạch chân/ngang, màu chữ, tô nền, liên kết trong đoạn và khối đường kẻ (nội dung `fet3d.learn/1` chỉ là chữ thường) → BE#172; tải ảnh từ máy → BE#171. Các nút này hiện "Sắp có".
+- Figma `05b Admin v2`: "Learn · Trình soạn v3 (kiểu Docs)", "Bài mới v3 (modal)", ghi chú thiết kế. FE PR #167 → develop, #168 → main.
