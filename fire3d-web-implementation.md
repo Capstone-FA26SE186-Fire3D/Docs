@@ -71,6 +71,7 @@ Người dùng tổ chức và học viên không đọc được từ ngữ c�
 - Tiêu chí chấm chỉ dùng các chỉ số học viên mà máy chủ đã tính (đến lối thoát, thời gian, che mũi trong khói, kiểm tra nhiệt cửa, bấm báo cháy, dùng bình, không dập đám cháy lớn, không đi thang máy, hướng dẫn người khác…), nên dùng được ngay mà không cần thêm gì ở Unity. Chỉ năng lực runtime (nguồn nguy hiểm, NPC, thiết bị dùng được) mới cần runtime catalog.
 - Bản đã xuất bản không sửa được; muốn đổi nội dung thì tạo phiên bản mới, nhờ vậy kịch bản tổ chức đã dùng bản cũ không bị đổi theo.
 - Chi tiết mục và trình sửa phiên bản mở bằng popup giữa màn hình (rộng 880px, cao cố định), trên điện thoại là bottom sheet. FE PR #151 → develop, #152 → main.
+- Phía tổ chức (`/workspace/library`), chi tiết mẫu cũng là popup. Nút "Dùng làm mẫu" cho chọn công trình và kịch bản, rồi mở trình soạn với `?useSample=<loại>:<mã mục>`; trình soạn đứng sẵn ở thẻ Thư viện với bản xem trước của mẫu, chưa áp dụng gì cho tới khi người soạn xác nhận. Tham số được giữ qua bước chọn bản nháp và xóa khỏi URL sau khi mở. FE PR #153 → develop, #154 → main.
 
 ## Lỗi, nguyên nhân và bài học
 
