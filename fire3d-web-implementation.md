@@ -71,6 +71,7 @@ Người dùng tổ chức và học viên không đọc được từ ngữ c�
   - Bỏ ETag, "bất biến", "xóa mềm", "UTC", "Top 8", "ticket".
   - Tổ chức hoặc gói không tìm thấy hiện "không còn tồn tại" thay cho mã.
   - Tên năng lực runtime dùng chung một bảng (`src/configs/capability-labels.ts`).
+  - FE PR #157 → develop, #158 → main.
 
 ## Báo cáo: phiên theo ngày (26/10/2026)
 
