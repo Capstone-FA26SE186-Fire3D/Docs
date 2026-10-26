@@ -80,6 +80,7 @@ Máy chủ chỉ trả nhóm số liệu cho những ngày có phiên. Vì vậy
 ## Thư viện tổ chức: dữ liệu mẫu và popup (26/10/2026)
 
 - Production đã có sẵn 15 thiết bị, 10 tiêu chí chấm mẫu và 20 kịch bản mẫu (từ nhà phố, phòng trọ, lớp học tới tòa văn phòng 20 tầng, bệnh viện, nhà ga ngầm, kho hóa chất, phòng máy chủ), tất cả đã xuất bản v1. Mã có tiền tố `EQ-`, `RB-`, `TPL-`.
+- Bổ sung chiều 26/10/2026: thêm 30 mục v1 (tổng 25 thiết bị, 20 tiêu chí chấm, 30 kịch bản), có ghi đủ "năng lực yêu cầu" theo danh mục runtime. Thiết bị gồm cả đồ dùng thường ngày nhân vật tương tác được: khăn, áo thun, chăn bông (làm ướt rồi che mũi), bồn rửa, bồn tắm, vòi sen (nguồn nước), ba lô/laptop, ví/điện thoại (vật thử thách nên bỏ lại), thang máy (không được dùng), cửa gỗ (kiểm tra nhiệt). Năng lực ghi đầu tiên là năng lực "Dùng làm mẫu" gắn cho đồ vật. 45 mục cũ chưa ghi năng lực ("Không khai báo").
 - Tiêu chí chấm chỉ dùng các chỉ số học viên mà máy chủ đã tính (đến lối thoát, thời gian, che mũi trong khói, kiểm tra nhiệt cửa, bấm báo cháy, dùng bình, không dập đám cháy lớn, không đi thang máy, hướng dẫn người khác…), nên dùng được ngay mà không cần thêm gì ở Unity. Chỉ năng lực runtime (nguồn nguy hiểm, NPC, thiết bị dùng được) mới cần runtime catalog.
 - Bản đã xuất bản không sửa được; muốn đổi nội dung thì tạo phiên bản mới, nhờ vậy kịch bản tổ chức đã dùng bản cũ không bị đổi theo.
 - Chi tiết mục và trình sửa phiên bản mở bằng popup giữa màn hình (rộng 880px, cao cố định), trên điện thoại là bottom sheet. FE PR #151 → develop, #152 → main.
