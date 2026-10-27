@@ -388,7 +388,7 @@ Chốt 28/10/2026 để Unity (runtime 2.1.0), FE và BE dùng một bộ tên. 
 | `assembly.point` | Điểm tập kết | Đi vào (Goal) | `assembly_point_reached` |
 | `window.openable` | Cửa sổ mở được | Mở thông gió (liên kết mô hình gió) | `window_opened` |
 
-BE hiện viết cứng danh sách metric chấm được (`EditorContract.EventCountMetrics` và `learner_session_finalize`), nên các event trên chỉ chấm được sau khi BE chuyển sang đọc metric từ runtime catalog hoặc thêm danh sách này: BE issue #183.
+BE hiện viết cứng danh sách metric chấm được (`EditorContract.EventCountMetrics` và `learner_session_finalize`), nên các event trên chỉ chấm được sau khi BE chuyển sang đọc metric từ runtime catalog: BE issue #183.
 
 ### 6.3. Sprinkler (đợt 1)
 
