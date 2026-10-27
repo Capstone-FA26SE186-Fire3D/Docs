@@ -379,7 +379,7 @@ Chốt 28/10/2026 để Unity (runtime 2.1.0), FE và BE dùng một bộ tên. 
 | `gas.valve` | Van gas | Khóa van | `gas_valve_closed` |
 | `door.fire_wedged` | Cửa chống cháy bị chèn | Gỡ nêm cho cửa đóng | `wedge_removed` |
 | `door.exit_locked` | Cửa thoát bị khóa | Thử mở (bẫy, phải tìm lối khác) | `locked_exit_tried` |
-| `phone.emergency` | Điện thoại khẩn cấp | Gọi 114 | `emergency_called` |
+| `phone.emergency` | Gọi 114 | Gọi 114 bằng điện thoại di động của người chơi (nút trên HUD, không đặt máy bàn trong tòa) | `emergency_called` |
 | `signal.window` | Cửa sổ ra hiệu | Ra hiệu cứu hộ | `signaled_for_help` |
 | `ppe.escape_hood` | Mặt nạ thoát hiểm | Đeo | `escape_hood_worn` |
 | `firstaid.kit` | Hộp sơ cứu | Lấy, dùng cho người bị thương | `first_aid_used` |
