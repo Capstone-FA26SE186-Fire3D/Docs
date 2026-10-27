@@ -1,0 +1,119 @@
+// Fire3D physical model, group B4.
+// Paste into https://dbdiagram.io . Gray tables belong to other groups and only show the columns referenced here.
+
+Table integration_outbox_events {
+  "idempotency_key" varchar(255) [pk]
+  "aggregate_type" varchar(80) [not null]
+  "aggregate_id" uuid [not null]
+  "event_type" varchar(100) [not null]
+  "schema_version" varchar(50) [not null, note: '''CHECK ((NULLIF(btrim((schema_version)::text), ''::text) IS NOT NULL))''']
+  "organization_id" uuid
+  "payload" jsonb [not null]
+  "payload_hash" varchar(64) [not null]
+  "status" varchar(20) [not null, default: 'Pending', note: '''CHECK (((status)::text = ANY (ARRAY[('Pending'::character varying)::text, ('Leased'::character varying)::text, ('Published'::character varying)::text, ('Failed'::character varying)::text])))''']
+  "attempts" integer [not null, default: 0, note: '''CHECK ((attempts >= 0))''']
+  "available_at" timestamptz [not null, default: `now()`]
+  "lease_owner" varchar(255)
+  "lease_token" uuid [unique]
+  "lease_until" timestamptz
+  "published_lease_token" uuid
+  "last_error" text
+  "created_at" timestamptz [not null, default: `now()`]
+  "published_at" timestamptz
+
+  indexes {
+    (status, available_at, lease_until) [name: 'idx_outbox_dispatch']
+    (organization_id, status, available_at) [name: 'idx_outbox_scope_dispatch']
+  }
+
+  Note: '''CHECK (((((status)::text = 'Leased'::text) AND (NULLIF(btrim((lease_owner)::text), ''::text) IS NOT NULL) AND (lease_token IS NOT NULL) AND (lease_until IS NOT NULL)) OR (((status)::text <> 'Leased'::text) AND (lease_owner IS NULL) AND (lease_token IS NULL) AND (lease_until IS NULL))))
+CHECK ((((payload_hash)::text ~ '^[0-9a-fA-F]{64}$'::text) AND (lower((payload_hash)::text) = (fet3d_jsonb_payload_hash(payload))::text)))
+CHECK (((((status)::text = 'Published'::text) AND (published_at IS NOT NULL) AND (published_lease_token IS NOT NULL)) OR (((status)::text <> 'Published'::text) AND (published_at IS NULL))))
+CHECK (((organization_id IS NOT NULL) OR ((aggregate_type)::text = ANY (ARRAY[('System'::character varying)::text, ('Platform'::character varying)::text]))))'''
+}
+
+Table integration_event_consumptions {
+  "consumer_name" varchar(120) [not null, note: '''CHECK ((NULLIF(btrim((consumer_name)::text), ''::text) IS NOT NULL))''']
+  "event_key" varchar(255) [not null]
+  "payload_hash" varchar(64) [not null, note: '''CHECK (((payload_hash)::text ~ '^[0-9a-fA-F]{64}$'::text))''']
+  "result_reference" text
+  "processed_at" timestamptz [not null, default: `now()`]
+
+  indexes {
+    (consumer_name, event_key) [pk]
+    (event_key, payload_hash) [name: 'idx_event_consumptions_hash']
+  }
+}
+
+Table processing_delivery_receipts {
+  "event_key" text [pk]
+  "payload_hash" varchar(64) [not null]
+  "attempt_id" uuid [not null]
+  "receipt_id" uuid [not null, unique]
+  "created_at" timestamptz [not null, default: `now()`]
+}
+
+Table processing_stream_deliveries {
+  "id" bigint [pk]
+  "event_key" text [not null]
+  "lease_token" uuid [not null, unique]
+  "stream_name" text [not null]
+  "stream_id" text [not null, note: '''CHECK ((stream_id ~ '^[0-9]+-[0-9]+$'::text))''']
+  "published_at" timestamptz [not null, default: `clock_timestamp()`]
+
+  indexes {
+    (stream_name, stream_id) [unique]
+    (event_key, published_at) [name: 'processing_stream_delivery_event']
+  }
+}
+
+Table processing_stream_state {
+  "event_key" text [pk]
+  "delivery_failures" integer [not null, default: 0, note: '''CHECK ((delivery_failures >= 0))''']
+  "next_delivery_at" timestamptz [not null, default: `clock_timestamp()`]
+  "blocked_reason" text
+  "last_replay_at" timestamptz
+  "last_error" text
+}
+
+Table processing_stream_rejections {
+  "stream_name" text [not null]
+  "stream_id" text [not null]
+  "event_key" text
+  "code" text [not null]
+  "created_at" timestamptz [not null, default: `clock_timestamp()`]
+
+  indexes {
+    (stream_name, stream_id) [pk]
+  }
+}
+
+Table processing_stream_retry_receipts {
+  "request_key" text [pk, note: '''CHECK (((length(request_key) >= 1) AND (length(request_key) <= 255)))''']
+  "job_id" uuid [not null]
+  "event_key" text [not null]
+  "reason" text [not null, note: '''CHECK (((length(reason) >= 1) AND (length(reason) <= 1000)))''']
+  "previous_delivery" jsonb [not null]
+  "created_at" timestamptz [not null, default: `clock_timestamp()`]
+}
+
+Table organizations [headercolor: #9E9E9E, note: 'nhóm B1'] {
+  "id" uuid [pk]
+}
+
+Table processing_job_attempts [headercolor: #9E9E9E, note: 'nhóm B3'] {
+  "id" uuid [pk]
+}
+
+Table processing_jobs [headercolor: #9E9E9E, note: 'nhóm B3'] {
+  "id" uuid [pk]
+}
+
+Ref integration_outbox_events_organization_id_fkey: integration_outbox_events.organization_id > organizations.id [delete: restrict]
+Ref integration_event_consumptions_event_key_fkey: integration_event_consumptions.event_key > integration_outbox_events.idempotency_key [delete: restrict]
+Ref processing_delivery_receipts_attempt_id_fkey: processing_delivery_receipts.attempt_id > processing_job_attempts.id [delete: no action]
+Ref processing_delivery_receipts_event_key_fkey: processing_delivery_receipts.event_key > integration_outbox_events.idempotency_key [delete: no action]
+Ref processing_stream_deliveries_event_key_fkey: processing_stream_deliveries.event_key > integration_outbox_events.idempotency_key [delete: no action]
+Ref processing_stream_state_event_key_fkey: processing_stream_state.event_key > integration_outbox_events.idempotency_key [delete: no action]
+Ref processing_stream_retry_receipts_event_key_fkey: processing_stream_retry_receipts.event_key > integration_outbox_events.idempotency_key [delete: no action]
+Ref processing_stream_retry_receipts_job_id_fkey: processing_stream_retry_receipts.job_id > processing_jobs.id [delete: no action]

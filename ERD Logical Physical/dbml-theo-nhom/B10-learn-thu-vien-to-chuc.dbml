@@ -1,0 +1,171 @@
+// Fire3D physical model, group B10.
+// Paste into https://dbdiagram.io . Gray tables belong to other groups and only show the columns referenced here.
+
+Table learn_situations {
+  "id" uuid [pk]
+  "slug" varchar(120) [not null, unique, note: '''CHECK (((slug)::text ~ '^[a-z0-9]+(-[a-z0-9]+)*$'::text))''']
+  "name" varchar(255) [not null, note: '''CHECK ((NULLIF(btrim((name)::text), ''::text) IS NOT NULL))''']
+  "description" text
+  "is_active" boolean [not null, default: true]
+  "created_by" uuid [not null]
+  "created_at" timestamptz [not null]
+  "updated_at" timestamptz [not null]
+}
+
+Table learn_posts {
+  "id" uuid [pk]
+  "slug" varchar(180) [not null, unique, note: '''CHECK (((slug)::text ~ '^[a-z0-9]+(-[a-z0-9]+)*$'::text))''']
+  "publication_status" text [not null, note: '''CHECK ((publication_status = ANY (ARRAY['Unpublished'::text, 'Published'::text, 'Hidden'::text, 'Deleted'::text])))''']
+  "published_version_id" uuid
+  "created_by" uuid [not null]
+  "revision_no" bigint [not null, default: 1, note: '''CHECK ((revision_no > 0))''']
+  "created_at" timestamptz [not null]
+  "updated_at" timestamptz [not null]
+
+  Note: '''CHECK (((publication_status <> ALL (ARRAY['Published'::text, 'Hidden'::text])) OR (published_version_id IS NOT NULL)))'''
+}
+
+Table learn_post_versions {
+  "id" uuid [pk]
+  "post_id" uuid [not null]
+  "version_number" integer [not null, note: '''CHECK ((version_number > 0))''']
+  "content_schema_version" varchar(50) [not null]
+  "content_kind" text [not null, note: '''CHECK ((content_kind = ANY (ARRAY['Article'::text, 'Tip'::text, 'Video'::text])))''']
+  "title" varchar(255) [not null, note: '''CHECK ((NULLIF(btrim((title)::text), ''::text) IS NOT NULL))''']
+  "summary" text [not null, note: '''CHECK ((NULLIF(btrim(summary), ''::text) IS NOT NULL))''']
+  "cover_image_url" text
+  "content_blocks" jsonb [not null, note: '''CHECK ((jsonb_typeof(content_blocks) = 'array'::text))''']
+  "content_hash" varchar(64) [not null, note: '''CHECK (((content_hash)::text ~ '^[0-9a-f]{64}$'::text))''']
+  "status" text [not null, note: '''CHECK ((status = ANY (ARRAY['Draft'::text, 'Published'::text])))''']
+  "created_by" uuid [not null]
+  "published_by" uuid
+  "published_at" timestamptz
+  "revision_no" bigint [not null, default: 1, note: '''CHECK ((revision_no > 0))''']
+  "created_at" timestamptz [not null]
+  "updated_at" timestamptz [not null]
+
+  indexes {
+    (id, post_id) [unique]
+    (post_id, version_number) [unique]
+  }
+
+  Note: '''CHECK ((((status = 'Draft'::text) AND (published_by IS NULL) AND (published_at IS NULL)) OR ((status = 'Published'::text) AND (published_by IS NOT NULL) AND (published_at IS NOT NULL))))'''
+}
+
+Table learn_post_version_situations {
+  "post_version_id" uuid [not null]
+  "situation_id" uuid [not null]
+  "created_at" timestamptz [not null, default: `now()`]
+
+  indexes {
+    (post_version_id, situation_id) [pk]
+  }
+}
+
+Table learn_post_version_sources {
+  "post_version_id" uuid [not null]
+  "source_id" uuid [not null]
+  "source_role" text [not null, default: 'Reference', note: '''CHECK ((source_role = ANY (ARRAY['Primary'::text, 'Reference'::text, 'Transcript'::text])))''']
+  "locator" jsonb [not null, default: `'{}'::jsonb`, note: '''CHECK ((jsonb_typeof(locator) = 'object'::text))''']
+  "created_at" timestamptz [not null, default: `now()`]
+
+  indexes {
+    (post_version_id, source_id, source_role) [pk]
+  }
+}
+
+Table learn_bookmarks {
+  "trainee_user_id" uuid [not null]
+  "post_id" uuid [not null]
+  "created_at" timestamptz [not null, default: `now()`]
+
+  indexes {
+    (trainee_user_id, post_id) [pk]
+  }
+}
+
+Table organization_library_items {
+  "id" uuid [pk]
+  "kind" text [not null, note: '''CHECK ((kind = ANY (ARRAY['ScenarioTemplate'::text, 'RubricSample'::text, 'Equipment'::text, 'StylePreset'::text, 'ColorScheme'::text])))''']
+  "code" varchar(80) [not null, unique, note: '''CHECK (((code)::text ~ '^[A-Z0-9][A-Z0-9_-]{0,79}$'::text))''']
+  "is_active" boolean [not null, default: true]
+  "created_by" uuid [not null]
+  "created_at" timestamptz [not null]
+  "updated_at" timestamptz [not null]
+  "revision" bigint [not null, default: 1, note: '''CHECK ((revision > 0))''']
+}
+
+Table organization_library_versions {
+  "id" uuid [pk]
+  "item_id" uuid [not null]
+  "version_number" integer [not null, note: '''CHECK ((version_number > 0))''']
+  "name" varchar(255) [not null, note: '''CHECK ((NULLIF(btrim((name)::text), ''::text) IS NOT NULL))''']
+  "payload" jsonb [not null, note: '''CHECK ((jsonb_typeof(payload) = 'object'::text))''']
+  "required_capabilities" jsonb [not null, default: `'[]'::jsonb`, note: '''CHECK ((jsonb_typeof(required_capabilities) = 'array'::text))''']
+  "payload_hash" varchar(64) [not null, note: '''CHECK (((payload_hash)::text ~ '^[0-9a-f]{64}$'::text))''']
+  "status" text [not null, note: '''CHECK ((status = ANY (ARRAY['Draft'::text, 'Published'::text])))''']
+  "published_by" uuid
+  "published_at" timestamptz
+  "created_by" uuid [not null]
+  "created_at" timestamptz [not null]
+  "updated_at" timestamptz [not null]
+  "revision" bigint [not null, default: 1, note: '''CHECK ((revision > 0))''']
+
+  indexes {
+    (item_id, version_number) [unique]
+  }
+
+  Note: '''CHECK (((status = 'Draft'::text) = (published_at IS NULL)))
+CHECK (((status = 'Draft'::text) = (published_by IS NULL)))'''
+}
+
+Table learn_media_images {
+  "id" uuid [pk]
+  "created_by" uuid [not null]
+  "idempotency_key" varchar(128) [not null, note: '''CHECK (((idempotency_key)::text ~ '^[!-~]{1,128}$'::text))''']
+  "input_hash" char(64) [not null, note: '''CHECK ((input_hash ~ '^[0-9a-f]{64}$'::text))''']
+  "file_name" varchar(255) [not null, note: '''CHECK (((length(btrim((file_name)::text)) >= 1) AND (length(btrim((file_name)::text)) <= 255)))''']
+  "content_type" text [not null, note: '''CHECK ((content_type = ANY (ARRAY['image/jpeg'::text, 'image/png'::text, 'image/webp'::text])))''']
+  "size_bytes" bigint [not null, note: '''CHECK (((size_bytes >= 1) AND (size_bytes <= 5242880)))''']
+  "sha256" char(64) [not null, note: '''CHECK ((sha256 ~ '^[0-9a-f]{64}$'::text))''']
+  "staging_key" text [not null, unique]
+  "object_key" text [unique]
+  "width" integer [note: '''CHECK (((width >= 1) AND (width <= 4096)))''']
+  "height" integer [note: '''CHECK (((height >= 1) AND (height <= 4096)))''']
+  "created_at" timestamptz [not null]
+  "expires_at" timestamptz [not null]
+  "completed_at" timestamptz
+
+  indexes {
+    (created_by, idempotency_key) [unique]
+  }
+
+  Note: '''CHECK ((expires_at > created_at))
+CHECK ((((completed_at IS NULL) = (object_key IS NULL)) AND ((completed_at IS NULL) = (width IS NULL)) AND ((completed_at IS NULL) = (height IS NULL))))'''
+}
+
+Table knowledge_sources [headercolor: #9E9E9E, note: 'nhóm B9'] {
+  "id" uuid [pk]
+}
+
+Table users [headercolor: #9E9E9E, note: 'nhóm B1'] {
+  "id" uuid [pk]
+}
+
+Ref learn_situations_created_by_fkey: learn_situations.created_by > users.id [delete: no action]
+Ref learn_post_published_version: learn_posts.(published_version_id, id) > learn_post_versions.(id, post_id) [delete: no action]
+Ref learn_posts_created_by_fkey: learn_posts.created_by > users.id [delete: no action]
+Ref learn_post_versions_created_by_fkey: learn_post_versions.created_by > users.id [delete: no action]
+Ref learn_post_versions_post_id_fkey: learn_post_versions.post_id > learn_posts.id [delete: no action]
+Ref learn_post_versions_published_by_fkey: learn_post_versions.published_by > users.id [delete: no action]
+Ref learn_post_version_situations_post_version_id_fkey: learn_post_version_situations.post_version_id > learn_post_versions.id [delete: no action]
+Ref learn_post_version_situations_situation_id_fkey: learn_post_version_situations.situation_id > learn_situations.id [delete: no action]
+Ref learn_post_version_sources_post_version_id_fkey: learn_post_version_sources.post_version_id > learn_post_versions.id [delete: no action]
+Ref learn_post_version_sources_source_id_fkey: learn_post_version_sources.source_id > knowledge_sources.id [delete: no action]
+Ref learn_bookmarks_post_id_fkey: learn_bookmarks.post_id > learn_posts.id [delete: no action]
+Ref learn_bookmarks_trainee_user_id_fkey: learn_bookmarks.trainee_user_id > users.id [delete: no action]
+Ref organization_library_items_created_by_fkey: organization_library_items.created_by > users.id [delete: no action]
+Ref organization_library_versions_created_by_fkey: organization_library_versions.created_by > users.id [delete: no action]
+Ref organization_library_versions_item_id_fkey: organization_library_versions.item_id > organization_library_items.id [delete: no action]
+Ref organization_library_versions_published_by_fkey: organization_library_versions.published_by > users.id [delete: no action]
+Ref learn_media_images_created_by_fkey: learn_media_images.created_by > users.id [delete: no action]

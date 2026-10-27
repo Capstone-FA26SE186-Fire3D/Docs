@@ -10,7 +10,7 @@
 
 ## 1. Mục tiêu và giới hạn
 
-FET3D là đồ án tạo trải nghiệm tập huấn sơ tán 3D trên Android từ mô hình **IFC** của Building. Ứng dụng Android được cài một lần. Trainee đăng nhập quét QR Building public hoặc xác minh mã tham gia Building private, xem/chọn bài đã publish được phép; backend tạo session preparation để ứng dụng tải/xác minh package, rồi chỉ bước `start` online mới kiểm tra entitlement, kiểm tra quyền public/private và suất người, pin Training/release/scenario và cấp launch grant để khởi chạy Unity.
+FET3D là đồ án tạo trải nghiệm tập huấn PCCC 3D (thoát nạn và xử lý đám cháy ban đầu) trên Android từ mô hình **IFC** của Building. Ứng dụng Android được cài một lần. Trainee đăng nhập quét QR Building public hoặc xác minh mã tham gia Building private, xem/chọn bài đã publish được phép; backend tạo session preparation để ứng dụng tải/xác minh package, rồi chỉ bước `start` online mới kiểm tra entitlement, kiểm tra quyền public/private và suất người, pin Training/release/scenario và cấp launch grant để khởi chạy Unity.
 
 Luồng cốt lõi là **IFC → 3D → Unity Android → QR → Training → Result**. Ở backend, QR Building có thể tồn tại như điểm resolve ổn định; danh sách chỉ trả bài đã publish, preparation có thể tạo trước, nhưng session mới chỉ được start sau khi entitlement online còn hợp lệ.
 
@@ -23,8 +23,9 @@ Sản phẩm là công cụ học tập và đánh giá hoạt động của đ�
 | `PlatformAdmin` | Quản trị nền tảng, tổ chức, tài khoản, cấu hình vận hành và giám sát tổng quan. |
 | `OrganizationUser` | Sở hữu Building, IFC, editor/scenario, publish, QR, analytics, billing và AI usage của tổ chức. |
 | `Trainee` | Đăng ký/đăng nhập email và mật khẩu hoặc Google với username theo quy trình onboarding, quét QR Building, chọn bài đã publish, tải package, thực hiện buổi tập huấn, hỏi AI ngoài game và xem kết quả của chính mình. Tài khoản cũ thiếu username hoàn thiện qua profile/onboarding; game start không tự tạo username gate. |
+| Khách (Visitor) | Không phải tài khoản/role hệ thống: xem landing, Khám phá, phần giới thiệu Dành cho tổ chức, đọc/tìm Learn và tải ứng dụng. Lưu bài, hỏi AI hoặc chơi game cần đăng ký. |
 
-Không có guest account, guest training không định danh hoặc role Visitor. Landing/Learn công khai; mọi game session gắn với Trainee đã xác thực. Building public cho mọi Trainee đã đăng nhập tham gia; Building private yêu cầu thêm mã tham gia chung do Organization cung cấp. Mã không tạo role, membership hoặc quyền đọc tài liệu nội bộ. Xác minh mã tạo grant theo tài khoản ở `access_revision` hiện tại; đổi/thu hồi mã hoặc đổi public/private làm grant cũ mất hiệu lực. QR chỉ resolve Building, không thay kiểm tra quyền. Backend kiểm tra quyền trước khi trả bài/package private và kiểm tra lại ở online start.
+Khách (Visitor) là actor của phần công khai nhưng không có guest account, guest training không định danh hay role Visitor trong hệ thống. Landing/Learn công khai; mọi game session gắn với Trainee đã xác thực. Building public cho mọi Trainee đã đăng nhập tham gia; Building private yêu cầu thêm mã tham gia chung do Organization cung cấp. Mã không tạo role, membership hoặc quyền đọc tài liệu nội bộ. Xác minh mã tạo grant theo tài khoản ở `access_revision` hiện tại; đổi/thu hồi mã hoặc đổi public/private làm grant cũ mất hiệu lực. QR chỉ resolve Building, không thay kiểm tra quyền. Backend kiểm tra quyền trước khi trả bài/package private và kiểm tra lại ở online start.
 
 Sau IFC/connectivity QA, revision ở `ReadyForScenario`. `OrganizationUser` có thể tạo nhiều Scenario/version trên revision, kể cả sau khi scenario khác đã được confirm nếu geometry tương thích. `ConfirmForTraining` là action cho đúng cặp revision/version; QR không phải điều kiện đầu vào vì QR chỉ là Building resolve point. Action không xác nhận công trình, lối thoát, phương án PCCC hay hiệu lực pháp lý của bất kỳ nội dung nào.
 
@@ -44,6 +45,7 @@ Organization tự soạn hoặc dùng template tùy chọn, có thể kết hợ
 | FR-WEB-04 | Góc học tập của Trainee đã xác thực hiển thị AI, bài lưu, lịch sử và kết quả cá nhân; trang Dành cho tổ chức công khai phần giới thiệu nhưng khu quản lý enforce quyền `OrganizationUser` và `organizationId`. | 1 |
 | FR-WEB-05 | Organization editor hiển thị IFC preview, tầng/lớp, đặt/chỉnh/xóa scenario objects, lưu draft, undo/redo, validation và version. Preview web chỉ minh họa; full playtest chạy riêng trong Mobile/Unity với quyền OrganizationUser, trong Trial còn quota thử hoặc entitlement Building `Active`. | 1 |
 | FR-WEB-06 | Web hiển thị gói Building 6/12 tháng, hạn mức người/còn lại và quota AI chung Organization; có thao tác nâng cấp gói và mua thêm quota AI trả trước. Hết quota chặn yêu cầu AI tính phí mới, không áp dụng overage trả sau. | 1 |
+| FR-WEB-07 | Người dùng không thuộc tòa nhà nào: chưa đăng nhập dùng landing, Khám phá, phần giới thiệu Dành cho tổ chức, Learn (đọc/tìm bài, mẹo, video theo tình huống) và tải ứng dụng; đăng ký Trainee thì thêm lưu bài, hỏi AI theo quota ngày, lịch sử/kết quả cá nhân và chơi mọi Building public qua QR hoặc Khám phá. Building private cần mã tham gia chung của Organization. | 1 |
 
 ### FR-AUTH: xác thực và phân quyền
 
@@ -109,7 +111,7 @@ Nguồn đồng bộ auth: [BE authentication](../BE/docs/authentication.md) và
 
 | ID | Yêu cầu | Phase |
 | :--- | :--- | :--- |
-| FR-SCENARIO-01 | OrganizationUser tự soạn hoặc tùy chỉnh template không bắt buộc trên revision hợp lệ; hỗ trợ kết hợp mục tiêu trong capability runtime. Admin cung cấp rubric mẫu, Organization chỉnh rồi gửi duyệt cùng bài. | 1 |
+| FR-SCENARIO-01 | OrganizationUser tự soạn hoặc tùy chỉnh template không bắt buộc trên revision hợp lệ; hỗ trợ kết hợp mục tiêu trong capability runtime. Admin cung cấp rubric mẫu, Organization chỉnh rồi gửi duyệt cùng bài. Template của hệ thống gồm nguồn lửa, tốc độ cháy, khói, gió, cửa/vùng chặn, vật phẩm, mục tiêu, thời lượng và rubric mẫu; quy mô không gian lấy từ IFC của chính công trình, không phải tham số của template. Mục tiêu "hỗ trợ người khác" là dạng thoát nạn có cứu hộ trong capability hiện có; NPC cần cứu thuộc Phase 2. | 1 |
 | FR-SCENARIO-02 | Hệ thống lưu cấu hình risk-aware A* cùng version scenario để replay và so sánh được. | 1 |
 | FR-SCENARIO-03 | ConfirmForTraining ghi readiness kỹ thuật theo revision/version sau validation. Organization gửi mọi phiên bản kịch bản/rubric cho PlatformAdmin duyệt nội dung; từ chối có lý do, sửa phải tạo bản mới và gửi lại. Readiness không thay approval nội dung. | 1 |
 | FR-SCENARIO-04 | Màn hình readiness phải hiển thị rõ giới hạn của mô phỏng và không dùng ngôn ngữ chứng nhận hoặc phê duyệt PCCC. | 1 |
@@ -136,7 +138,7 @@ Nguồn đồng bộ auth: [BE authentication](../BE/docs/authentication.md) và
 | FR-TRAINING-05 | Basic NPC: scenario hỗ trợ số lượng NPC giới hạn, state đơn giản và budget hiệu năng trên Android. | 2 |
 | FR-TRAINING-06 | Mỗi session mới kiểm tra online ở bước start kể cả package đã cache; sau khi launch grant/gameplay đã bắt đầu, mất mạng hoặc entitlement hết hạn không dừng gameplay, event/result được xếp hàng và đồng bộ khi có mạng. `training`, `release`, `scenario`, tenant và QR đã pin không được đổi. Gate event/result dùng actor sở hữu session, event ID/sequence hoặc result key/hash để replay an toàn; không kiểm tra lại entitlement hay trạng thái active hiện tại để chặn sync phiên đã bắt đầu. | 1 |
 | FR-TRAINING-07 | Unity runtime cung cấp thư viện dùng chung cho movement, camera 3D góc nhìn thứ ba (third-person) bám theo nhân vật, collision, cửa, vật phẩm, lửa/khói/gió/cháy lan và chấm điểm. Camera hỗ trợ orbit/zoom có giới hạn và xử lý vật cản trong không gian BIM; dùng chung cho training/playtest, giữ cấu trúc và kích thước công trình. Organization chỉ cấu hình capability đã có. | 1 |
-| FR-TRAINING-08 | Assessment chấm đạt/chưa đạt theo rubric đã duyệt/version hóa, trả lý do và lưu từng lần. Hoàn thành khác với đạt. Thi lại không giới hạn; không chứng nhận, module/sprint hoặc điều kiện luyện trước. Ngưỡng và trọng số cụ thể chưa chốt. | 1 |
+| FR-TRAINING-08 | Backend chấm Assessment theo rubric đã pin của phiên bản bài: rubric gồm `pass_threshold` (0–1) và danh sách tiêu chí; mỗi tiêu chí so một chỉ số do server tính từ event của Unity (`reached_exit`, `completion_time_seconds`, `wrong_exits`, `hazard_exposure`, `distance_meters`, số lần dùng thiết bị mà runtime đã khai báo) với ngưỡng bằng `gte`/`lte`/`eq`, có cờ bắt buộc và trọng số. Điểm = tổng trọng số tiêu chí đạt / tổng trọng số (lưu theo %). Đạt khi mọi tiêu chí bắt buộc đạt và điểm ≥ ngưỡng; kết quả là `Passed`/`NotPassed`/`Incomplete` (bỏ dở) kèm lý do (`MANDATORY_CRITERION_FAILED`, `BELOW_PASS_THRESHOLD`, `ALL_REQUIREMENTS_MET`…); Learn và Guided Drill là `NotAssessed`. Ngưỡng và trọng số do Organization đặt trong rubric (bắt đầu từ rubric mẫu của Admin) và được Admin duyệt cùng bài; hệ thống không gợi ý con số. Thi lại không giới hạn, mọi lần đều lưu; một người chơi lại hoặc chơi nhiều bài cùng tòa trong kỳ chỉ tính một suất người. Hoàn thành khác với đạt; không chứng nhận, module/sprint hoặc điều kiện luyện trước. | 1 |
 | FR-TRAINING-09 | Khói trong runtime đọng dưới trần và hạ dần, chuyển từ trắng sang đen theo thời gian, không xuyên tường và chỉ rò qua khe cửa. Người chơi đứng, cúi hoặc bò; phơi nhiễm khói tính theo độ cao đầu so với lớp khói. Thông số là mô hình game, không phải mô phỏng CFD. | 1 |
 
 ### FR-ANALYTICS: analytics
@@ -203,7 +205,7 @@ Nguồn đồng bộ auth: [BE authentication](../BE/docs/authentication.md) và
 ## 6. Ngoài phạm vi
 
 - Cấp chứng nhận hoàn thành; phê duyệt, kiểm định hoặc kết luận tuân thủ PCCC.
-- Chương trình học module/sprint hoặc prerequisite bắt buộc; role Visitor và guest gameplay.
+- Chương trình học module/sprint hoặc prerequisite bắt buộc; tài khoản/role hệ thống cho Visitor và guest gameplay.
 - Chuyển đổi tự động từ định dạng mô hình ngoài IFC.
 - Game không có tài khoản xác thực hoặc đọc dữ liệu Organization vượt quyền; landing/Learn vẫn đọc công khai.
 - Hướng dẫn quyết định trong tình huống cháy nổ thực tế.
@@ -237,4 +239,4 @@ Các tiêu chí trên là contract thiết kế và acceptance criteria cho đ�
 
 ## 9. Chi tiết nghiệp vụ còn mở
 
-Giá/hạn mức gói, lượng/đơn vị/hiệu lực quota AI, nâng cấp giữa kỳ, rubric số cụ thể và vòng đời mã private theo [bảng quyết định mở](fire_evacuation_project_overview.md). Không tự đặt số người, giá hay điểm đạt. SQL/sơ đồ/report cần một đợt đồng bộ riêng trước triển khai.
+Giá/hạn mức gói, lượng/đơn vị/hiệu lực quota AI, nâng cấp giữa kỳ, rubric mẫu khuyến nghị và vòng đời mã private theo [bảng quyết định mở](fire_evacuation_project_overview.md). Không tự đặt số người hay giá; ngưỡng/trọng số đạt là của từng rubric được duyệt (FR-TRAINING-08). SQL/sơ đồ/report cần một đợt đồng bộ riêng trước triển khai.

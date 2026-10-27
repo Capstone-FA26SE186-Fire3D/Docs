@@ -1,0 +1,177 @@
+// Fire3D physical model, group B12.
+// Paste into https://dbdiagram.io . Gray tables belong to other groups and only show the columns referenced here.
+
+Table ai_command_receipts {
+  "actor_user_id" uuid [not null]
+  "operation" text [not null]
+  "idempotency_key" varchar(128) [not null]
+  "input_hash" varchar(64) [not null]
+  "result" jsonb [not null]
+  "created_at" timestamptz [not null]
+
+  indexes {
+    (actor_user_id, operation, idempotency_key) [pk]
+  }
+}
+
+Table application_command_receipts {
+  "id" uuid [pk, default: `gen_random_uuid()`]
+  "actor_user_id" uuid [not null]
+  "organization_id" uuid
+  "operation_name" varchar(100) [not null]
+  "idempotency_key" varchar(255) [not null, note: '''CHECK ((NULLIF(btrim((idempotency_key)::text), ''::text) IS NOT NULL))''']
+  "input_hash" varchar(128) [not null, note: '''CHECK (((input_hash)::text ~ '^[0-9a-fA-F]{64,128}$'::text))''']
+  "result_status" varchar(30) [not null, note: '''CHECK (((result_status)::text = ANY (ARRAY[('Succeeded'::character varying)::text, ('Rejected'::character varying)::text])))''']
+  "result_payload" jsonb [not null, default: `'{}'::jsonb`]
+  "created_at" timestamptz [not null, default: `now()`]
+
+  indexes {
+    (actor_user_id, operation_name, idempotency_key) [unique]
+  }
+
+  Note: '''CREATE INDEX idx_command_receipts_operation ON application_command_receipts USING btree (operation_name, created_at DESC)'''
+}
+
+Table authoring_command_receipts {
+  "actor_id" uuid [not null]
+  "operation" text [not null]
+  "idempotency_key" varchar(128) [not null]
+  "input_hash" varchar(64) [not null, note: '''CHECK (((input_hash)::text ~ '^[0-9a-f]{64}$'::text))''']
+  "result_id" uuid [not null]
+  "created_at" timestamptz [not null, default: `now()`]
+
+  indexes {
+    (actor_id, operation, idempotency_key) [pk]
+  }
+}
+
+Table billing_command_receipts {
+  "id" uuid [pk]
+  "actor_id" uuid [not null]
+  "operation" varchar(80) [not null]
+  "idempotency_key" varchar(128) [not null]
+  "input_hash" varchar(64) [not null, note: '''CHECK (((input_hash)::text ~ '^[a-f0-9]{64}$'::text))''']
+  "resource_id" uuid [not null]
+  "created_at" timestamptz [not null]
+  "response" jsonb
+
+  indexes {
+    (actor_id, operation, idempotency_key) [unique]
+  }
+}
+
+Table content_command_receipts {
+  "actor_id" uuid [not null]
+  "operation" text [not null]
+  "idempotency_key" varchar(128) [not null]
+  "input_hash" varchar(64) [not null, note: '''CHECK (((input_hash)::text ~ '^[0-9a-f]{64}$'::text))''']
+  "result" jsonb [not null]
+  "created_at" timestamptz [not null, default: `now()`]
+
+  indexes {
+    (actor_id, operation, idempotency_key) [pk]
+  }
+}
+
+Table learner_command_receipts {
+  "actor_id" uuid [not null]
+  "operation" text [not null]
+  "idempotency_key" varchar(128) [not null]
+  "input_hash" varchar(64) [not null, note: '''CHECK (((input_hash)::text ~ '^[0-9a-f]{64}$'::text))''']
+  "result" jsonb [not null]
+  "created_at" timestamptz [not null, default: `now()`]
+
+  indexes {
+    (actor_id, operation, idempotency_key) [pk]
+  }
+}
+
+Table playtest_command_receipts {
+  "actor_id" uuid [not null]
+  "operation" text [not null]
+  "idempotency_key" varchar(128) [not null]
+  "input_hash" varchar(64) [not null, note: '''CHECK (((input_hash)::text ~ '^[0-9a-f]{64}$'::text))''']
+  "result" jsonb [not null]
+  "created_at" timestamptz [not null, default: `now()`]
+
+  indexes {
+    (actor_id, operation, idempotency_key) [pk]
+  }
+}
+
+Table processing_command_receipts {
+  "actor_id" uuid [not null]
+  "operation" text [not null]
+  "idempotency_key" text [not null]
+  "input_hash" varchar(64) [not null]
+  "job_id" uuid [not null]
+  "created_at" timestamptz [not null, default: `now()`]
+
+  indexes {
+    (actor_id, operation, idempotency_key) [pk]
+  }
+}
+
+Table readiness_command_receipts {
+  "actor_id" uuid [not null]
+  "operation" text [not null]
+  "idempotency_key" varchar(128) [not null]
+  "input_hash" varchar(64) [not null, note: '''CHECK (((input_hash)::text ~ '^[0-9a-f]{64}$'::text))''']
+  "result" jsonb [not null]
+  "created_at" timestamptz [not null, default: `now()`]
+
+  indexes {
+    (actor_id, operation, idempotency_key) [pk]
+  }
+}
+
+Table release_command_receipts {
+  "actor_id" uuid [not null]
+  "operation" text [not null]
+  "idempotency_key" varchar(128) [not null]
+  "input_hash" varchar(64) [not null]
+  "result" jsonb [not null]
+
+  indexes {
+    (actor_id, operation, idempotency_key) [pk]
+  }
+}
+
+Table support_command_receipts {
+  "actor_id" uuid [not null]
+  "operation" text [not null]
+  "idempotency_key" varchar(128) [not null]
+  "input_hash" varchar(64) [not null, note: '''CHECK (((input_hash)::text ~ '^[0-9a-f]{64}$'::text))''']
+  "result" jsonb [not null]
+  "created_at" timestamptz [not null, default: `now()`]
+
+  indexes {
+    (actor_id, operation, idempotency_key) [pk]
+  }
+}
+
+Table organizations [headercolor: #9E9E9E, note: 'nhóm B1'] {
+  "id" uuid [pk]
+}
+
+Table processing_jobs [headercolor: #9E9E9E, note: 'nhóm B3'] {
+  "id" uuid [pk]
+}
+
+Table users [headercolor: #9E9E9E, note: 'nhóm B1'] {
+  "id" uuid [pk]
+}
+
+Ref ai_command_receipts_actor_user_id_fkey: ai_command_receipts.actor_user_id > users.id [delete: no action]
+Ref application_command_receipts_actor_user_id_fkey: application_command_receipts.actor_user_id > users.id [delete: restrict]
+Ref application_command_receipts_organization_id_fkey: application_command_receipts.organization_id > organizations.id [delete: restrict]
+Ref authoring_command_receipts_actor_id_fkey: authoring_command_receipts.actor_id > users.id [delete: no action]
+Ref billing_command_receipts_actor_id_fkey: billing_command_receipts.actor_id > users.id [delete: restrict]
+Ref content_command_receipts_actor_id_fkey: content_command_receipts.actor_id > users.id [delete: no action]
+Ref learner_command_receipts_actor_id_fkey: learner_command_receipts.actor_id > users.id [delete: no action]
+Ref playtest_command_receipts_actor_id_fkey: playtest_command_receipts.actor_id > users.id [delete: no action]
+Ref processing_command_receipts_actor_id_fkey: processing_command_receipts.actor_id > users.id [delete: no action]
+Ref processing_command_receipts_job_id_fkey: processing_command_receipts.job_id > processing_jobs.id [delete: no action]
+Ref readiness_command_receipts_actor_id_fkey: readiness_command_receipts.actor_id > users.id [delete: no action]
+Ref release_command_receipts_actor_id_fkey: release_command_receipts.actor_id > users.id [delete: no action]
+Ref support_command_receipts_actor_id_fkey: support_command_receipts.actor_id > users.id [delete: no action]
