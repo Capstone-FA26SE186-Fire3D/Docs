@@ -25,6 +25,7 @@ Giá trị cốt lõi là giúp người học làm quen với không gian đã 
 | `PlatformAdmin` | Quản lý nền tảng, thư viện hỗ trợ Organization, Learn công khai, gói/quota; duyệt mọi phiên bản kịch bản/rubric. |
 | `OrganizationUser` | Sở hữu Building, IFC, scenario, publish, QR, analytics và billing cho organization. |
 | `Trainee` | Quét QR Building, chọn bài đã publish trong app Android và chỉ xem dữ liệu buổi tập huấn của chính mình. |
+| Khách (Visitor) | Không phải tài khoản: xem landing, Khám phá, phần giới thiệu Dành cho tổ chức, đọc/tìm Learn và tải ứng dụng; muốn lưu bài, hỏi AI hoặc chơi phải đăng ký Trainee hoặc Organization. |
 
 Building public cho mọi Trainee đã đăng nhập tham gia; Building private yêu cầu thêm mã tham gia chung do Organization cung cấp. Mã không tạo role, membership hoặc quyền đọc tài liệu nội bộ. Xác minh mã tạo grant theo tài khoản ở `access_revision` hiện tại; đổi/thu hồi mã hoặc đổi public/private làm grant cũ mất hiệu lực. QR chỉ resolve Building, không thay kiểm tra quyền. Backend kiểm tra quyền trước khi trả bài/package private và kiểm tra lại ở online start.
 
@@ -110,7 +111,7 @@ Mode Learn trong Unity vẫn là trải nghiệm tự do quan sát không gian v
 
 ### 5.3. Assessment
 
-Trainee tự chọn đọc Learn/blog, Learn trong Unity, Guided Drill hoặc vào Assessment ngay; không có prerequisite học/luyện. Assessment giảm/tắt gợi ý, chấm đạt/chưa đạt theo rubric đã duyệt và trả lý do/debrief. Lưu từng lần làm; thi lại không giới hạn và không bắt buộc luyện lại. Hoàn thành session không tự đồng nghĩa đạt; lỗi, hủy và chưa sync phải phân biệt với kết quả hợp lệ. Không cấp chứng nhận, không curriculum/module/sprint. Tiêu chí bắt buộc/tùy chọn, trọng số, ngưỡng điểm và lỗi khiến chưa đạt cần chốt theo từng loại bài, chưa hard-code con số.
+Trainee tự chọn đọc Learn/blog, Learn trong Unity, Guided Drill hoặc vào Assessment ngay; không có prerequisite học/luyện. Assessment giảm/tắt gợi ý, chấm đạt/chưa đạt theo rubric đã duyệt và trả lý do/debrief. Lưu từng lần làm; thi lại không giới hạn và không bắt buộc luyện lại. Hoàn thành session không tự đồng nghĩa đạt; lỗi, hủy và chưa sync phải phân biệt với kết quả hợp lệ. Không cấp chứng nhận, không curriculum/module/sprint. Backend chấm Assessment theo rubric đã pin của phiên bản bài: rubric gồm `pass_threshold` (0–1) và danh sách tiêu chí; mỗi tiêu chí so một chỉ số do server tính từ event của Unity (`reached_exit`, `completion_time_seconds`, `wrong_exits`, `hazard_exposure`, `distance_meters`, số lần dùng thiết bị mà runtime đã khai báo) với ngưỡng bằng `gte`/`lte`/`eq`, có cờ bắt buộc và trọng số. Điểm = tổng trọng số tiêu chí đạt / tổng trọng số (lưu theo %). Đạt khi mọi tiêu chí bắt buộc đạt và điểm ≥ ngưỡng; kết quả là `Passed`/`NotPassed`/`Incomplete` (bỏ dở) kèm lý do (`MANDATORY_CRITERION_FAILED`, `BELOW_PASS_THRESHOLD`, `ALL_REQUIREMENTS_MET`…); Learn và Guided Drill là `NotAssessed`. Ngưỡng và trọng số do Organization đặt trong rubric (bắt đầu từ rubric mẫu của Admin) và được Admin duyệt cùng bài; hệ thống không gợi ý con số. Thi lại không giới hạn, mọi lần đều lưu; một người chơi lại hoặc chơi nhiều bài cùng tòa trong kỳ chỉ tính một suất người.
 
 
 - Scenario cố định, giảm hoặc tắt gợi ý theo rubric.

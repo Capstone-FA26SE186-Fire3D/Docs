@@ -8,7 +8,7 @@
 
 ## Mục đích
 
-FET3D là đồ án tạo trải nghiệm tập huấn và đánh giá sơ tán trong môi trường 3D trên Android, xây dựng từ mô hình **IFC** của một công trình. Hệ thống giúp người học quan sát không gian, thực hành scenario mô phỏng và xem debrief về quyết định của mình.
+FET3D là đồ án tạo trải nghiệm tập huấn và đánh giá PCCC (thoát nạn và xử lý đám cháy ban đầu bằng thiết bị trong game) trong môi trường 3D trên Android, xây dựng từ mô hình **IFC** của một công trình. Hệ thống giúp người học quan sát không gian, thực hành scenario mô phỏng và xem debrief về quyết định của mình.
 
 Luồng cốt lõi:
 
@@ -31,8 +31,9 @@ Thời lượng, lựa chọn tuyến, trạng thái hoàn thành và modeled ex
 | `PlatformAdmin` | Quản trị nền tảng, thư viện hỗ trợ Organization, Learn công khai và duyệt mọi phiên bản kịch bản/rubric; quản lý gói và quota. |
 | `OrganizationUser` | Quản lý Building, IFC, scenario, publish, QR, analytics và billing của organization. |
 | `Trainee` | Đăng nhập Android, quét QR Building, chọn bài đã publish, thực hiện training và xem kết quả của chính mình. |
+| Khách (Visitor) | Không phải tài khoản: xem landing, Khám phá, phần giới thiệu Dành cho tổ chức, đọc/tìm Learn và tải ứng dụng; muốn lưu bài, hỏi AI hoặc chơi phải đăng ký Trainee hoặc Organization. |
 
-Landing và Learn trên web là nội dung công khai cho khách. Hệ thống không có guest account, guest training không định danh, lời mời thành viên hoặc role hệ thống thứ tư cho kiểm tra nội dung PCCC. Trainee local nhập username ngay khi đăng ký; form → OTP → proof → account verified → login bằng email/password. Google đã link giữ role/tenant cũ; Google mới trả OnboardingRequired, email local trùng trả ACCOUNT_LINK_REQUIRED, đã có API hoàn tất onboarding/link; nghiệm thu provider/client riêng. Thiết kế đích chỉ onboarding Trainee/OrganizationUser. Trainee đăng nhập quét QR; Building public tham gia trực tiếp, private cần mã tham gia chung; xem/chọn bài được phép; session sau đó pin đúng `Training`, release và scenario.
+Landing và Learn trên web là nội dung công khai cho khách; trong use case, khách (Visitor) là actor của phần công khai nhưng không phải tài khoản hay role hệ thống. Hệ thống không có guest account, guest training không định danh, lời mời thành viên hoặc role hệ thống thứ tư cho kiểm tra nội dung PCCC. Người đã đăng ký Trainee nhưng không thuộc tòa nhà nào vẫn chơi được mọi Building public; Building private cần mã tham gia chung của Organization. Trainee local nhập username ngay khi đăng ký; form → OTP → proof → account verified → login bằng email/password. Google đã link giữ role/tenant cũ; Google mới trả OnboardingRequired, email local trùng trả ACCOUNT_LINK_REQUIRED, đã có API hoàn tất onboarding/link; nghiệm thu provider/client riêng. Thiết kế đích chỉ onboarding Trainee/OrganizationUser. Trainee đăng nhập quét QR; Building public tham gia trực tiếp, private cần mã tham gia chung; xem/chọn bài được phép; session sau đó pin đúng `Training`, release và scenario.
 
 ## Trải nghiệm web
 
@@ -46,7 +47,7 @@ Website chung điều hướng theo nhu cầu với các mục Khám phá, Dành
 2. Worker kiểm tra hash/định dạng, dùng Python/IfcOpenShell/IfcConvert để trích xuất, dùng Blender script để tối ưu geometry và tạo preview/issue.
 3. Unity build worker dùng asset runtime đã chuẩn bị để tạo collider, NavMesh, liên kết tầng và content package; không dựng thủ công từng tòa.
 4. QA kiểm tra floor, cửa, cầu thang, exit, liên kết liên tầng, route, collider, budget package và mã đối tượng. Revision chuyển `ReadyForScenario` hoặc `NeedsFix`.
-5. Organization tự soạn hoặc dùng template tùy chọn, có thể kết hợp mục tiêu sơ tán, nhận biết nguy cơ, dùng thiết bị và hỗ trợ người khác trong capability runtime. Admin cung cấp tiêu chí mẫu; Organization điều chỉnh rồi gửi duyệt cùng kịch bản. PlatformAdmin duyệt mọi phiên bản trước phát hành hoặc từ chối kèm lý do. Sửa nội dung/rubric phải tạo phiên bản mới và gửi duyệt lại. IFC QA/ConfirmForTraining là readiness kỹ thuật, không thay bước duyệt nội dung; release chỉ publish khi cả hai đạt. Phiên và kết quả cũ giữ phiên bản đã pin.
+5. Organization tự soạn hoặc dùng template tùy chọn, có thể kết hợp mục tiêu sơ tán, nhận biết nguy cơ, dùng thiết bị và hỗ trợ người khác trong capability runtime. Template của hệ thống gồm nguồn lửa, tốc độ cháy, khói, gió, cửa/vùng chặn, vật phẩm, mục tiêu, thời lượng và rubric mẫu; quy mô không gian lấy từ IFC của chính công trình, không phải tham số của template. Mục tiêu "hỗ trợ người khác" là dạng thoát nạn có cứu hộ trong capability hiện có; NPC cần cứu thuộc Phase 2. Admin cung cấp tiêu chí mẫu; Organization điều chỉnh rồi gửi duyệt cùng kịch bản. PlatformAdmin duyệt mọi phiên bản trước phát hành hoặc từ chối kèm lý do. Sửa nội dung/rubric phải tạo phiên bản mới và gửi duyệt lại. IFC QA/ConfirmForTraining là readiness kỹ thuật, không thay bước duyệt nội dung; release chỉ publish khi cả hai đạt. Phiên và kết quả cũ giữ phiên bản đã pin.
 6. OrganizationUser có thể chạy thử riêng bằng Mobile/Unity trong hạn mức thử. Playtest không đi qua QR Trainee và không tính learner analytics.
 7. ConfirmForTraining ghi readiness kỹ thuật theo revision/version; PlatformAdmin phải duyệt đúng phiên bản nội dung/rubric trước publish. Xác nhận một bài không khóa geometry dùng chung.
 8. Backend tạo release `Built`, package bất biến và `Training` khớp revision/scenario/version. Payment dịch vụ Building phải cấp entitlement `Active` trước khi publish.
@@ -58,6 +59,10 @@ Website chung điều hướng theo nhu cầu với các mục Khám phá, Dành
 Mỗi Building có một QR canonical để người dùng mở đúng tòa nhà; QR không giữ FK tới Training/release và không đổi Building sau khi cấp. QR không tải/cài APK riêng cho từng tòa nhà: Mobile app cài một lần rồi tải content package Unity theo bài/release đã chọn. Khi dịch vụ hết hạn, QR vẫn mở web/app để đăng nhập hoặc tải ứng dụng nhưng backend chặn phát hành và phiên mới. Three.js dùng cho landing và editor/preview; gameplay đầy đủ vẫn chạy trong Unity.
 
 `ConfirmForTraining` chỉ là trạng thái readiness nội bộ, không phải xác nhận, phê duyệt hoặc thẩm duyệt PCCC.
+
+## Đánh giá đạt/chưa đạt của Trainee
+
+Backend chấm Assessment theo rubric đã pin của phiên bản bài: rubric gồm `pass_threshold` (0–1) và danh sách tiêu chí; mỗi tiêu chí so một chỉ số do server tính từ event của Unity (`reached_exit`, `completion_time_seconds`, `wrong_exits`, `hazard_exposure`, `distance_meters`, số lần dùng thiết bị mà runtime đã khai báo) với ngưỡng bằng `gte`/`lte`/`eq`, có cờ bắt buộc và trọng số. Điểm = tổng trọng số tiêu chí đạt / tổng trọng số (lưu theo %). Đạt khi mọi tiêu chí bắt buộc đạt và điểm ≥ ngưỡng; kết quả là `Passed`/`NotPassed`/`Incomplete` (bỏ dở) kèm lý do (`MANDATORY_CRITERION_FAILED`, `BELOW_PASS_THRESHOLD`, `ALL_REQUIREMENTS_MET`…); Learn và Guided Drill là `NotAssessed`. Ngưỡng và trọng số do Organization đặt trong rubric (bắt đầu từ rubric mẫu của Admin) và được Admin duyệt cùng bài; hệ thống không gợi ý con số. Thi lại không giới hạn, mọi lần đều lưu; một người chơi lại hoặc chơi nhiều bài cùng tòa trong kỳ chỉ tính một suất người. Hoàn thành không đồng nghĩa đạt; không cấp chứng nhận. Chi tiết API theo [BE learner sessions](../BE/docs/learner-sessions.md).
 
 ## Kiến trúc
 
@@ -117,7 +122,7 @@ Dashboard dùng các định nghĩa cố định: `Trainee unique` là số Trai
 | Redis provider/version, region, cache TTL/eviction, Streams retention và outbox recovery window | Retry, replay, chi phí, tải database và khả năng phục hồi | Trước triển khai event/cache production |
 | OneShield/OnePortal plan/SKU, DNS ownership, TLS termination, WAF/rate limits, logging, SLA, region, cost và failover | Edge protection, ingress, observability và chi phí vận hành | Trước public production ingress |
 | Đơn vị/hiệu lực/rollover quota AI, hoàn tiền/hủy; phí và thời hạn nâng cấp giữa kỳ | Mua thêm, provisioning và dữ liệu lịch sử | Billing lifecycle |
-| Catalog runtime ưu tiên; tiêu chí, trọng số, ngưỡng và lỗi khiến chưa đạt | Thư viện Organization, editor, scoring và review | Runtime authoring |
+| Catalog runtime ưu tiên; bộ rubric mẫu khuyến nghị theo loại bài (ngưỡng/trọng số gợi ý). Cơ chế chấm đã chốt, xem mục Đánh giá đạt/chưa đạt | Thư viện Organization, editor | Runtime authoring |
 | Bộ IFC, Android mục tiêu và benchmark | QA support matrix, package budget | IFC/Mobile release |
 | Unity project/build worker, LLM/embedding, Azure SKU/region và compute cho BE/worker | Toolchain, vector dimension, chi phí và vận hành | Production deployment |
 

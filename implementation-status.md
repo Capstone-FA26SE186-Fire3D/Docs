@@ -32,4 +32,4 @@ BE có source Redis cache/Streams/recovery; không gọi toàn bộ Redis pipeli
 - FE integration/mock: client và fixture kiểm cùng contract; không thay API/provider thật.
 - Acceptance: ghi môi trường, commit/migration, dữ liệu test và kết quả thực tế cho DB/worker/provider/thiết bị.
 
-Không chạy build/test ứng dụng, migration, payment hoặc LLM chỉ để cập nhật trang này. Giá/quota/expiry/rollover/rubric còn mở vẫn theo [overview](fire_evacuation_project_overview.md); không tự đặt con số. [Backlog tổng](https://github.com/Capstone-FA26SE186-Fire3D/Docs/issues/37) liên kết các phần việc triển khai/nghiệm thu và phải kiểm trạng thái hiện hành trước khi thực hiện.
+Không chạy build/test ứng dụng, migration, payment hoặc LLM chỉ để cập nhật trang này. Giá/quota/expiry/rollover còn mở vẫn theo [overview](fire_evacuation_project_overview.md); không tự đặt con số. [Backlog tổng](https://github.com/Capstone-FA26SE186-Fire3D/Docs/issues/37) liên kết các phần việc triển khai/nghiệm thu và phải kiểm trạng thái hiện hành trước khi thực hiện.
