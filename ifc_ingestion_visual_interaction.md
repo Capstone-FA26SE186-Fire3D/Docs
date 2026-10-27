@@ -368,7 +368,27 @@ Catalog do PlatformAdmin quản lý trong Organization Library (FR-LIBRARY-01/02
 
 ### 6.2. Đợt 2 (mở rộng)
 
-`extinguisher.hose_reel`, `blanket.fire` (bếp), `item.blanket`, `power.breaker`, `gas.valve`, `door.fire_wedged`, `door.exit_locked`, `phone.emergency`, `signal.window`, `ppe.escape_hood`, `firstaid.kit`, `npc.injured`, `npc.wheelchair` + `refuge.area`, `assembly.point`, `window.openable` (liên kết mô hình gió).
+Chốt 28/10/2026 để Unity (runtime 2.1.0), FE và BE dùng một bộ tên. Event trong catalog viết PascalCase; metric cho rubric là dạng snake_case tương ứng. Payload chung `{objectId}` (+ `npcId` cho hai event NPC). Chưa có trong runtime 2.0.2.
+
+| catalogKey | Tên hiển thị | Thao tác | Event cho rubric |
+| :--- | :--- | :--- | :--- |
+| `extinguisher.hose_reel` | Cuộn vòi chữa cháy | Mở van, giữ để phun | `hose_reel_used` |
+| `blanket.fire` | Chăn chữa cháy (bếp) | Kéo ra, trùm lên lửa nhỏ | `fire_blanket_used` |
+| `item.blanket` | Chăn | Nhặt, nhúng nước, trùm người | `blanket_covered` (nhúng dùng `item_wetted`) |
+| `power.breaker` | Tủ điện | Ngắt cầu dao | `power_cut_off` |
+| `gas.valve` | Van gas | Khóa van | `gas_valve_closed` |
+| `door.fire_wedged` | Cửa chống cháy bị chèn | Gỡ nêm cho cửa đóng | `wedge_removed` |
+| `door.exit_locked` | Cửa thoát bị khóa | Thử mở (bẫy, phải tìm lối khác) | `locked_exit_tried` |
+| `phone.emergency` | Điện thoại khẩn cấp | Gọi 114 | `emergency_called` |
+| `signal.window` | Cửa sổ ra hiệu | Ra hiệu cứu hộ | `signaled_for_help` |
+| `ppe.escape_hood` | Mặt nạ thoát hiểm | Đeo | `escape_hood_worn` |
+| `firstaid.kit` | Hộp sơ cứu | Lấy, dùng cho người bị thương | `first_aid_used` |
+| `npc.injured` | Người bị thương | Dìu, sơ cứu | `injured_helped` |
+| `npc.wheelchair` + `refuge.area` | Người ngồi xe lăn, chỗ chờ cứu hộ | Đưa tới chỗ chờ cứu hộ (Goal) | `wheelchair_to_refuge` |
+| `assembly.point` | Điểm tập kết | Đi vào (Goal) | `assembly_point_reached` |
+| `window.openable` | Cửa sổ mở được | Mở thông gió (liên kết mô hình gió) | `window_opened` |
+
+BE hiện viết cứng danh sách metric chấm được (`EditorContract.EventCountMetrics` và `learner_session_finalize`), nên các event trên chỉ chấm được sau khi BE chuyển sang đọc metric từ runtime catalog hoặc thêm danh sách này: BE issue #183.
 
 ### 6.3. Sprinkler (đợt 1)
 
