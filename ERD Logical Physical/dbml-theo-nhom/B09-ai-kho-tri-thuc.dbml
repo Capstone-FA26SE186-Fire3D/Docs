@@ -1,0 +1,152 @@
+// Fire3D physical model, group B9.
+// Paste into https://dbdiagram.io . Gray tables belong to other groups and only show the columns referenced here.
+
+Table ai_operation_policies {
+  "id" uuid [pk]
+  "operation" text [not null, note: '''CHECK ((operation = ANY (ARRAY['ScenarioDraft'::text, 'Answer'::text, 'TraineeAnswer'::text])))''']
+  "quota_unit" text [not null, note: '''CHECK ((quota_unit ~ '^[a-z][a-z0-9_-]{0,49}$'::text))''']
+  "reserve_units" integer [not null, note: '''CHECK (((reserve_units >= 1) AND (reserve_units <= 100000000)))''']
+  "max_input_chars" integer [not null, note: '''CHECK (((max_input_chars >= 1) AND (max_input_chars <= 20000)))''']
+  "max_sources" integer [not null, note: '''CHECK (((max_sources >= 1) AND (max_sources <= 100)))''']
+  "effective_from" timestamptz [not null]
+  "effective_until" timestamptz
+  "created_by" uuid [not null]
+  "created_at" timestamptz [not null]
+  "daily_units" integer
+
+  Note: '''CHECK (((effective_until IS NULL) OR (effective_until > effective_from)))
+CHECK ((((operation = 'TraineeAnswer'::text) = (daily_units IS NOT NULL)) AND ((daily_units IS NULL) OR ((daily_units >= 1) AND (daily_units <= 100000000) AND (daily_units >= reserve_units)))))
+ai_operation_policies_operation_tstzrange_excl: EXCLUDE USING gist (operation WITH =, tstzrange(effective_from, effective_until, '[)'::text) WITH &&)'''
+}
+
+Table ai_requests {
+  "id" uuid [pk]
+  "organization_id" uuid
+  "actor_user_id" uuid [not null]
+  "operation" text [not null, note: '''CHECK ((operation = ANY (ARRAY['ScenarioDraft'::text, 'Answer'::text, 'TraineeAnswer'::text])))''']
+  "policy_id" uuid [not null]
+  "quota_unit" text [not null]
+  "reserved_units" integer [not null, note: '''CHECK ((reserved_units > 0))''']
+  "consumed_units" integer
+  "status" text [not null, note: '''CHECK ((status = ANY (ARRAY['Accepted'::text, 'Processing'::text, 'Succeeded'::text, 'Failed'::text, 'NeedsReconcile'::text, 'Rejected'::text])))''']
+  "input" jsonb [not null, note: '''CHECK ((jsonb_typeof(input) = 'object'::text))''']
+  "input_hash" varchar(64) [not null]
+  "sources" jsonb [not null, note: '''CHECK ((jsonb_typeof(sources) = 'array'::text))''']
+  "result" jsonb
+  "provider_result" jsonb
+  "failure_code" varchar(80)
+  "attempts" integer [not null, default: 0, note: '''CHECK ((attempts >= 0))''']
+  "lease_token" uuid
+  "lease_until" timestamptz
+  "next_attempt_at" timestamptz [not null]
+  "reconcile_requested_at" timestamptz
+  "reconcile_requested_by" uuid
+  "created_at" timestamptz [not null]
+  "updated_at" timestamptz [not null]
+  "completed_at" timestamptz
+  "revision" bigint [not null, default: 1, note: '''CHECK ((revision > 0))''']
+  "audience" text [not null, default: 'organization']
+  "result_type" text [note: '''CHECK (((result_type IS NULL) OR (result_type = ANY (ARRAY['KnowledgeAnswer'::text, 'ScenarioDraft'::text, 'InsufficientEvidence'::text, 'RejectedBySafetyGate'::text]))))''']
+  "context" jsonb
+  "bim" jsonb
+  "model_version" text
+  "technical_usage" jsonb
+
+  indexes {
+    (status, next_attempt_at, created_at) [name: 'ai_requests_dispatch']
+  }
+
+  Note: '''CHECK (((audience = ANY (ARRAY['organization'::text, 'trainee'::text])) AND ((audience = 'organization'::text) = (organization_id IS NOT NULL)) AND ((audience = 'trainee'::text) = (operation = 'TraineeAnswer'::text))))
+CHECK (((consumed_units >= 0) AND (consumed_units <= reserved_units)))
+CHECK (((lease_token IS NULL) = (lease_until IS NULL)))
+CHECK (((status <> 'Processing'::text) OR (lease_token IS NOT NULL)))
+CHECK (((status = 'Succeeded'::text) = ((consumed_units IS NOT NULL) AND (result IS NOT NULL) AND (result_type IS NOT NULL))))
+CHECK (((status = ANY (ARRAY['Succeeded'::text, 'Failed'::text, 'Rejected'::text])) = (completed_at IS NOT NULL)))
+CREATE INDEX ai_requests_organization ON ai_requests USING btree (organization_id, created_at DESC, id)
+CREATE INDEX ai_requests_trainee ON ai_requests USING btree (actor_user_id, created_at DESC, id) WHERE (audience = 'trainee'::text)'''
+}
+
+Table knowledge_sources {
+  "id" uuid [pk]
+  "organization_id" uuid
+  "visibility" text [not null, note: '''CHECK ((visibility = ANY (ARRAY['Common'::text, 'Organization'::text])))''']
+  "title" text [not null, note: '''CHECK ((NULLIF(btrim(title), ''::text) IS NOT NULL))''']
+  "source_uri" text
+  "version_label" varchar(100) [not null]
+  "source_hash" varchar(64) [not null, note: '''CHECK (((source_hash)::text ~ '^[0-9a-f]{64}$'::text))''']
+  "jurisdiction" text
+  "effective_from" timestamptz
+  "effective_until" timestamptz
+  "approval_status" text [not null, note: '''CHECK ((approval_status = ANY (ARRAY['Draft'::text, 'Approved'::text, 'Retired'::text])))''']
+  "approved_by" uuid
+  "approved_at" timestamptz
+  "created_by" uuid [not null]
+  "created_at" timestamptz [not null]
+  "revision" bigint [not null, default: 1, note: '''CHECK ((revision > 0))''']
+
+  Note: '''CHECK ((((visibility = 'Common'::text) AND (organization_id IS NULL)) OR ((visibility = 'Organization'::text) AND (organization_id IS NOT NULL))))
+CHECK (((approval_status = 'Draft'::text) = (approved_at IS NULL)))
+CHECK (((effective_until IS NULL) OR (effective_from IS NULL) OR (effective_until > effective_from)))
+CREATE UNIQUE INDEX knowledge_sources_identity ON knowledge_sources USING btree (COALESCE(organization_id, '00000000-0000-0000-0000-000000000000'::uuid), visibility, source_hash, version_label)'''
+}
+
+Table knowledge_chunks {
+  "id" uuid [pk, default: `gen_random_uuid()`]
+  "source_id" uuid [not null]
+  "chunk_index" integer [not null]
+  "content" text [not null]
+  "locator" jsonb [not null, default: `'{}'::jsonb`]
+  "embedding" vector
+  "metadata" jsonb [not null, default: `'{}'::jsonb`]
+  "created_at" timestamptz [not null, default: `now()`]
+
+  indexes {
+    (source_id, chunk_index) [unique]
+    (source_id) [name: 'idx_knowledge_chunks_source']
+  }
+}
+
+Table knowledge_source_files {
+  "id" uuid [pk]
+  "created_by" uuid [not null]
+  "idempotency_key" varchar(128) [not null, note: '''CHECK (((idempotency_key)::text ~ '^[!-~]{1,128}$'::text))''']
+  "input_hash" char(64) [not null, note: '''CHECK ((input_hash ~ '^[0-9a-f]{64}$'::text))''']
+  "file_name" varchar(255) [not null, note: '''CHECK (((length(btrim((file_name)::text)) >= 1) AND (length(btrim((file_name)::text)) <= 255)))''']
+  "content_type" text [not null, note: '''CHECK ((content_type = ANY (ARRAY['application/pdf'::text, 'text/markdown'::text, 'text/plain'::text, 'text/html'::text])))''']
+  "size_bytes" bigint [not null, note: '''CHECK (((size_bytes >= 1) AND (size_bytes <= 20971520)))''']
+  "staging_key" text [not null, unique]
+  "object_key" text [unique]
+  "sha256" char(64) [note: '''CHECK ((sha256 ~ '^[0-9a-f]{64}$'::text))''']
+  "source_id" uuid [unique]
+  "created_at" timestamptz [not null]
+  "expires_at" timestamptz [not null]
+  "completed_at" timestamptz
+
+  indexes {
+    (created_by, idempotency_key) [unique]
+  }
+
+  Note: '''CHECK ((expires_at > created_at))
+CHECK ((((completed_at IS NULL) = (object_key IS NULL)) AND ((completed_at IS NULL) = (sha256 IS NULL))))
+CHECK (((source_id IS NULL) OR (completed_at IS NOT NULL)))'''
+}
+
+Table organizations [headercolor: #9E9E9E, note: 'nhóm B1'] {
+  "id" uuid [pk]
+}
+
+Table users [headercolor: #9E9E9E, note: 'nhóm B1'] {
+  "id" uuid [pk]
+}
+
+Ref ai_operation_policies_created_by_fkey: ai_operation_policies.created_by > users.id [delete: no action]
+Ref ai_requests_actor_user_id_fkey: ai_requests.actor_user_id > users.id [delete: no action]
+Ref ai_requests_organization_id_fkey: ai_requests.organization_id > organizations.id [delete: no action]
+Ref ai_requests_policy_id_fkey: ai_requests.policy_id > ai_operation_policies.id [delete: no action]
+Ref ai_requests_reconcile_requested_by_fkey: ai_requests.reconcile_requested_by > users.id [delete: no action]
+Ref knowledge_sources_approved_by_fkey: knowledge_sources.approved_by > users.id [delete: no action]
+Ref knowledge_sources_created_by_fkey: knowledge_sources.created_by > users.id [delete: no action]
+Ref knowledge_sources_organization_id_fkey: knowledge_sources.organization_id > organizations.id [delete: no action]
+Ref knowledge_chunks_source_id_fkey: knowledge_chunks.source_id > knowledge_sources.id [delete: cascade]
+Ref knowledge_source_files_created_by_fkey: knowledge_source_files.created_by > users.id [delete: no action]
+Ref knowledge_source_files_source_id_fkey: knowledge_source_files.source_id > knowledge_sources.id [delete: no action]

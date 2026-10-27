@@ -1,0 +1,225 @@
+// Fire3D physical model, group B11.
+// Paste into https://dbdiagram.io . Gray tables belong to other groups and only show the columns referenced here.
+
+Enum audit_action_enum {
+  "Upload"
+  "ConfirmForTraining"
+  "Reject"
+  "Publish"
+  "Revoke"
+  "Sync"
+  "Login"
+  "Logout"
+  "Download"
+  "Delete"
+  "Create"
+  "Update"
+  "Rollback"
+  "Grant"
+  "Resume"
+  "Payment"
+  "Support"
+}
+
+Enum feedback_status_enum {
+  "Submitted"
+  "Reviewed"
+  "Closed"
+}
+
+Enum support_priority_enum {
+  "Low"
+  "Normal"
+  "High"
+  "Urgent"
+}
+
+Enum support_ticket_status_enum {
+  "Open"
+  "InProgress"
+  "Resolved"
+  "Closed"
+}
+
+Table feedback {
+  "id" uuid [pk, default: `extensions.gen_random_uuid()`]
+  "submitted_by" uuid [not null]
+  "organization_id" uuid
+  "session_id" uuid
+  "category" varchar(100) [not null]
+  "rating" integer [note: '''CHECK (((rating IS NULL) OR ((rating >= 1) AND (rating <= 5))))''']
+  "message" text [not null, note: '''CHECK ((NULLIF(btrim(message), ''::text) IS NOT NULL))''']
+  "status" feedback_status_enum [not null, default: `'Submitted'::feedback_status_enum`]
+  "reviewed_by" uuid
+  "reviewed_at" timestamptz
+  "created_at" timestamptz [not null, default: `now()`]
+  "updated_at" timestamptz [not null, default: `now()`]
+  "revision" bigint [not null, default: 1, note: '''CHECK ((revision > 0))''']
+
+  indexes {
+    (organization_id) [name: 'idx_feedback_organization']
+    (reviewed_by) [name: 'idx_feedback_reviewed_by']
+    (session_id) [name: 'idx_feedback_session']
+    (submitted_by) [name: 'idx_feedback_submitted_by']
+  }
+
+  Note: '''CHECK (((length(btrim((category)::text)) >= 1) AND (length(btrim((category)::text)) <= 100) AND ((length(btrim(message)) >= 1) AND (length(btrim(message)) <= 10000)) AND ((rating IS NULL) OR ((rating >= 1) AND (rating <= 5)))))
+CREATE INDEX feedback_owner_page ON feedback USING btree (submitted_by, created_at DESC, id)'''
+}
+
+Table support_tickets {
+  "id" uuid [pk, default: `extensions.gen_random_uuid()`]
+  "ticket_number" varchar(50) [not null, unique]
+  "created_by" uuid [not null]
+  "organization_id" uuid
+  "session_id" uuid
+  "feedback_id" uuid
+  "assigned_to" uuid
+  "subject" varchar(255) [not null, note: '''CHECK ((NULLIF(btrim((subject)::text), ''::text) IS NOT NULL))''']
+  "description" text [not null, note: '''CHECK ((NULLIF(btrim(description), ''::text) IS NOT NULL))''']
+  "priority" support_priority_enum [not null, default: `'Normal'::support_priority_enum`]
+  "status" support_ticket_status_enum [not null, default: `'Open'::support_ticket_status_enum`]
+  "resolved_at" timestamptz
+  "created_at" timestamptz [not null, default: `now()`]
+  "updated_at" timestamptz [not null, default: `now()`]
+  "revision" bigint [not null, default: 1, note: '''CHECK ((revision > 0))''']
+
+  indexes {
+    (assigned_to) [name: 'idx_support_tickets_assigned_to']
+    (created_by) [name: 'idx_support_tickets_created_by']
+    (feedback_id) [name: 'idx_support_tickets_feedback']
+    (organization_id) [name: 'idx_support_tickets_organization']
+    (status, priority, created_at) [name: 'idx_support_tickets_queue']
+    (session_id) [name: 'idx_support_tickets_session']
+  }
+
+  Note: '''CHECK (((status <> 'Resolved'::support_ticket_status_enum) OR (resolved_at IS NOT NULL)))
+CHECK (((length(btrim((subject)::text)) >= 1) AND (length(btrim((subject)::text)) <= 255) AND ((length(btrim(description)) >= 1) AND (length(btrim(description)) <= 10000))))
+CREATE INDEX support_tickets_owner_page ON support_tickets USING btree (created_by, created_at DESC, id)'''
+}
+
+Table support_ticket_messages {
+  "id" uuid [pk]
+  "ticket_id" uuid [not null]
+  "author_id" uuid [not null]
+  "message" text [not null, note: '''CHECK (((length(message) >= 1) AND (length(message) <= 10000)))''']
+  "created_at" timestamptz [not null]
+
+  indexes {
+    (ticket_id, created_at) [name: 'ix_support_ticket_messages_ticket_created']
+    (ticket_id, created_at, id) [name: 'support_messages_page']
+  }
+}
+
+Table organization_notifications {
+  "id" uuid [pk, default: `gen_random_uuid()`]
+  "organization_id" uuid [not null]
+  "recipient_user_id" uuid [not null]
+  "building_id" uuid [not null]
+  "entitlement_id" uuid [not null]
+  "notification_type" varchar(50) [not null, note: '''CHECK (((notification_type)::text = 'BuildingServiceExpiring'::text))''']
+  "title" text [not null]
+  "body" text [not null]
+  "reference_ends_at" timestamptz [not null]
+  "idempotency_key" varchar(255) [not null, unique]
+  "read_at" timestamptz
+  "created_at" timestamptz [not null, default: `now()`]
+
+  Note: '''CREATE INDEX organization_notifications_recipient ON organization_notifications USING btree (recipient_user_id, created_at DESC, id)'''
+}
+
+Table notification_deliveries {
+  "id" uuid [pk, default: `gen_random_uuid()`]
+  "notification_id" uuid [not null]
+  "channel" varchar(20) [not null, note: '''CHECK (((channel)::text = ANY (ARRAY[('Web'::character varying)::text, ('Email'::character varying)::text, ('Push'::character varying)::text])))''']
+  "status" varchar(20) [not null, default: 'Pending', note: '''CHECK (((status)::text = ANY (ARRAY[('Pending'::character varying)::text, ('Sending'::character varying)::text, ('Sent'::character varying)::text, ('Failed'::character varying)::text])))''']
+  "attempts" integer [not null, default: 0, note: '''CHECK ((attempts >= 0))''']
+  "provider_message_id" text
+  "last_error" text
+  "sent_at" timestamptz
+  "created_at" timestamptz [not null, default: `now()`]
+  "updated_at" timestamptz [not null, default: `now()`]
+  "lease_token" uuid
+  "lease_until" timestamptz
+  "next_attempt_at" timestamptz [not null, default: `now()`]
+
+  indexes {
+    (notification_id, channel) [unique]
+  }
+
+  Note: '''CHECK ((((status)::text = 'Sending'::text) = ((lease_token IS NOT NULL) AND (lease_until IS NOT NULL))))
+CREATE INDEX notification_deliveries_claim ON notification_deliveries USING btree (next_attempt_at, created_at) WHERE (((channel)::text = ANY (ARRAY[('Email'::character varying)::text, ('Push'::character varying)::text])) AND ((status)::text = ANY (ARRAY[('Pending'::character varying)::text, ('Sending'::character varying)::text])))
+CREATE INDEX notification_deliveries_pending ON notification_deliveries USING btree (created_at) WHERE ((status)::text = 'Pending'::text)'''
+}
+
+Table audit_logs {
+  "id" uuid [pk, default: `extensions.gen_random_uuid()`]
+  "user_id" uuid
+  "organization_id" uuid
+  "actor_type" text [not null, default: 'User', note: '''CHECK ((actor_type = ANY (ARRAY['User'::text, 'Worker'::text, 'System'::text])))''']
+  "action" audit_action_enum [not null]
+  "target_entity" text [not null]
+  "target_id" uuid
+  "correlation_id" uuid [not null, default: `extensions.gen_random_uuid()`]
+  "old_values" jsonb
+  "new_values" jsonb
+  "ip_address" inet
+  "user_agent" text
+  "created_at" timestamptz [not null, default: `now()`]
+
+  Note: '''CREATE INDEX audit_logs_target_history ON audit_logs USING btree (target_entity, target_id, created_at DESC, id DESC)
+CREATE INDEX audit_org_history ON audit_logs USING btree (organization_id, created_at DESC)'''
+}
+
+Table analytics_exports {
+  "id" uuid [pk]
+  "actor_id" uuid [not null]
+  "organization_id" uuid
+  "report" text [not null]
+  "filters" jsonb [not null, note: '''CHECK ((jsonb_typeof(filters) = 'object'::text))''']
+  "row_count" integer [not null, note: '''CHECK ((row_count >= 0))''']
+  "created_at" timestamptz [not null, default: `now()`]
+
+  indexes {
+    (actor_id, created_at) [name: 'analytics_exports_actor_day']
+  }
+}
+
+Table buildings [headercolor: #9E9E9E, note: 'nhóm B2'] {
+  "id" uuid [pk]
+}
+
+Table organizations [headercolor: #9E9E9E, note: 'nhóm B1'] {
+  "id" uuid [pk]
+}
+
+Table service_entitlements [headercolor: #9E9E9E, note: 'nhóm B8'] {
+  "id" uuid [pk]
+}
+
+Table sessions [headercolor: #9E9E9E, note: 'nhóm B7'] {
+  "id" uuid [pk]
+}
+
+Table users [headercolor: #9E9E9E, note: 'nhóm B1'] {
+  "id" uuid [pk]
+}
+
+Ref feedback_organization_id_fkey: feedback.organization_id > organizations.id [delete: set null]
+Ref feedback_reviewed_by_fkey: feedback.reviewed_by > users.id [delete: restrict]
+Ref feedback_session_id_fkey: feedback.session_id > sessions.id [delete: set null]
+Ref feedback_submitted_by_fkey: feedback.submitted_by > users.id [delete: restrict]
+Ref support_tickets_assigned_to_fkey: support_tickets.assigned_to > users.id [delete: restrict]
+Ref support_tickets_created_by_fkey: support_tickets.created_by > users.id [delete: restrict]
+Ref support_tickets_feedback_id_fkey: support_tickets.feedback_id > feedback.id [delete: set null]
+Ref support_tickets_organization_id_fkey: support_tickets.organization_id > organizations.id [delete: set null]
+Ref support_tickets_session_id_fkey: support_tickets.session_id > sessions.id [delete: set null]
+Ref support_ticket_messages_author_id_fkey: support_ticket_messages.author_id > users.id [delete: restrict]
+Ref support_ticket_messages_ticket_id_fkey: support_ticket_messages.ticket_id > support_tickets.id [delete: restrict]
+Ref organization_notifications_building_id_fkey: organization_notifications.building_id > buildings.id [delete: restrict]
+Ref organization_notifications_entitlement_id_fkey: organization_notifications.entitlement_id > service_entitlements.id [delete: restrict]
+Ref organization_notifications_organization_id_fkey: organization_notifications.organization_id > organizations.id [delete: restrict]
+Ref organization_notifications_recipient_user_id_fkey: organization_notifications.recipient_user_id > users.id [delete: restrict]
+Ref notification_deliveries_notification_id_fkey: notification_deliveries.notification_id > organization_notifications.id [delete: restrict]
+Ref analytics_exports_actor_id_fkey: analytics_exports.actor_id > users.id [delete: no action]
+Ref analytics_exports_organization_id_fkey: analytics_exports.organization_id > organizations.id [delete: no action]

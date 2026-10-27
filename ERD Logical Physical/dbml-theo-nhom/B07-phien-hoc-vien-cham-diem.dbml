@@ -1,0 +1,218 @@
+// Fire3D physical model, group B7.
+// Paste into https://dbdiagram.io . Gray tables belong to other groups and only show the columns referenced here.
+
+Enum release_status_enum {
+  "Built"
+  "Published"
+  "Superseded"
+  "Revoked"
+}
+
+Enum session_mode_enum {
+  "Learn"
+  "Guided"
+  "Assessment"
+}
+
+Enum session_status_enum {
+  "Created"
+  "Launching"
+  "Running"
+  "Completed"
+  "CompletedWithSupersededRelease"
+  "ScenarioUnsurvivable"
+  "Aborted"
+  "Abandoned"
+  "Crashed"
+}
+
+Table training_session_preparations {
+  "id" uuid [pk]
+  "trainee_user_id" uuid [not null]
+  "organization_id" uuid [not null]
+  "building_id" uuid [not null]
+  "training_id" uuid [not null]
+  "release_id" uuid [not null]
+  "scenario_version_id" uuid [not null]
+  "mode" text [not null, note: '''CHECK ((mode = ANY (ARRAY['Learn'::text, 'Guided'::text, 'Assessment'::text])))''']
+  "scenario_hash" varchar(64) [not null]
+  "rubric_hash" varchar(64)
+  "package" jsonb [not null]
+  "runtime_version" text [not null]
+  "status" text [not null, note: '''CHECK ((status = ANY (ARRAY['Prepared'::text, 'Started'::text])))''']
+  "created_at" timestamptz [not null]
+  "expires_at" timestamptz [not null]
+  "started_at" timestamptz
+}
+
+Table sessions {
+  "id" uuid [pk, default: `extensions.gen_random_uuid()`]
+  "training_id" uuid [not null]
+  "release_id" uuid [not null]
+  "scenario_version_id" uuid [not null]
+  "organization_id" uuid [not null]
+  "trainee_user_id" uuid [not null]
+  "device_id" uuid
+  "start_key" uuid [not null]
+  "app_version" text
+  "unity_version" text
+  "protocol_version" text [not null, default: '1.0']
+  "scenario_hash" varchar(64) [not null, note: '''CHECK (((scenario_hash)::text ~ '^[0-9a-f]{64}$'::text))''']
+  "release_hash" varchar(64) [not null, note: '''CHECK (((release_hash)::text ~ '^[0-9a-f]{64}$'::text))''']
+  "mode" session_mode_enum [not null]
+  "status" session_status_enum [not null, default: `'Created'::session_status_enum`]
+  "started_at" timestamptz [not null, default: `now()`]
+  "launched_at" timestamptz
+  "ended_at" timestamptz
+  "terminal_reason" text
+  "content_status_at_completion" release_status_enum
+  "contract_version" integer [not null, default: 1]
+  "building_id" uuid
+  "entitlement_id" uuid
+  "seat_id" uuid
+  "rubric_hash" varchar(64)
+  "package" jsonb
+  "runtime_version" text
+  "launch_family" uuid
+  "grant_generation" integer
+  "grant_issued_at" timestamptz
+  "grant_expires_at" timestamptz
+  "last_heartbeat_at" timestamptz
+  "continuation_id" uuid
+  "continuation_expires_at" timestamptz
+  "completion_key" varchar(128)
+  "completion_hash" varchar(64)
+  "completion_last_sequence" bigint
+  "completion_end_reason" text
+  "completion_requested_at" timestamptz
+
+  indexes {
+    (trainee_user_id, start_key) [unique]
+    (release_id) [name: 'sessions_release']
+    (training_id, trainee_user_id, mode) [name: 'sessions_training_attempts']
+  }
+
+  Note: '''CHECK (((launched_at IS NULL) OR (launched_at >= started_at)))
+CHECK (((ended_at IS NULL) OR (ended_at >= started_at)))
+CHECK (((status <> ALL (ARRAY['Running'::session_status_enum, 'Completed'::session_status_enum, 'CompletedWithSupersededRelease'::session_status_enum, 'ScenarioUnsurvivable'::session_status_enum])) OR (launched_at IS NOT NULL)))
+CREATE INDEX sessions_org_history ON sessions USING btree (organization_id, started_at DESC)
+CREATE INDEX sessions_personal_history ON sessions USING btree (trainee_user_id, started_at DESC)
+CREATE INDEX sessions_v7_building_started ON sessions USING btree (building_id, started_at) WHERE (contract_version = 7)
+CREATE INDEX sessions_v7_running_heartbeat ON sessions USING btree (last_heartbeat_at) WHERE ((contract_version = 7) AND (status = 'Running'::session_status_enum))
+CREATE INDEX sessions_v7_trainee_started ON sessions USING btree (trainee_user_id, started_at DESC, id DESC) WHERE (contract_version = 7)'''
+}
+
+Table session_events {
+  "id" uuid [pk, default: `extensions.gen_random_uuid()`]
+  "session_id" uuid [not null]
+  "sequence_number" bigint [not null, note: '''CHECK ((sequence_number > 0))''']
+  "client_event_id" uuid [not null]
+  "schema_version" text [not null, default: '1.0']
+  "event_type" text [not null, note: '''CHECK ((btrim(event_type) <> ''::text))''']
+  "event_data" jsonb [not null, default: `'{}'::jsonb`, note: '''CHECK ((jsonb_typeof(event_data) = 'object'::text))''']
+  "elapsed_ms" bigint [not null, note: '''CHECK ((elapsed_ms >= 0))''']
+  "recorded_at" timestamptz [not null]
+  "received_at" timestamptz [not null, default: `now()`]
+  "payload_hash" varchar(64) [note: '''CHECK (((payload_hash)::text ~ '^[0-9a-f]{64}$'::text))''']
+  "rejection_code" varchar(64) [note: '''CHECK (((rejection_code)::text = ANY (ARRAY[('EVENT_TYPE_UNSUPPORTED'::character varying)::text, ('EVENT_PAYLOAD_INVALID'::character varying)::text])))''']
+
+  indexes {
+    (session_id, client_event_id) [unique]
+    (session_id, sequence_number) [unique]
+  }
+}
+
+Table session_results {
+  "id" uuid [pk, default: `extensions.gen_random_uuid()`]
+  "session_id" uuid [not null, unique]
+  "completion_key" uuid [not null]
+  "last_event_sequence" bigint [not null, note: '''CHECK ((last_event_sequence >= 0))''']
+  "submission_payload" jsonb [not null, note: '''CHECK ((jsonb_typeof(submission_payload) = 'object'::text))''']
+  "result_schema_version" text [not null, default: '1.0']
+  "rubric_version" text [not null, note: '''CHECK ((btrim(rubric_version) <> ''::text))''']
+  "score" numeric(5,2) [note: '''CHECK (((score >= (0)::numeric) AND (score <= (100)::numeric)))''']
+  "time_taken_seconds" integer [note: '''CHECK ((time_taken_seconds >= 0))''']
+  "wrong_exits" integer [default: 0, note: '''CHECK ((wrong_exits >= 0))''']
+  "hazard_exposure_score" numeric(12,2) [default: 0, note: '''CHECK ((hazard_exposure_score >= (0)::numeric))''']
+  "total_distance_meters" numeric(12,2) [default: 0, note: '''CHECK ((total_distance_meters >= (0)::numeric))''']
+  "reached_exit" boolean
+  "exit_point_id" text
+  "path_traveled" jsonb [default: `'[]'::jsonb`, note: '''CHECK ((jsonb_typeof(path_traveled) = 'array'::text))''']
+  "client_started_at" timestamptz
+  "client_ended_at" timestamptz
+  "synced_at" timestamptz [not null, default: `now()`]
+  "created_at" timestamptz [not null, default: `now()`]
+  "contract_version" integer [not null, default: 1]
+  "mode" text
+  "outcome" text [note: '''CHECK ((outcome = ANY (ARRAY['Passed'::text, 'NotPassed'::text, 'Incomplete'::text, 'NotAssessed'::text])))''']
+  "outcome_reason" text
+  "rubric_hash" varchar(64)
+  "criterion_results" jsonb
+  "metrics" jsonb
+
+  indexes {
+    (session_id, created_at) [name: 'session_results_session_created']
+  }
+
+  Note: '''CHECK (((client_started_at IS NULL) OR (client_ended_at IS NULL) OR (client_ended_at >= client_started_at)))
+CHECK (((contract_version = 1) OR ((contract_version = 7) AND (outcome IS NOT NULL) AND (metrics IS NOT NULL) AND (mode IS NOT NULL))))'''
+}
+
+Table billing_learner_seats {
+  "id" uuid [pk, default: `gen_random_uuid()`]
+  "entitlement_id" uuid [not null]
+  "organization_id" uuid [not null]
+  "building_id" uuid [not null]
+  "trainee_id" uuid [not null]
+  "first_session_id" uuid [not null]
+  "allocated_at" timestamptz [not null]
+
+  indexes {
+    (entitlement_id, trainee_id) [unique]
+  }
+}
+
+Table buildings [headercolor: #9E9E9E, note: 'nhóm B2'] {
+  "id" uuid [pk]
+}
+
+Table organizations [headercolor: #9E9E9E, note: 'nhóm B1'] {
+  "id" uuid [pk]
+}
+
+Table service_entitlements [headercolor: #9E9E9E, note: 'nhóm B8'] {
+  "id" uuid [pk]
+}
+
+Table trainings [headercolor: #9E9E9E, note: 'nhóm B6'] {
+  "id" uuid [pk]
+  "release_id" uuid
+  "scenario_version_id" uuid
+  "organization_id" uuid
+}
+
+Table user_devices [headercolor: #9E9E9E, note: 'nhóm B1'] {
+  "id" uuid [pk]
+  "user_id" uuid
+}
+
+Table users [headercolor: #9E9E9E, note: 'nhóm B1'] {
+  "id" uuid [pk]
+}
+
+Ref training_session_preparations_building_id_fkey: training_session_preparations.building_id > buildings.id [delete: no action]
+Ref training_session_preparations_organization_id_fkey: training_session_preparations.organization_id > organizations.id [delete: no action]
+Ref training_session_preparations_trainee_user_id_fkey: training_session_preparations.trainee_user_id > users.id [delete: no action]
+Ref training_session_preparations_training_id_release_id_scena_fkey: training_session_preparations.(training_id, release_id, scenario_version_id, organization_id) > trainings.(id, release_id, scenario_version_id, organization_id) [delete: no action]
+Ref sessions_building_id_fkey: sessions.building_id > buildings.id [delete: no action]
+Ref sessions_device_id_trainee_user_id_fkey: sessions.(device_id, trainee_user_id) > user_devices.(id, user_id) [delete: no action]
+Ref sessions_entitlement_id_fkey: sessions.entitlement_id > service_entitlements.id [delete: no action]
+Ref sessions_seat_id_fkey: sessions.seat_id > billing_learner_seats.id [delete: no action]
+Ref sessions_trainee_user_id_fkey: sessions.trainee_user_id > users.id [delete: no action]
+Ref sessions_training_id_release_id_scenario_version_id_organi_fkey: sessions.(training_id, release_id, scenario_version_id, organization_id) > trainings.(id, release_id, scenario_version_id, organization_id) [delete: no action]
+Ref session_events_session_id_fkey: session_events.session_id > sessions.id [delete: no action]
+Ref session_results_session_id_fkey: session_results.session_id > sessions.id [delete: no action]
+Ref billing_learner_seats_building_id_fkey: billing_learner_seats.building_id > buildings.id [delete: no action]
+Ref billing_learner_seats_entitlement_id_fkey: billing_learner_seats.entitlement_id > service_entitlements.id [delete: no action]
+Ref billing_learner_seats_organization_id_fkey: billing_learner_seats.organization_id > organizations.id [delete: no action]
+Ref billing_learner_seats_trainee_id_fkey: billing_learner_seats.trainee_id > users.id [delete: no action]

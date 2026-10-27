@@ -1,0 +1,380 @@
+// Fire3D physical model, group B3.
+// Paste into https://dbdiagram.io . Gray tables belong to other groups and only show the columns referenced here.
+
+Enum file_type_enum {
+  "IFC"
+}
+
+Enum quarantine_status_enum {
+  "Pending"
+  "Accepted"
+  "Rejected"
+}
+
+Enum review_action_enum {
+  "ConfirmForTraining"
+  "Rejected"
+}
+
+Enum revision_status_enum {
+  "Draft"
+  "Uploaded"
+  "Processing"
+  "NeedsFix"
+  "ReadyForScenario"
+  "ConfirmedForTraining"
+  "Rejected"
+  "Failed"
+  "Superseded"
+}
+
+Table revisions {
+  "id" uuid [pk, default: `extensions.gen_random_uuid()`]
+  "building_id" uuid [not null]
+  "organization_id" uuid [not null]
+  "uploaded_by" uuid [not null]
+  "version_label" text [not null, note: '''CHECK ((btrim(version_label) <> ''::text))''']
+  "primary_type" file_type_enum [not null, default: `'IFC'::file_type_enum`]
+  "status" revision_status_enum [not null, default: `'Draft'::revision_status_enum`]
+  "created_at" timestamptz [not null, default: `now()`]
+  "updated_at" timestamptz [not null, default: `now()`]
+
+  indexes {
+    (building_id, version_label) [unique]
+    (id, building_id, organization_id) [unique]
+    (id, organization_id) [unique]
+  }
+}
+
+Table source_documents {
+  "id" uuid [pk, default: `extensions.gen_random_uuid()`]
+  "revision_id" uuid [not null, unique]
+  "uploaded_by" uuid [not null]
+  "original_filename" text [not null]
+  "file_type" file_type_enum [not null, default: `'IFC'::file_type_enum`]
+  "file_size_bytes" bigint [not null, note: '''CHECK ((file_size_bytes > 0))''']
+  "storage_url" text [not null, note: '''CHECK ((btrim(storage_url) <> ''::text))''']
+  "mime_type" text [not null]
+  "sha256_hash" varchar(64) [not null, note: '''CHECK (((sha256_hash)::text ~ '^[0-9a-f]{64}$'::text))''']
+  "quarantine_status" quarantine_status_enum [not null, default: `'Pending'::quarantine_status_enum`]
+  "quarantine_note" text
+  "usage_rights" text [not null, note: '''CHECK ((btrim(usage_rights) <> ''::text))''']
+  "source_tool" text
+  "created_at" timestamptz [not null, default: `now()`]
+  "upload_verified_at" timestamptz
+  "source_etag" text
+
+  indexes {
+    (id, revision_id) [unique]
+  }
+}
+
+Table ifc_upload_intents {
+  "revision_id" uuid [pk]
+  "building_id" uuid [not null]
+  "organization_id" uuid [not null]
+  "actor_id" uuid [not null]
+  "idempotency_key" varchar(128) [not null]
+  "input_hash" varchar(64) [not null, note: '''CHECK (((input_hash)::text ~ '^[0-9a-f]{64}$'::text))''']
+  "staging_key" text [not null, unique]
+  "size" bigint [not null, note: '''CHECK ((size > 0))''']
+  "hash" varchar(64) [not null, note: '''CHECK (((hash)::text ~ '^[0-9a-f]{64}$'::text))''']
+  "filename" varchar(255) [not null]
+  "expires_at" timestamptz [not null]
+  "completed_at" timestamptz
+  "completion_hash" varchar(64)
+  "final_key" text
+  "source_document_id" uuid
+
+  indexes {
+    (actor_id, idempotency_key) [unique]
+  }
+
+  Note: '''CHECK (((completed_at IS NULL) = (source_document_id IS NULL)))'''
+}
+
+Table ifc_upload_attempts {
+  "id" uuid [pk]
+  "revision_id" uuid [not null]
+  "final_key" text [not null, unique]
+  "source_etag" text [not null]
+  "input_hash" varchar(64) [not null, note: '''CHECK (((input_hash)::text ~ '^[0-9a-f]{64}$'::text))''']
+  "lease_until" timestamptz [not null]
+  "state" text [not null, default: 'Candidate', note: '''CHECK ((state = ANY (ARRAY['Candidate'::text, 'Adopted'::text, 'Abandoned'::text])))''']
+  "created_at" timestamptz [not null, default: `now()`]
+
+  indexes {
+    (state, lease_until) [name: 'ifc_candidate_recovery']
+  }
+}
+
+Table ifc_object_cleanup {
+  "object_key" text [pk]
+  "available_at" timestamptz [not null]
+  "lease_token" uuid
+  "lease_until" timestamptz
+  "attempts" integer [not null, default: 0]
+  "cleaned_at" timestamptz
+  "last_error" text
+
+  indexes {
+    (available_at, lease_until) [name: 'ifc_cleanup_due']
+  }
+}
+
+Table processing_jobs {
+  "id" uuid [pk, default: `extensions.gen_random_uuid()`]
+  "revision_id" uuid [not null]
+  "source_document_id" uuid [not null]
+  "kind" text [not null, default: 'Geometry']
+  "scenario_version_id" uuid
+  "job_key" uuid [not null, unique]
+  "status" text [not null, default: 'Queued', note: '''CHECK ((status = ANY (ARRAY['Queued'::text, 'Running'::text, 'Succeeded'::text, 'Failed'::text])))''']
+  "input_hash" text [not null, note: '''CHECK ((btrim(input_hash) <> ''::text))''']
+  "lease_owner" text
+  "heartbeat_at" timestamptz
+  "started_at" timestamptz
+  "finished_at" timestamptz
+  "error_message" text
+  "created_at" timestamptz [not null, default: `now()`]
+  "current_attempt_id" uuid
+  "input_snapshot" jsonb
+
+  indexes {
+    (id, revision_id) [unique]
+  }
+
+  Note: '''CHECK (((status = ANY (ARRAY['Succeeded'::text, 'Failed'::text])) = (finished_at IS NOT NULL)))
+CHECK (((finished_at IS NULL) OR ((started_at IS NOT NULL) AND (finished_at >= started_at))))
+CREATE UNIQUE INDEX one_live_revision_job ON processing_jobs USING btree (revision_id) WHERE (status = ANY (ARRAY['Queued'::text, 'Running'::text]))
+CREATE UNIQUE INDEX processing_verified_input_key ON processing_jobs USING btree (revision_id, kind, input_hash, COALESCE(scenario_version_id, '00000000-0000-0000-0000-000000000000'::uuid))'''
+}
+
+Table processing_job_attempts {
+  "id" uuid [pk]
+  "processing_job_id" uuid [not null]
+  "attempt_number" integer [not null, note: '''CHECK ((attempt_number > 0))''']
+  "input_hash" varchar(64) [not null, note: '''CHECK (((input_hash)::text ~ '^[0-9a-f]{64}$'::text))''']
+  "toolchain_version" varchar(100) [not null]
+  "lease_owner" varchar(100) [not null]
+  "lease_token" uuid [not null, unique]
+  "lease_until" timestamptz [not null]
+  "status" text [not null, note: '''CHECK ((status = ANY (ARRAY['Running'::text, 'Succeeded'::text, 'Failed'::text, 'Expired'::text])))''']
+  "output_hash" varchar(64) [note: '''CHECK (((output_hash IS NULL) OR ((output_hash)::text ~ '^[0-9a-f]{64}$'::text)))''']
+  "created_at" timestamptz [not null, default: `now()`]
+  "started_at" timestamptz [not null, default: `now()`]
+  "finished_at" timestamptz
+  "error_message" text
+
+  indexes {
+    (id, processing_job_id) [unique]
+    (processing_job_id, attempt_number) [unique]
+    (status, lease_until) [name: 'processing_attempt_expiry']
+  }
+}
+
+Table processing_candidate_outputs {
+  "attempt_id" uuid [not null]
+  "artifact_type" text [not null]
+  "input_hash" varchar(64) [not null]
+  "artifact_id" uuid [not null, unique]
+  "output" jsonb [not null]
+
+  indexes {
+    (attempt_id, artifact_type) [pk]
+  }
+}
+
+Table revision_artifacts {
+  "id" uuid [pk, default: `extensions.gen_random_uuid()`]
+  "revision_id" uuid [not null]
+  "job_id" uuid [not null]
+  "artifact_type" text [not null]
+  "object_key" text [not null, note: '''CHECK ((btrim(object_key) <> ''::text))''']
+  "sha256_hash" varchar(64) [not null, note: '''CHECK (((sha256_hash)::text ~ '^[0-9a-f]{64}$'::text))''']
+  "size_bytes" bigint [not null, note: '''CHECK ((size_bytes > 0))''']
+  "schema_version" text [not null, note: '''CHECK ((btrim(schema_version) <> ''::text))''']
+  "metadata" jsonb [not null, default: `'{}'::jsonb`, note: '''CHECK ((jsonb_typeof(metadata) = 'object'::text))''']
+  "created_at" timestamptz [not null, default: `now()`]
+  "attempt_id" uuid
+  "is_runtime_ready" boolean [not null, default: false]
+  "storage_key" text [default: `object_key`]
+
+  indexes {
+    (id, revision_id) [unique]
+    (job_id, artifact_type, sha256_hash) [unique]
+    (revision_id) [name: 'artifacts_revision']
+  }
+}
+
+Table validation_runs {
+  "id" uuid [pk, default: `extensions.gen_random_uuid()`]
+  "revision_id" uuid [not null]
+  "job_id" uuid [not null, unique]
+  "kind" text [not null]
+  "scenario_version_id" uuid
+  "candidate_artifact_id" uuid
+  "annotation_set_id" uuid
+  "outcome" text [not null, note: '''CHECK ((outcome = ANY (ARRAY['Passed'::text, 'Failed'::text])))''']
+  "scenario_hash" varchar(64)
+  "validator_version" text [not null, note: '''CHECK ((btrim(validator_version) <> ''::text))''']
+  "report" jsonb [not null, note: '''CHECK ((jsonb_typeof(report) = 'object'::text))''']
+  "created_at" timestamptz [not null, default: `now()`]
+  "processing_attempt_id" uuid
+  "processing_job_id" uuid [default: `job_id`]
+  "artifact_id" uuid [default: `candidate_artifact_id`]
+  "scope" text [default: `kind`]
+  "status" text [default: `outcome`]
+  "summary" jsonb [default: `report`]
+  "started_at" timestamptz
+  "finished_at" timestamptz
+
+  indexes {
+    (revision_id, kind, outcome) [name: 'validation_revision']
+  }
+}
+
+Table revision_issues {
+  "id" uuid [pk, default: `extensions.gen_random_uuid()`]
+  "validation_run_id" uuid [not null]
+  "severity" text [not null]
+  "code" text [not null]
+  "ifc_guid" text
+  "message" text [not null, note: '''CHECK ((btrim(message) <> ''::text))''']
+  "details" jsonb [not null, default: `'{}'::jsonb`, note: '''CHECK ((jsonb_typeof(details) = 'object'::text))''']
+  "created_at" timestamptz [not null, default: `now()`]
+}
+
+Table bim_facts {
+  "id" uuid [pk, default: `gen_random_uuid()`]
+  "revision_id" uuid [not null]
+  "ifc_global_id" varchar(255) [not null]
+  "entity_type" varchar(100) [not null]
+  "property_path" text [not null]
+  "value" jsonb
+  "source_hash" varchar(64) [not null]
+  "quality_flags" jsonb [not null, default: `'[]'::jsonb`]
+  "created_at" timestamptz [not null, default: `now()`]
+
+  indexes {
+    (revision_id, ifc_global_id, property_path) [unique]
+    (revision_id, ifc_global_id) [name: 'idx_bim_facts_ifc_global_id']
+    (revision_id) [name: 'idx_bim_facts_revision']
+  }
+}
+
+Table revision_equipment_decisions {
+  "id" uuid [pk]
+  "revision_id" uuid [not null]
+  "version_number" integer [not null, note: '''CHECK ((version_number > 0))''']
+  "data" jsonb [not null, note: '''CHECK (((jsonb_typeof(data) = 'object'::text) AND (jsonb_typeof((data -> 'items'::text)) = 'array'::text)))''']
+  "created_by" uuid [not null]
+  "created_at" timestamptz [not null, default: `now()`]
+
+  indexes {
+    (revision_id, version_number) [unique]
+  }
+}
+
+Table revision_style_selections {
+  "id" uuid [pk]
+  "revision_id" uuid [not null]
+  "version_number" integer [not null, note: '''CHECK ((version_number > 0))''']
+  "data" jsonb [not null, note: '''CHECK ((jsonb_typeof(data) = 'object'::text))''']
+  "created_by" uuid [not null]
+  "created_at" timestamptz [not null]
+
+  indexes {
+    (revision_id, version_number) [unique]
+  }
+}
+
+Table annotation_sets {
+  "id" uuid [pk, default: `extensions.gen_random_uuid()`]
+  "revision_id" uuid [not null]
+  "version_number" integer [not null, note: '''CHECK ((version_number > 0))''']
+  "data" jsonb [not null, note: '''CHECK ((jsonb_typeof(data) = 'object'::text))''']
+  "provenance" text [not null, default: 'manual', note: '''CHECK ((provenance = ANY (ARRAY['manual'::text, 'pipeline'::text])))''']
+  "created_by" uuid [not null]
+  "created_at" timestamptz [not null, default: `now()`]
+
+  indexes {
+    (id, revision_id) [unique]
+    (revision_id, version_number) [unique]
+  }
+}
+
+Table revision_reviews {
+  "id" uuid [pk, default: `extensions.gen_random_uuid()`]
+  "revision_id" uuid [not null]
+  "scenario_version_id" uuid [not null]
+  "reviewed_by" uuid [not null]
+  "validation_run_id" uuid [not null]
+  "annotation_set_id" uuid
+  "action" review_action_enum [not null]
+  "review_message" text
+  "reviewed_at" timestamptz [not null, default: `now()`]
+
+  indexes {
+    (validation_run_id, action) [unique]
+  }
+
+  Note: '''CHECK (((action <> 'Rejected'::review_action_enum) OR (NULLIF(btrim(review_message), ''::text) IS NOT NULL)))
+CREATE UNIQUE INDEX one_scenario_confirmation ON revision_reviews USING btree (scenario_version_id) WHERE (action = 'ConfirmForTraining'::review_action_enum)'''
+}
+
+Table buildings [headercolor: #9E9E9E, note: 'nhóm B2'] {
+  "id" uuid [pk]
+  "organization_id" uuid
+}
+
+Table organizations [headercolor: #9E9E9E, note: 'nhóm B1'] {
+  "id" uuid [pk]
+}
+
+Table scenario_versions [headercolor: #9E9E9E, note: 'nhóm B5'] {
+  "id" uuid [pk]
+}
+
+Table users [headercolor: #9E9E9E, note: 'nhóm B1'] {
+  "id" uuid [pk]
+}
+
+Ref revisions_building_id_organization_id_fkey: revisions.(building_id, organization_id) > buildings.(id, organization_id) [delete: no action]
+Ref revisions_uploaded_by_fkey: revisions.uploaded_by > users.id [delete: no action]
+Ref source_documents_revision_id_fkey: source_documents.revision_id > revisions.id [delete: no action]
+Ref source_documents_uploaded_by_fkey: source_documents.uploaded_by > users.id [delete: no action]
+Ref ifc_upload_intents_actor_id_fkey: ifc_upload_intents.actor_id > users.id [delete: no action]
+Ref ifc_upload_intents_building_id_fkey: ifc_upload_intents.building_id > buildings.id [delete: no action]
+Ref ifc_upload_intents_organization_id_fkey: ifc_upload_intents.organization_id > organizations.id [delete: no action]
+Ref ifc_upload_intents_revision_id_fkey: ifc_upload_intents.revision_id > revisions.id [delete: no action]
+Ref ifc_upload_intents_source_document_id_fkey: ifc_upload_intents.source_document_id > source_documents.id [delete: no action]
+Ref ifc_upload_attempts_revision_id_fkey: ifc_upload_attempts.revision_id > ifc_upload_intents.revision_id [delete: no action]
+Ref processing_jobs_current_attempt_id_fkey: processing_jobs.current_attempt_id > processing_job_attempts.id [delete: no action]
+Ref processing_jobs_revision_id_fkey: processing_jobs.revision_id > revisions.id [delete: no action]
+Ref processing_jobs_scenario_version_id_fkey: processing_jobs.scenario_version_id > scenario_versions.id [delete: no action]
+Ref processing_jobs_source_document_id_revision_id_fkey: processing_jobs.(source_document_id, revision_id) > source_documents.(id, revision_id) [delete: no action]
+Ref processing_job_attempts_processing_job_id_fkey: processing_job_attempts.processing_job_id > processing_jobs.id [delete: no action]
+Ref processing_candidate_outputs_attempt_id_fkey: processing_candidate_outputs.attempt_id > processing_job_attempts.id [delete: no action]
+Ref revision_artifacts_attempt_id_fkey: revision_artifacts.attempt_id > processing_job_attempts.id [delete: no action]
+Ref revision_artifacts_job_id_revision_id_fkey: revision_artifacts.(job_id, revision_id) > processing_jobs.(id, revision_id) [delete: no action]
+Ref revision_artifacts_revision_id_fkey: revision_artifacts.revision_id > revisions.id [delete: no action]
+Ref validation_runs_annotation_set_id_revision_id_fkey: validation_runs.(annotation_set_id, revision_id) > annotation_sets.(id, revision_id) [delete: no action]
+Ref validation_runs_candidate_artifact_id_revision_id_fkey: validation_runs.(candidate_artifact_id, revision_id) > revision_artifacts.(id, revision_id) [delete: no action]
+Ref validation_runs_job_id_revision_id_fkey: validation_runs.(job_id, revision_id) > processing_jobs.(id, revision_id) [delete: no action]
+Ref validation_runs_processing_attempt_id_fkey: validation_runs.processing_attempt_id > processing_job_attempts.id [delete: no action]
+Ref validation_runs_revision_id_fkey: validation_runs.revision_id > revisions.id [delete: no action]
+Ref validation_runs_scenario_version_id_fkey: validation_runs.scenario_version_id > scenario_versions.id [delete: no action]
+Ref revision_issues_validation_run_id_fkey: revision_issues.validation_run_id > validation_runs.id [delete: no action]
+Ref bim_facts_revision_id_fkey: bim_facts.revision_id > revisions.id [delete: cascade]
+Ref revision_equipment_decisions_created_by_fkey: revision_equipment_decisions.created_by > users.id [delete: no action]
+Ref revision_equipment_decisions_revision_id_fkey: revision_equipment_decisions.revision_id > revisions.id [delete: no action]
+Ref revision_style_selections_created_by_fkey: revision_style_selections.created_by > users.id [delete: no action]
+Ref revision_style_selections_revision_id_fkey: revision_style_selections.revision_id > revisions.id [delete: no action]
+Ref annotation_sets_created_by_fkey: annotation_sets.created_by > users.id [delete: no action]
+Ref annotation_sets_revision_id_fkey: annotation_sets.revision_id > revisions.id [delete: no action]
+Ref revision_reviews_annotation_set_id_revision_id_fkey: revision_reviews.(annotation_set_id, revision_id) > annotation_sets.(id, revision_id) [delete: no action]
+Ref revision_reviews_reviewed_by_fkey: revision_reviews.reviewed_by > users.id [delete: no action]
+Ref revision_reviews_revision_id_fkey: revision_reviews.revision_id > revisions.id [delete: no action]
+Ref revision_reviews_scenario_version_id_fkey: revision_reviews.scenario_version_id > scenario_versions.id [delete: no action]
+Ref revision_reviews_validation_run_id_fkey: revision_reviews.validation_run_id > validation_runs.id [delete: no action]

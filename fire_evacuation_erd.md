@@ -1,5 +1,7 @@
 # Fire Evacuation Training 3D — PostgreSQL ERD
 
+> **Bản thiết kế v7 (lịch sử).** ERD đúng với database production hiện hành nằm ở [ERD Logical Physical](ERD%20Logical%20Physical/0-Ke-hoach-ve.md) (112 bảng, đối chiếu 27/10/2026). Các bảng `building_floors`, `debrief_artifacts`, `invoice_metadata`, `password_reset_tokens`, `release_qr_codes`, `session_checkpoints` và `revision_processing_logs` nhắc dưới đây đã bị xóa khỏi production.
+
 > Hiện trạng implementation và giới hạn nghiệm thu: xem [đối chiếu source 21/10/2026](implementation-status.md). Các thiết kế và bằng chứng lịch sử bên dưới không thay thế kiểm chứng deployment hiện hành.
 
 This ERD mirrors the design target in `fire_evacuation_schema.sql` version 7.0. SQL is authoritative for defaults and check-constraint expressions. This is a design document, not a database migration.

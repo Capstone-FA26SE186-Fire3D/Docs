@@ -1,0 +1,125 @@
+{
+ "1. Định danh & phiên đăng nhập": [
+  "users",
+  "organizations",
+  "auth_refresh_tokens",
+  "device_installations",
+  "user_devices",
+  "auth_google_onboarding_sessions",
+  "registration_email_challenges",
+  "registration_otp_email_jobs",
+  "local_password_reset_tokens",
+  "password_reset_email_jobs",
+  "email_verification_tokens",
+  "email_verification_jobs",
+  "avatar_upload_intents",
+  "avatar_object_cleanups"
+ ],
+ "2. Công trình & quyền truy cập": [
+  "buildings",
+  "building_locations",
+  "building_contacts",
+  "building_participation_grants",
+  "building_qr_codes"
+ ],
+ "3. IFC & xử lý (worker)": [
+  "revisions",
+  "source_documents",
+  "ifc_upload_intents",
+  "ifc_upload_attempts",
+  "ifc_object_cleanup",
+  "processing_jobs",
+  "processing_job_attempts",
+  "processing_candidate_outputs",
+  "revision_artifacts",
+  "validation_runs",
+  "revision_issues",
+  "bim_facts",
+  "revision_equipment_decisions",
+  "revision_style_selections",
+  "annotation_sets",
+  "revision_reviews"
+ ],
+ "4. Outbox & giao job (Redis/HTTP)": [
+  "integration_outbox_events",
+  "integration_event_consumptions",
+  "processing_delivery_receipts",
+  "processing_stream_deliveries",
+  "processing_stream_state",
+  "processing_stream_rejections",
+  "processing_stream_retry_receipts"
+ ],
+ "5. Kịch bản & playtest": [
+  "scenarios",
+  "scenario_drafts",
+  "scenario_versions",
+  "scenario_content_reviews",
+  "runtime_compatibility_catalog",
+  "playtest_sessions",
+  "playtest_handoffs",
+  "playtest_package_pins",
+  "playtest_runtime_state",
+  "playtest_events"
+ ],
+ "6. Phát hành & bài huấn luyện": [
+  "releases",
+  "release_packages",
+  "release_build_provenance",
+  "trainings"
+ ],
+ "7. Phiên học viên & chấm điểm": [
+  "training_session_preparations",
+  "sessions",
+  "session_events",
+  "session_results",
+  "billing_learner_seats"
+ ],
+ "8. Báo giá, PayOS & dịch vụ": [
+  "service_packages",
+  "service_package_discount_rules",
+  "billing_quota_policy_versions",
+  "quotations",
+  "quotation_building_items",
+  "quotation_topup_items",
+  "billing_checkout_operations",
+  "billing_service_reservations",
+  "billing_upgrade_reservations",
+  "payos_payment_requests",
+  "payos_webhook_inbox",
+  "payment_transactions",
+  "payment_provisioning_records",
+  "service_entitlements",
+  "billing_entitlement_upgrades",
+  "billing_ai_quota_grants",
+  "billing_ai_quota_allocations",
+  "enterprise_quote_requests",
+  "enterprise_quote_responses"
+ ],
+ "9. AI & kho tri thức": [
+  "ai_operation_policies",
+  "ai_requests",
+  "knowledge_sources",
+  "knowledge_chunks",
+  "knowledge_source_files"
+ ],
+ "10. Learn & thư viện tổ chức": [
+  "learn_situations",
+  "learn_posts",
+  "learn_post_versions",
+  "learn_post_version_situations",
+  "learn_post_version_sources",
+  "learn_bookmarks",
+  "organization_library_items",
+  "organization_library_versions",
+  "learn_media_images"
+ ],
+ "11. Hỗ trợ, thông báo, audit": [
+  "feedback",
+  "support_tickets",
+  "support_ticket_messages",
+  "organization_notifications",
+  "notification_deliveries",
+  "audit_logs",
+  "analytics_exports"
+ ]
+}
