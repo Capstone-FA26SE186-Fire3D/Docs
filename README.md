@@ -16,7 +16,8 @@ Thư mục này chứa tài liệu sản phẩm và kiến trúc cho **Fire Evac
 | `fire-evacuation-training-workflows.md` | Luồng từ mô hình IFC đến package, QR, buổi tập huấn và dữ liệu kết quả. |
 | `fire-evacuation-training-technology.md` | Kiến trúc, pipeline IFC, runtime Android và các quyết định kỹ thuật. |
 | `fire_evacuation_schema.sql` | Thiết kế cơ sở dữ liệu. |
-| `fire_evacuation_erd.md` | Sơ đồ thực thể–quan hệ. |
+| `ERD Logical Physical/` | **ERD hiện hành** cho báo cáo: logical (63 thực thể) và physical (112 bảng), sinh từ schema production ngày 27/10/2026 (136 migration). Bắt đầu từ `0-Ke-hoach-ve.md`. |
+| `fire_evacuation_erd.md` | ERD thiết kế v7 (lịch sử). Còn các bảng đã bỏ khỏi production; vẽ báo cáo thì dùng `ERD Logical Physical/`. |
 | `3D-Fire-Evacuation-Training-IDEA2.docx` | Bản ý tưởng đã được bổ sung contract v7 ngày 03/10/2026; requirements vẫn là nguồn yêu cầu chi tiết. |
 | `schema_v7_contract.md` | Hợp đồng dữ liệu/gate v7 cho auth, review, private access, thương mại, quota AI, đánh giá và RAG. |
 | `fire_evacuation_project_overview.md` | Tổng quan thống nhất về mục tiêu, phạm vi, workflow và giới hạn của FET3D. |
@@ -25,7 +26,7 @@ Thư mục này chứa tài liệu sản phẩm và kiến trúc cho **Fire Evac
 | `fire3d-web-implementation.md` | Prototype đã triển khai, khác biệt so với thiết kế đầu, lỗi, giải pháp và giới hạn kiểm chứng. |
 | `ifc_ingestion_visual_interaction.md` | Spike 12 file IFC, hướng dẫn xuất IFC, chọn Body, nhận diện thiết bị, thư viện vật liệu PBR, mã issue QA, catalog vật thể tương tác, luật tương tác theo ngữ cảnh và trách nhiệm từng worker/repo. |
 
-Requirements là nguồn yêu cầu sản phẩm; technology mô tả service/transaction boundary và contract kỹ thuật. SQL và ERD đã có overlay/hợp đồng thiết kế v7 cho các quyết định ngày 03/10/2026, nhưng chưa là bằng chứng migration, API hay vận hành production. `Mẫu report/` là tài sản mẫu độc lập và không thuộc phạm vi đồng bộ này.
+Requirements là nguồn yêu cầu sản phẩm; technology mô tả service/transaction boundary và contract kỹ thuật. SQL và ERD v7 là overlay/hợp đồng thiết kế cho các quyết định ngày 03/10/2026, không phải bằng chứng migration, API hay vận hành production; schema thật hiện hành nằm ở `ERD Logical Physical/`. `Mẫu report/` là tài sản mẫu độc lập và không thuộc phạm vi đồng bộ này.
 
 **Thư viện hỗ trợ Organization** gồm template kịch bản tùy chọn, bộ tiêu chí chấm mẫu và danh mục thiết bị game đã được runtime hỗ trợ. PlatformAdmin duy trì các nội dung chuẩn; OrganizationUser dùng để soạn/cấu hình bài trong khu quản lý đã đăng nhập. Thư viện này tách khỏi **Learn công khai** trên web: bài viết, mẹo và video cho mọi người đọc không cần đăng nhập; lưu bài/hỏi AI cần đăng nhập. Learn giữ quy trình biên tập hiện tại và không có bước duyệt bài riêng. Mode Learn trong Unity là trải nghiệm làm quen không gian, không phải blog. IFC, mô hình và kịch bản riêng của Organization không tự được chia sẻ vào thư viện.
 

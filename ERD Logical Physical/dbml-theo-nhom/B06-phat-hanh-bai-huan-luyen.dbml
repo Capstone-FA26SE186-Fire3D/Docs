@@ -1,0 +1,152 @@
+// Fire3D physical model, group B6.
+// Paste into https://dbdiagram.io . Gray tables belong to other groups and only show the columns referenced here.
+
+Enum release_status_enum {
+  "Built"
+  "Published"
+  "Superseded"
+  "Revoked"
+}
+
+Enum session_mode_enum {
+  "Learn"
+  "Guided"
+  "Assessment"
+}
+
+Enum training_status_enum {
+  "Draft"
+  "Active"
+  "Closed"
+  "Archived"
+}
+
+Table releases {
+  "id" uuid [pk, default: `extensions.gen_random_uuid()`]
+  "revision_id" uuid [not null]
+  "scenario_version_id" uuid [not null]
+  "building_id" uuid [not null]
+  "organization_id" uuid [not null]
+  "confirmation_review_id" uuid [not null]
+  "published_by" uuid
+  "revoked_by" uuid
+  "status" release_status_enum [not null, default: `'Built'::release_status_enum`]
+  "safety_thresholds" jsonb [not null, default: `'{}'::jsonb`, note: '''CHECK ((jsonb_typeof(safety_thresholds) = 'object'::text))''']
+  "revoked_reason" text
+  "published_at" timestamptz
+  "revoked_at" timestamptz
+  "created_at" timestamptz [not null, default: `now()`]
+  "updated_at" timestamptz [not null, default: `now()`]
+
+  indexes {
+    (id, scenario_version_id, organization_id) [unique]
+    (revision_id, scenario_version_id) [unique]
+  }
+
+  Note: '''CHECK (((published_at IS NULL) = (published_by IS NULL)))
+CHECK (((status <> ALL (ARRAY['Published'::release_status_enum, 'Superseded'::release_status_enum])) OR (published_at IS NOT NULL)))
+CHECK (((status <> 'Built'::release_status_enum) OR (published_at IS NULL)))
+CHECK ((((status = 'Revoked'::release_status_enum) AND (revoked_by IS NOT NULL) AND (revoked_at IS NOT NULL) AND (NULLIF(btrim(revoked_reason), ''::text) IS NOT NULL)) OR ((status <> 'Revoked'::release_status_enum) AND (revoked_by IS NULL) AND (revoked_at IS NULL) AND (revoked_reason IS NULL))))'''
+}
+
+Table release_packages {
+  "id" uuid [pk, default: `extensions.gen_random_uuid()`]
+  "release_id" uuid [not null, unique]
+  "candidate_artifact_id" uuid [not null]
+  "manifest_url" text [not null, note: '''CHECK ((btrim(manifest_url) <> ''::text))''']
+  "manifest_sha256" varchar(64) [not null, note: '''CHECK (((manifest_sha256)::text ~ '^[0-9a-f]{64}$'::text))''']
+  "package_url" text [not null, note: '''CHECK ((btrim(package_url) <> ''::text))''']
+  "checksum_sha256" varchar(64) [not null, note: '''CHECK (((checksum_sha256)::text ~ '^[0-9a-f]{64}$'::text))''']
+  "package_size_bytes" bigint [not null, note: '''CHECK ((package_size_bytes > 0))''']
+  "min_runtime_version" text [not null, note: '''CHECK ((btrim(min_runtime_version) <> ''::text))''']
+  "schema_version" text [not null, default: '1.0']
+  "build_target" text [not null, default: 'Android']
+  "created_at" timestamptz [not null, default: `now()`]
+}
+
+Table release_build_provenance {
+  "release_id" uuid [pk]
+  "validation_run_id" uuid [not null]
+  "manifest_artifact_id" uuid [not null]
+  "attempt_id" uuid [not null]
+  "content_review_id" uuid [not null]
+  "created_at" timestamptz [not null, default: `now()`]
+}
+
+Table trainings {
+  "id" uuid [pk, default: `extensions.gen_random_uuid()`]
+  "release_id" uuid [not null]
+  "scenario_version_id" uuid [not null]
+  "organization_id" uuid [not null]
+  "name" text [not null, note: '''CHECK ((btrim(name) <> ''::text))''']
+  "description" text
+  "start_date" timestamptz
+  "end_date" timestamptz
+  "status" training_status_enum [not null, default: `'Draft'::training_status_enum`]
+  "mode" session_mode_enum [not null, default: `'Guided'::session_mode_enum`]
+  "allowed_modes" "text[]" [not null, default: `ARRAY['Learn'::text, 'Guided'::text, 'Assessment'::text]`]
+  "max_attempts" integer [note: '''CHECK ((max_attempts > 0))''']
+  "created_by" uuid [not null]
+  "created_at" timestamptz [not null, default: `now()`]
+  "updated_at" timestamptz [not null, default: `now()`]
+
+  indexes {
+    (id, release_id, organization_id) [unique]
+    (id, release_id, scenario_version_id, organization_id) [unique]
+    (release_id) [name: 'trainings_release']
+  }
+
+  Note: '''CHECK (((start_date IS NULL) OR (end_date IS NULL) OR (end_date > start_date)))
+CHECK (((cardinality(allowed_modes) > 0) AND (array_position(allowed_modes, NULL::text) IS NULL) AND (allowed_modes <@ ARRAY['Learn'::text, 'Guided'::text, 'Assessment'::text]) AND ((mode)::text = ANY (allowed_modes))))'''
+}
+
+Table processing_job_attempts [headercolor: #9E9E9E, note: 'nhóm B3'] {
+  "id" uuid [pk]
+}
+
+Table revision_artifacts [headercolor: #9E9E9E, note: 'nhóm B3'] {
+  "id" uuid [pk]
+}
+
+Table revision_reviews [headercolor: #9E9E9E, note: 'nhóm B3'] {
+  "id" uuid [pk]
+}
+
+Table revisions [headercolor: #9E9E9E, note: 'nhóm B3'] {
+  "id" uuid [pk]
+  "building_id" uuid
+  "organization_id" uuid
+}
+
+Table scenario_content_reviews [headercolor: #9E9E9E, note: 'nhóm B5'] {
+  "id" uuid [pk]
+}
+
+Table scenario_versions [headercolor: #9E9E9E, note: 'nhóm B5'] {
+  "id" uuid [pk]
+  "revision_id" uuid
+  "organization_id" uuid
+}
+
+Table users [headercolor: #9E9E9E, note: 'nhóm B1'] {
+  "id" uuid [pk]
+}
+
+Table validation_runs [headercolor: #9E9E9E, note: 'nhóm B3'] {
+  "id" uuid [pk]
+}
+
+Ref releases_confirmation_review_id_fkey: releases.confirmation_review_id > revision_reviews.id [delete: no action]
+Ref releases_published_by_fkey: releases.published_by > users.id [delete: no action]
+Ref releases_revision_id_building_id_organization_id_fkey: releases.(revision_id, building_id, organization_id) > revisions.(id, building_id, organization_id) [delete: no action]
+Ref releases_revoked_by_fkey: releases.revoked_by > users.id [delete: no action]
+Ref releases_scenario_version_id_revision_id_organization_id_fkey: releases.(scenario_version_id, revision_id, organization_id) > scenario_versions.(id, revision_id, organization_id) [delete: no action]
+Ref release_packages_candidate_artifact_id_fkey: release_packages.candidate_artifact_id > revision_artifacts.id [delete: no action]
+Ref release_packages_release_id_fkey: release_packages.release_id > releases.id [delete: no action]
+Ref release_build_provenance_attempt_id_fkey: release_build_provenance.attempt_id > processing_job_attempts.id [delete: no action]
+Ref release_build_provenance_content_review_id_fkey: release_build_provenance.content_review_id > scenario_content_reviews.id [delete: no action]
+Ref release_build_provenance_manifest_artifact_id_fkey: release_build_provenance.manifest_artifact_id > revision_artifacts.id [delete: no action]
+Ref release_build_provenance_release_id_fkey: release_build_provenance.release_id > releases.id [delete: no action]
+Ref release_build_provenance_validation_run_id_fkey: release_build_provenance.validation_run_id > validation_runs.id [delete: no action]
+Ref trainings_created_by_fkey: trainings.created_by > users.id [delete: no action]
+Ref trainings_release_id_scenario_version_id_organization_id_fkey: trainings.(release_id, scenario_version_id, organization_id) > releases.(id, scenario_version_id, organization_id) [delete: no action]
