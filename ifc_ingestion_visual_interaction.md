@@ -212,9 +212,17 @@ Thứ tự lấy vật liệu: `IfcStyledItem` → `IfcRelAssociatesMaterial` (l
 | `wood` | holz, wood, lamellen, eiche, esche, kiefer | Wood092 | 1.0 m |
 | `stone` | naturstein, marble, granite, sandstein | Marble012 | 1.5 m |
 | `metal.painted` | metall lack, paint finish, steel, stahl | Metal027 | 1.0 m |
-| `metal.brushed` | chrome, aluminium, stainless | Metal009 | 0.5 m |
+| `metal.brushed` | chrome, aluminium | Metal009 | 0.5 m |
+| `metal.stainless` | stainless, edelstahl, inox | Metal012 | 0.5 m |
+| `floor.epoxy` | epoxy, polished concrete, beschichtung, sàn epoxy, bê tông mài | Concrete048 | 2.0 m |
+| `floor.vinyl` | vinyl, linoleum, pvc, kautschuk, sàn nhựa | Plastic011 | 1.0 m |
+| `floor.terrazzo` | terrazzo, granito, đá mài | Tiles040 | 1.2 m |
+| `floor.rubber` | rubber, gummi, anti-slip, cao su, chống trơn | Rubber004 | 0.6 m |
+| `wall.tile.white` | white tile, weiße fliese, gạch ốp trắng (trên sàn thì về `floor.tile`) | Tiles133A | 0.6 m |
+| `wall.paint` | paint, farbe, anstrich, maling, sơn | Paint004 | 2.0 m |
 | `glass.clear` / `glass.frosted` | glas, glass, klart / frosted, matt | không texture, shader kính | — |
 
+- Bảy khóa `metal.stainless`, `floor.epoxy`, `floor.vinyl`, `floor.terrazzo`, `floor.rubber`, `wall.tile.white`, `wall.paint` thêm ngày 27/10/2026 (ambientCG CC0); IFC worker trong Unity (`Tools/GeometryWorker`) đã nhận diện các tên trên.
 - Tên không khớp: dùng màu gốc của surface style nếu có, ghi `IFC_UNMAPPED_MATERIAL` mức thông tin để PlatformAdmin bổ sung từ điển.
 - **Nơi giữ texture (chốt 17/10/2026):** file ảnh PBR chỉ nằm trong project Unity dưới dạng thư viện material URP đã tuyển chọn (Git LFS). GLB từ Blender worker chỉ mang `libraryKey`, biến thể và màu nhuộm, không nhúng texture; BE, IFC worker và Blender worker không lưu file ảnh. Unity build worker gán material theo `libraryKey` trước khi bake, nên mọi tòa dùng chung bộ texture mà không tải trùng. Thư viện được đóng thành một **AssetBundle thư viện dùng chung** cài sẵn trong app (StreamingAssets, có version); AssetBundle của từng tòa khai báo phụ thuộc vào bundle này thay vì chứa lại texture. Phần tải riêng cho mỗi tòa chỉ gồm mesh, collider, lightmap/probe đã bake (ASTC) của chính tòa đó. Đổi version thư viện thì tòa build bằng version cũ phải build lại hoặc giữ bundle thư viện cũ; manifest ghi rõ version thư viện đã dùng.
 - **Tránh đơn điệu giữa các tòa.** IFC không mang texture (0/25 file có `IfcImageTexture`); spike dùng một bộ 12 texture cho mọi tòa nên các tòa trông giống nhau. Thiết kế đích:
@@ -357,7 +365,7 @@ Catalog do PlatformAdmin quản lý trong Organization Library (FR-LIBRARY-01/02
 | `alarm.call_point` | Editor (hiếm có trong IFC) | Nhấn báo cháy | `alarm_raised` |
 | `alarm.detector` | `IfcSensor` hoặc editor | Tự kích hoạt theo khói | `detector_triggered` |
 | `extinguisher.portable` | Proxy/FlowTerminal theo tên hoặc editor | Lấy bình, rút chốt, giữ để phun | `extinguisher_used`, `extinguish_attempt_large_fire` |
-| `water.sink` / `water.bath` / `water.shower` | FlowTerminal/Furnishing theo tên hoặc editor | Nhúng khăn/chăn (giữ) | `item_wetted` |
+| `water.sink` / `water.bath` / `water.shower` | FlowTerminal/Furnishing theo tên hoặc editor | Nhúng khăn/chăn (chạm một lần, chờ đủ vòng) | `item_wetted` |
 | `item.towel` | Editor | Nhặt, che mũi khi ướt | `nose_covered_in_smoke` |
 | `door.standard` / `door.fire` / `door.exit` | `IfcDoor` | Sờ cửa, mở, đóng | `checked_door_heat`, `closed_door` |
 | `transport.elevator` | `IfcTransportElement`/`IfcSpace` hoặc editor | Gọi thang (bẫy, vẫn hiện nút) | `used_elevator` |
@@ -384,9 +392,11 @@ Catalog do PlatformAdmin quản lý trong Organization Library (FR-LIBRARY-01/02
 - Nút phụ thuộc **vật đang cầm** và **trạng thái**: bồn nước chỉ hiện "Nhúng nước" khi đang cầm khăn/chăn khô ("Nhúng lại" khi đã ướt); bình chỉ hiện "Rút chốt" rồi mới "Phun".
 - **Cầm vật không có tác dụng** cho tới khi dùng đúng cách (khăn phải ướt và bấm "Che mũi").
 - Một ô tay cầm và một ô che mũi; đang cầm vật khác thì nút đổi thành "Đổi lấy…".
-- Tối đa 3 nút; thao tác quan trọng là nút giữ (nhúng nước khoảng 2 giây, phun bình).
-- **Bẫy vẫn hiện nút bình thường** để đánh giá được hành vi.
-- Guided Drill làm nổi bật nút nên bấm và có gợi ý; Assessment hiện đủ nút, không làm nổi bật, không gợi ý (technology mục 1.2).
+- **Ô tương tác cạnh vật (27/10/2026):** hành động với vật trước mặt hiện thành ô nhỏ gọn kiểu PUBG Mobile ngay cạnh vật, tối đa 3 ô xếp dọc, tên vật ở trên. Chạm một lần là làm (mở/đóng cửa, sờ cửa, nhặt, nhấn báo cháy, gọi thang); không còn nút tròn cho hành động với vật.
+- **Thao tác cần thời gian** (nhúng nước khoảng 2 giây) cũng chỉ cần chạm một lần: vòng trên ô tự chạy đủ một vòng là xong. Đi xa quá 0.6 m hoặc quay sang vật khác trước khi đủ vòng thì thất bại, hiện "… chưa xong. Hãy đứng yên và làm lại." và phải làm lại từ đầu.
+- Hành động của **vật đang cầm** (phun bình, che mũi) ở nút tròn vùng ngón cái phải; phun bình vẫn là giữ nút.
+- **Bẫy vẫn hiện ô/nút bình thường** để đánh giá được hành vi.
+- Guided Drill làm nổi bật ô/nút nên bấm và có gợi ý; Assessment hiện đủ nút, không làm nổi bật, không gợi ý (technology mục 1.2).
 
 **Ánh xạ với contract editor hiện có:** BE/FE đã có contract `fet3d.editor/1` (BE `contracts/editor/v1`) với sáu loại object `Spawn`, `Hazard`, `Goal`, `Npc`, `BlockedElement`, `Equipment`; `Equipment`/`Hazard` mang capability `{id,version}` lấy từ `GET /api/scenario-interactions/catalog`. **`catalogKey` trong tài liệu này chính là capability id đó**; vật tương tác và sprinkler là object `Equipment`, nguồn lửa là `Hazard`. Không thêm trường `interactions` riêng: luật hành động bên dưới là metadata của capability trong catalog, tham số đặt trên từng object theo schema tham số của capability.
 
