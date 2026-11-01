@@ -364,7 +364,7 @@ Catalog do PlatformAdmin quản lý trong Organization Library (FR-LIBRARY-01/02
 | :--- | :--- | :--- | :--- |
 | `alarm.call_point` | Editor (hiếm có trong IFC) | Nhấn báo cháy | `alarm_raised` |
 | `alarm.detector` | `IfcSensor` hoặc editor | Tự kích hoạt theo khói | `detector_triggered` |
-| `extinguisher.portable` | Proxy/FlowTerminal theo tên hoặc editor | Lấy bình, rút chốt, giữ để phun | `extinguisher_used`, `extinguish_attempt_large_fire` |
+| `extinguisher.portable` | Proxy/FlowTerminal theo tên hoặc editor | Lấy bình, rút chốt, giữ để phun. Tham số `agent` quyết định hiệu ứng: `Powder` đám bột, `CO2` luồng khí trắng lạnh có hơi sương, `Foam` dòng bọt trắng (runtime 2.1.0); nhãn có "xe đẩy"/MFTZ dùng mẫu bình xe đẩy | `extinguisher_used`, `extinguish_attempt_large_fire` |
 | `water.sink` / `water.bath` / `water.shower` | FlowTerminal/Furnishing theo tên hoặc editor | Nhúng khăn/chăn (chạm một lần, chờ đủ vòng) | `item_wetted` |
 | `item.towel` | Editor | Nhặt, che mũi khi ướt | `nose_covered_in_smoke` |
 | `door.standard` / `door.fire` / `door.exit` | `IfcDoor` | Sờ cửa, mở, đóng | `checked_door_heat`, `closed_door` |
@@ -376,17 +376,18 @@ Catalog do PlatformAdmin quản lý trong Organization Library (FR-LIBRARY-01/02
 
 ### 6.2. Đợt 2 (mở rộng)
 
-Chốt 28/10/2026 để Unity (runtime 2.1.0), FE và BE dùng một bộ tên. Event trong catalog viết PascalCase; metric cho rubric là dạng snake_case tương ứng. Payload chung `{objectId}` (+ `npcId` cho hai event NPC). Chưa có trong runtime 2.0.2. Bổ sung 01/11/2026: `item.clothing` và hành động "Chèn khe cửa" (`door_gap_sealed`), vì đồ vải nào cũng chèn được, không riêng chăn.
+Chốt 28/10/2026 để Unity (runtime 2.1.0), FE và BE dùng một bộ tên. Event trong catalog viết PascalCase; metric cho rubric là dạng snake_case tương ứng. Payload chung `{objectId}` (+ `npcId` cho hai event NPC). Chưa có trong runtime 2.0.2. Runtime 2.1.0 (Unity, 01/11/2026, chưa đăng ký production) đã làm `extinguisher.hose_reel`, `gas.valve`, `event.explosion` và hiệu ứng phun theo `agent`; các mục còn lại chưa làm. Bổ sung 01/11/2026: `item.clothing` và hành động "Chèn khe cửa" (`door_gap_sealed`), vì đồ vải nào cũng chèn được, không riêng chăn.
 
 | catalogKey | Tên hiển thị | Thao tác | Event cho rubric |
 | :--- | :--- | :--- | :--- |
-| `extinguisher.hose_reel` | Cuộn vòi chữa cháy | Mở van, giữ để phun | `hose_reel_used` |
+| `extinguisher.hose_reel` | Tủ chữa cháy vách tường (cuộn vòi) | Kéo vòi (cầm lăng, ống vòi nối về tủ), Mở van, giữ Phun nước; nước không hết; đi xa quá `hoseLengthMeters` (mặc định 20 m) thì vòi tuột khỏi tay | `hose_reel_used` |
 | `blanket.fire` | Chăn chữa cháy (bếp) | Kéo ra, trùm lên lửa nhỏ | `fire_blanket_used` |
 | `item.blanket` | Chăn | Nhặt, nhúng nước, trùm người | `blanket_covered` (nhúng dùng `item_wetted`) |
 | `item.clothing` | Quần áo, đồ vải (áo, quần, khăn trải bàn, rèm) | Nhặt, nhúng nước, che mũi | dùng chung `item_wetted`, `nose_covered_in_smoke` |
 | `door.standard` / `door.fire` (đang đóng) | Chèn khe cửa | Khi bị kẹt trong phòng: nhét bất kỳ đồ vải nào đang cầm (khăn, quần áo, chăn; ướt càng tốt) vào khe dưới cửa để giảm khói lọt vào | `door_gap_sealed` |
 | `power.breaker` | Tủ điện | Ngắt cầu dao | `power_cut_off` |
-| `gas.valve` | Van gas | Khóa van | `gas_valve_closed` |
+| `gas.valve` | Van gas (bình gas, đường ống gas) | Khóa van gas; khóa kịp thì vụ nổ liên kết không xảy ra | `gas_valve_closed` |
+| `event.explosion` | Vụ nổ (sự kiện dòng thời gian, Hazard) | Không tương tác: nổ ở `atSeconds` tại vị trí đặt, bán kính `radius`, để lại đám cháy `fireIntensity`; nếu `gasValveId` trỏ tới van gas đã khóa thì không nổ. Người đứng trong bán kính bị thương theo khoảng cách | Không có event riêng; thương tích tính vào `HazardExposure` |
 | `door.fire_wedged` | Cửa chống cháy bị chèn mở | Gỡ vật chèn giữ cửa mở (nêm, ghế, thùng) cho cửa tự đóng; khác với chèn khe cửa ở trên | `wedge_removed` |
 | `door.exit_locked` | Cửa thoát bị khóa | Thử mở (bẫy, phải tìm lối khác) | `locked_exit_tried` |
 | `phone.emergency` | Gọi 114 | Gọi 114 bằng điện thoại di động của người chơi (nút trên HUD, không đặt máy bàn trong tòa) | `emergency_called` |
