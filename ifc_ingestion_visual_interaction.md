@@ -364,7 +364,7 @@ Catalog do PlatformAdmin quản lý trong Organization Library (FR-LIBRARY-01/02
 | :--- | :--- | :--- | :--- |
 | `alarm.call_point` | Editor (hiếm có trong IFC) | Nhấn báo cháy | `alarm_raised` |
 | `alarm.detector` | `IfcSensor` hoặc editor | Tự kích hoạt theo khói | `detector_triggered` |
-| `extinguisher.portable` | Proxy/FlowTerminal theo tên hoặc editor | Lấy bình, rút chốt, giữ để phun | `extinguisher_used`, `extinguish_attempt_large_fire` |
+| `extinguisher.portable` | Proxy/FlowTerminal theo tên hoặc editor | Lấy bình, rút chốt, giữ để phun. Tham số `agent` quyết định hiệu ứng: `Powder` đám bột, `CO2` luồng khí trắng lạnh có hơi sương, `Foam` dòng bọt trắng (runtime 2.1.0); nhãn có "xe đẩy"/MFTZ dùng mẫu bình xe đẩy | `extinguisher_used`, `extinguish_attempt_large_fire` |
 | `water.sink` / `water.bath` / `water.shower` | FlowTerminal/Furnishing theo tên hoặc editor | Nhúng khăn/chăn (chạm một lần, chờ đủ vòng) | `item_wetted` |
 | `item.towel` | Editor | Nhặt, che mũi khi ướt | `nose_covered_in_smoke` |
 | `door.standard` / `door.fire` / `door.exit` | `IfcDoor` | Sờ cửa, mở, đóng | `checked_door_heat`, `closed_door` |
@@ -376,16 +376,19 @@ Catalog do PlatformAdmin quản lý trong Organization Library (FR-LIBRARY-01/02
 
 ### 6.2. Đợt 2 (mở rộng)
 
-Chốt 28/10/2026 để Unity (runtime 2.1.0), FE và BE dùng một bộ tên. Event trong catalog viết PascalCase; metric cho rubric là dạng snake_case tương ứng. Payload chung `{objectId}` (+ `npcId` cho hai event NPC). Chưa có trong runtime 2.0.2.
+Chốt 28/10/2026 để Unity (runtime 2.1.0), FE và BE dùng một bộ tên. Event trong catalog viết PascalCase; metric cho rubric là dạng snake_case tương ứng. Payload chung `{objectId}` (+ `npcId` cho hai event NPC). Chưa có trong runtime 2.0.2. Runtime 2.1.0 (Unity, 01/11/2026, chưa đăng ký production) đã làm `extinguisher.hose_reel`, `gas.valve`, `event.explosion` và hiệu ứng phun theo `agent`; các mục còn lại chưa làm. Bổ sung 01/11/2026: `item.clothing` và hành động "Chèn khe cửa" (`door_gap_sealed`), vì đồ vải nào cũng chèn được, không riêng chăn.
 
 | catalogKey | Tên hiển thị | Thao tác | Event cho rubric |
 | :--- | :--- | :--- | :--- |
-| `extinguisher.hose_reel` | Cuộn vòi chữa cháy | Mở van, giữ để phun | `hose_reel_used` |
+| `extinguisher.hose_reel` | Tủ chữa cháy vách tường (cuộn vòi) | Kéo vòi (cầm lăng, ống vòi nối về tủ), Mở van, giữ Phun nước; nước không hết; đi xa quá `hoseLengthMeters` (mặc định 20 m) thì vòi tuột khỏi tay | `hose_reel_used` |
 | `blanket.fire` | Chăn chữa cháy (bếp) | Kéo ra, trùm lên lửa nhỏ | `fire_blanket_used` |
 | `item.blanket` | Chăn | Nhặt, nhúng nước, trùm người | `blanket_covered` (nhúng dùng `item_wetted`) |
+| `item.clothing` | Quần áo, đồ vải (áo, quần, khăn trải bàn, rèm) | Nhặt, nhúng nước, che mũi | dùng chung `item_wetted`, `nose_covered_in_smoke` |
+| `door.standard` / `door.fire` (đang đóng) | Chèn khe cửa | Khi bị kẹt trong phòng: nhét bất kỳ đồ vải nào đang cầm (khăn, quần áo, chăn; ướt càng tốt) vào khe dưới cửa để giảm khói lọt vào | `door_gap_sealed` |
 | `power.breaker` | Tủ điện | Ngắt cầu dao | `power_cut_off` |
-| `gas.valve` | Van gas | Khóa van | `gas_valve_closed` |
-| `door.fire_wedged` | Cửa chống cháy bị chèn | Gỡ nêm cho cửa đóng | `wedge_removed` |
+| `gas.valve` | Van gas (bình gas, đường ống gas) | Khóa van gas; khóa kịp thì vụ nổ liên kết không xảy ra | `gas_valve_closed` |
+| `event.explosion` | Vụ nổ (sự kiện dòng thời gian, Hazard) | Không tương tác: nổ ở `atSeconds` tại vị trí đặt, bán kính `radius`, để lại đám cháy `fireIntensity`; nếu `gasValveId` trỏ tới van gas đã khóa thì không nổ. Người đứng trong bán kính bị thương theo khoảng cách | Không có event riêng; thương tích tính vào `HazardExposure` |
+| `door.fire_wedged` | Cửa chống cháy bị chèn mở | Gỡ vật chèn giữ cửa mở (nêm, ghế, thùng) cho cửa tự đóng; khác với chèn khe cửa ở trên | `wedge_removed` |
 | `door.exit_locked` | Cửa thoát bị khóa | Thử mở (bẫy, phải tìm lối khác) | `locked_exit_tried` |
 | `phone.emergency` | Gọi 114 | Gọi 114 bằng điện thoại di động của người chơi (nút trên HUD, không đặt máy bàn trong tòa) | `emergency_called` |
 | `signal.window` | Cửa sổ ra hiệu | Ra hiệu cứu hộ | `signaled_for_help` |
@@ -409,7 +412,8 @@ BE hiện viết cứng danh sách metric chấm được (`EditorContract.Event
 ## 7. Luật tương tác theo ngữ cảnh
 
 - Nút chỉ hiện khi người chơi **ở trong vùng chạm** (mặc định 1.2 m) và vật đó là **vật gần nhất phía trước**.
-- Nút phụ thuộc **vật đang cầm** và **trạng thái**: bồn nước chỉ hiện "Nhúng nước" khi đang cầm khăn/chăn khô ("Nhúng lại" khi đã ướt); bình chỉ hiện "Rút chốt" rồi mới "Phun".
+- Nút phụ thuộc **vật đang cầm** và **trạng thái**: bồn nước chỉ hiện "Nhúng nước" khi đang cầm đồ vải khô (khăn, quần áo, chăn; "Nhúng lại" khi đã ướt); cửa đang đóng chỉ hiện "Chèn khe cửa" khi đang cầm đồ vải; bình chỉ hiện "Rút chốt" rồi mới "Phun".
+- **Đồ vải dùng chung một luật:** khăn, quần áo và chăn đều nhúng nước, che mũi và chèn khe cửa được; chăn còn trùm người được. Không bắt người chơi tìm đúng một món: món nào trong tầm tay cũng dùng được.
 - **Cầm vật không có tác dụng** cho tới khi dùng đúng cách (khăn phải ướt và bấm "Che mũi").
 - Một ô tay cầm và một ô che mũi; đang cầm vật khác thì nút đổi thành "Đổi lấy…".
 - **Ô tương tác cạnh vật (27/10/2026):** hành động với vật trước mặt hiện thành ô nhỏ gọn kiểu PUBG Mobile ngay cạnh vật, tối đa 3 ô xếp dọc, tên vật ở trên. Chạm một lần là làm (mở/đóng cửa, sờ cửa, nhặt, nhấn báo cháy, gọi thang); không còn nút tròn cho hành động với vật.
@@ -426,7 +430,7 @@ Ví dụ metadata capability (minh họa, field cuối cùng chốt cùng catalo
 {
   "catalogKey": "water.sink",
   "actions": [
-    {"id": "wet_item", "requiresHeld": ["item.towel:dry", "item.towel:wet", "item.blanket:dry"],
+    {"id": "wet_item", "requiresHeld": ["item.towel", "item.clothing", "item.blanket"],
      "hold_s": 2.0, "effect": {"setState": "wet"}, "event": "item_wetted"}
   ]
 }
@@ -475,7 +479,7 @@ Editor chỉ thêm vật lên artifact; không sửa tường, cửa, sàn hay k
 - Ngân sách tam giác/draw call là mục tiêu ban đầu, phải đo trên thiết bị.
 - Thư viện asset thay thế và decal cần người làm 3D tạo một lần; mô hình AI-generate (ví dụ Tripo) phải kiểm license và dọn lưới trước khi dùng.
 - Texture CC0 từ ambientCG dùng được cho thương mại; vẫn ghi nguồn trong thư viện. Mô hình trên Sketchfab có license riêng từng mục, không tự đưa vào sản phẩm.
-- Tác dụng của khăn ướt, chăn ướt, che mũi và nơi trú tạm cần chuyên gia PCCC duyệt nội dung; game chỉ là mô phỏng tập huấn, không phải hướng dẫn khẩn cấp thực tế.
+- Tác dụng của khăn ướt, chăn ướt, che mũi, chèn khe cửa và nơi trú tạm cần chuyên gia PCCC duyệt nội dung; game chỉ là mô phỏng tập huấn, không phải hướng dẫn khẩn cấp thực tế.
 - Kết quả spike là bằng chứng kỹ thuật cục bộ, không phải bằng chứng worker production, package Android hay hiệu năng thiết bị.
 
 ## 12. Nguồn tham khảo
