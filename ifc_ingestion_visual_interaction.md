@@ -228,19 +228,20 @@ Thứ tự lấy vật liệu: `IfcStyledItem` → `IfcRelAssociatesMaterial` (l
 - **Tránh đơn điệu giữa các tòa.** IFC không mang texture (0/25 file có `IfcImageTexture`); spike dùng một bộ 12 texture cho mọi tòa nên các tòa trông giống nhau. Thiết kế đích:
   - Mỗi khóa thư viện có 5–10 **biến thể**; chọn biến thể xác định bằng hash (`buildingId` + tên vật liệu IFC) để mỗi tòa khác nhau nhưng build lại cho kết quả giống hệt.
   - **Nhuộm texture bằng màu surface style gốc** khi IFC có màu (ví dụ "Verputz blau", "Farbe braun") để giữ ý đồ kiến trúc.
-  - **Ưu tiên theo loại phòng** từ `IfcSpace`: WC → gạch ốp + sàn chống trơn; văn phòng → thảm; hành lang bệnh viện/trường → vinyl; lab/xưởng → epoxy; sảnh → đá.
-  - **Preset phong cách** theo loại công trình (trường học, bệnh viện, văn phòng, nhà ở) do PlatformAdmin quản lý; OrganizationUser chọn preset và có thể đổi vật liệu theo nhóm trong editor. Lựa chọn lưu theo revision, áp dụng tự động ở Blender/Unity worker, không chỉnh tay.
+  - **Ưu tiên theo loại phòng** từ `IfcSpace`: WC → gạch ốp + sàn chống trơn; văn phòng → thảm; hành lang bệnh viện/trường → vinyl; lab/xưởng → epoxy; sảnh → đá. Nếu làm, worker tự suy ra từ loại phòng mà IFC worker đã nhận diện (`spaces[].category`), không cần ai chọn.
+  - **Không có bộ vật liệu (preset) hay bảng màu (scheme) do người dùng chọn (quyết định 04/11/2026).** Thiết kế cũ (BE STYLE-01, 17/10/2026) cho PlatformAdmin soạn preset theo loại công trình và bảng 4 màu trong Thư viện, OrganizationUser chọn theo từng bản IFC. Không worker nào từng áp lựa chọn đó vào gói nên đã bỏ: FE gỡ khỏi giao diện (FE#214), BE gỡ hai loại Thư viện `StylePreset`/`ColorScheme`, API `/api/revisions/{id}/style` và bảng `revision_style_selections` (BE#194).
+  - **Hiện trạng:** vật liệu chọn tự động theo tên vật liệu/kiểu bề mặt trong IFC (từ khóa ở bảng trên), không khớp thì theo class (`Tools/GeometryWorker/fet3d_geometry/classify.py`); Unity build worker gán material thư viện và biến thể theo khóa. Chưa nhuộm màu và chưa đổi vật liệu theo loại phòng.
 - **Kết quả spike v2 (15/10/2026)** trên phòng khám, trường học, Digital Hub và Duplex: sàn/trần hoàn thiện sinh từ mặt đáy/đỉnh `IfcSpace` theo loại phòng, màu tường chọn theo tòa, len chân tường bỏ qua ô cửa, tấm đèn âm trần nhìn thấy được; mỗi tòa 15–45 giây trong Blender. Bài học:
   - Lớp hoàn thiện phải đặt ở **mặt sàn/trần thật** (dò tia từ tâm phòng), không ở đáy `IfcSpace`: Revit để đáy phòng thấp hơn mặt sàn nên lớp mới bị che.
   - Thư viện phải **tuyển chọn**: 3/4 mẫu vữa CC0 phổ biến là loại bong tróc/lộ gạch, chỉ hợp cảnh cũ nát; terrazzo hạt to và thảm đỏ cam quá nổi cho hành lang.
-  - Nhận diện preset bằng regex dễ nhầm ("Student" chứa "dent", "Gruppenbüro" khớp "gruppe"); cần ranh giới từ, trọng số theo số phòng và cho OrganizationUser xác nhận preset.
+  - Nhận diện loại công trình bằng regex dễ nhầm ("Student" chứa "dent", "Gruppenbüro" khớp "gruppe"); cần ranh giới từ và trọng số theo số phòng.
   - Ốp gạch WC phải gán **theo mặt tường quay vào phòng WC**, không gán cả tường (spike ốp cả mặt hành lang).
   - Cần thêm biến thể cho bê tông/vữa của kết cấu IFC; hai tòa khác nhau vẫn giống nhau nếu tường kết cấu dùng cùng một texture.
 - **Spike v3 (15/10/2026)** sửa các lỗi trên và chốt cách xử lý màu:
-  - **IFC gần như không mang màu dùng được.** `IfcSurfaceStyle` chỉ là màu phẳng RGB, không có texture; trong 25 file đầy đủ chỉ KIT và FZK-Haus có màu kiến trúc thật, các file Revit xuất xám/trắng toàn bộ (phòng khám: 12 tường có style nhưng đều xám, không dùng được). Quy tắc: **IFC có màu thật thì nhuộm texture theo màu đó; không có thì dùng bộ màu phối sẵn (scheme) do PlatformAdmin duyệt, chọn xác định theo tòa, OrganizationUser đổi được trong editor.**
+  - **IFC gần như không mang màu dùng được.** `IfcSurfaceStyle` chỉ là màu phẳng RGB, không có texture; trong 25 file đầy đủ chỉ KIT và FZK-Haus có màu kiến trúc thật, các file Revit xuất xám/trắng toàn bộ (phòng khám: 12 tường có style nhưng đều xám, không dùng được). Quy tắc đề xuất lúc đó: IFC có màu thật thì nhuộm texture theo màu đó; không có thì dùng bộ màu phối sẵn (scheme). Phần scheme do người dùng chọn đã bỏ ngày 04/11/2026 (xem trên); nếu làm lại, worker tự chọn màu, không cần ai chọn.
   - Scheme gồm 4 màu phối với nhau: tường, tường nhấn (một mặt dài của hành lang), tông gỗ cửa, len chân tường. Tránh màu bão hòa cao; đây là lý do cảnh thương mại nhìn "có gu" hơn màu ngẫu nhiên.
   - Ốp gạch WC và tường nhấn gán **theo từng mặt** (dò tia từ tâm mặt theo pháp tuyến vào phòng), không gán cả tường.
-  - Nhận diện preset dùng **so khớp token nguyên từ** thay vì regex substring; phòng khám (`GEN. DENT.`, `TRICARE OFFICE`) và trường học (`Workshop`, `Student Council`) nhận đúng. Vẫn phải cho OrganizationUser xác nhận.
+  - Nhận diện loại công trình dùng **so khớp token nguyên từ** thay vì regex substring; phòng khám (`GEN. DENT.`, `TRICARE OFFICE`) và trường học (`Workshop`, `Student Council`) nhận đúng.
   - Bê tông/kết cấu có 3 biến thể chọn theo tòa; ánh sáng ấm hơn (3200–3500K), bầu trời chỉ dùng cho cửa sổ, nội thất do tấm đèn chiếu.
   - Còn thiếu để đạt mức asset pack thương mại: đồ vật (bàn ghế, biển báo, thiết bị), decal bẩn/mòn, và AO/lightmap bake trong Unity. Ba thứ này nằm ở thư viện asset và Unity build worker, không ở bước IFC.
 - **UV0**: chiếu box theo trục pháp tuyến trội, đơn vị mét (texture lặp theo kích thước thật). **UV1**: unwrap riêng cho lightmap, không chồng lấn. Spike tạo UV0 cho 789 mesh duy nhất trong 1.8 giây.
@@ -493,6 +494,7 @@ Editor chỉ thêm vật lên artifact; không sửa tường, cửa, sàn hay k
 - Texture CC0 từ ambientCG dùng được cho thương mại; vẫn ghi nguồn trong thư viện. Mô hình trên Sketchfab có license riêng từng mục, không tự đưa vào sản phẩm.
 - Tác dụng của khăn ướt, chăn ướt, che mũi, chèn khe cửa và nơi trú tạm cần chuyên gia PCCC duyệt nội dung; game chỉ là mô phỏng tập huấn, không phải hướng dẫn khẩn cấp thực tế.
 - Kết quả spike là bằng chứng kỹ thuật cục bộ, không phải bằng chứng worker production, package Android hay hiệu năng thiết bị.
+- `ERD Logical Physical/` sinh từ schema production nên vẫn còn `revision_style_selections` và hai giá trị `StylePreset`/`ColorScheme` của `organization_library_items.kind` cho tới khi BE#194 lên production; sinh lại theo `ERD Logical Physical/_sinh-lai/README.md` sau đó, không sửa tay.
 
 ## 12. Nguồn tham khảo
 
