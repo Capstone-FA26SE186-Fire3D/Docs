@@ -399,7 +399,19 @@ Chốt 28/10/2026 để Unity (runtime 2.1.0), FE và BE dùng một bộ tên. 
 | `assembly.point` | Điểm tập kết | Đi vào (Goal) | `assembly_point_reached` |
 | `window.openable` | Cửa sổ mở được | Mở thông gió (liên kết mô hình gió) | `window_opened` |
 
-BE hiện viết cứng danh sách metric chấm được (`EditorContract.EventCountMetrics` và `learner_session_finalize`), nên các event trên chỉ chấm được sau khi BE chuyển sang đọc metric từ runtime catalog: BE issue #183.
+BE chấm theo `events[].metric` khai trong runtime catalog (BE #183, production 28/10/2026): mỗi metric đếm số lần event đó xảy ra. Runtime 2.1.0 đã đăng ký mà không khai `metric`, nên `hose_reel_used`/`gas_valve_closed` chỉ chấm được từ runtime 2.2.0 (khai đủ).
+
+#### Di chuyển của người chơi (runtime 2.2.0, 04/11/2026)
+
+Capability `player.movement` (objectKind `Spawn`, không phải vật để đặt) khai các event của chính người chơi để rubric chấm được:
+
+| Event | Metric | Khi nào | Payload |
+| :--- | :--- | :--- | :--- |
+| `Jumped` | `jumped` | Người chơi nhảy (nút Nhảy) | `{}` |
+| `ObstacleClimbed` | `obstacle_climbed` | Leo lên bờ/vật cản cao 0,4–1,3 m (cùng nút, đổi thành "Leo lên" khi có bờ trước mặt; bậc cầu thang không tính) | `{heightMeters}` |
+| `FellFromHeight` | `fell_from_height` | Tiếp đất sau khi rơi từ 1,8 m trở lên; mất máu theo độ cao, chế độ Hướng dẫn nhắc "đi cầu thang, đừng nhảy xuống" | `{dropMeters}` |
+
+Gợi ý rubric: `fell_from_height` `eq 0` (bắt buộc) cho bài thoát nạn nhiều tầng; `jumped` `lte` một ngưỡng nhỏ nếu muốn phạt chạy nhảy thay vì đi bình tĩnh; `obstacle_climbed` dùng cho bài có vật cản chắn lối. Nhảy hay leo không thay cầu thang: tòa nhà vẫn chỉ thoát qua lối ra.
 
 ### 6.3. Sprinkler (đợt 1)
 
