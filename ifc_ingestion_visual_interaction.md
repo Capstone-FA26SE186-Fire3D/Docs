@@ -369,7 +369,7 @@ Catalog do PlatformAdmin quản lý trong Organization Library (FR-LIBRARY-01/02
 | `water.sink` / `water.bath` / `water.shower` | FlowTerminal/Furnishing theo tên hoặc editor | Nhúng khăn/chăn (chạm một lần, chờ đủ vòng) | `item_wetted` |
 | `item.towel` | Editor | Nhặt, che mũi khi ướt | `nose_covered_in_smoke` |
 | `door.standard` / `door.fire` / `door.exit` | `IfcDoor` | Sờ cửa, mở, đóng | `checked_door_heat`, `closed_door` |
-| `transport.elevator` | `IfcTransportElement`/`IfcSpace` hoặc editor | Gọi thang (bẫy, vẫn hiện nút) | `used_elevator` |
+| `transport.elevator` | **Chỉ từ IFC** (`IfcTransportElement`/`IfcSpace` tên thang máy). Thang máy thuộc tòa nhà: game tự đặt cửa thang ở mặt khối thang nhìn ra sàn đi lại, trong mọi bài của tòa nhà; trình soạn không cho thêm/xóa, bản nháp cũ có thang máy đặt tay bị báo `CAPABILITY_BUILDING_ONLY` (04/11/2026) | Gọi thang: cửa mở ra cabin; bước vào = thang dừng giữa tầng, khói lùa vào, mất máu (bẫy) | `used_elevator` (kịch bản chỉ quyết định có chấm hay không qua rubric) |
 | `exit.stair` / `exit.final` | `IfcStair`, cửa ra ngoài | Đi vào | `reached_exit`, thời gian thoát |
 | `bait.belongings` | Editor | Nhặt đồ (bẫy) | `went_back_for_belongings` |
 | `npc.guide` | Editor (spawn NPC) | Gọi, dẫn đường | `npc_guided` |
