@@ -377,28 +377,29 @@ Catalog do PlatformAdmin quản lý trong Organization Library (FR-LIBRARY-01/02
 
 ### 6.2. Đợt 2 (mở rộng)
 
-Chốt 28/10/2026 để Unity (runtime 2.1.0), FE và BE dùng một bộ tên. Event trong catalog viết PascalCase; metric cho rubric là dạng snake_case tương ứng. Payload chung `{objectId}` (+ `npcId` cho hai event NPC). Chưa có trong runtime 2.0.2. Runtime 2.1.0 (Unity, 01/11/2026) đã làm `extinguisher.hose_reel`, `gas.valve`, `event.explosion` và hiệu ứng phun theo `agent`. Runtime 2.2.0 (04/11/2026) làm thêm `phone.emergency`, `firstaid.kit`, `npc.injured`, `npc.wheelchair` + `refuge.area`, `blanket.fire`; các mục còn lại chưa làm. Bổ sung 01/11/2026: `item.clothing` và hành động "Chèn khe cửa" (`door_gap_sealed`), vì đồ vải nào cũng chèn được, không riêng chăn.
+Chốt 28/10/2026 để Unity (runtime 2.1.0), FE và BE dùng một bộ tên. Event trong catalog viết PascalCase; metric cho rubric là dạng snake_case tương ứng. Payload chung `{objectId}` (+ `npcId` cho hai event NPC). Chưa có trong runtime 2.0.2. Runtime 2.1.0 (Unity, 01/11/2026) đã làm `extinguisher.hose_reel`, `gas.valve`, `event.explosion` và hiệu ứng phun theo `agent`. Runtime 2.2.0 (04/11/2026) làm thêm `phone.emergency`, `firstaid.kit`, `npc.injured`, `npc.wheelchair` + `refuge.area`, `blanket.fire`. Runtime 2.3.0 (05/11/2026) làm nốt các mục còn lại: `power.breaker`, `door.fire_wedged`, `door.exit_locked`, `signal.window`, `window.openable`, `assembly.point`, `item.blanket`, `item.clothing`, `ppe.escape_hood`, chèn khe cửa (`door.standard`/`door.fire`/`door.exit` 1.1.0), nguồn nước 1.1.0 nhận mọi đồ vải, và thêm `furniture.bed`. Hiệu ứng (tỷ lệ hít khói khi che mũi, thời gian khô, tỷ lệ nóng khi trùm chăn, lọc của mặt nạ) đều là tham số nội dung, không mặc định. Bổ sung 01/11/2026: `item.clothing` và hành động "Chèn khe cửa" (`door_gap_sealed`), vì đồ vải nào cũng chèn được, không riêng chăn.
 
 | catalogKey | Tên hiển thị | Thao tác | Event cho rubric |
 | :--- | :--- | :--- | :--- |
 | `extinguisher.hose_reel` | Tủ chữa cháy vách tường (cuộn vòi) | Kéo vòi (cầm lăng, ống vòi nối về tủ), Mở van, giữ Phun nước; nước không hết; đi xa quá `hoseLengthMeters` (mặc định 20 m) thì vòi tuột khỏi tay | `hose_reel_used` |
 | `blanket.fire` | Chăn chữa cháy (bếp) | Lấy chăn khỏi túi treo tường, đứng trước đám cháy nhỏ rồi Trùm lên lửa; lửa khoảng 1,5 m² trở xuống thì tắt, lớn hơn thì chăn không dập được và người chơi được nhắc rời đi | `fire_blanket_used` |
-| `item.blanket` | Chăn | Nhặt, nhúng nước, trùm người | `blanket_covered` (nhúng dùng `item_wetted`) |
-| `item.clothing` | Quần áo, đồ vải (áo, quần, khăn trải bàn, rèm) | Nhặt, nhúng nước, che mũi | dùng chung `item_wetted`, `nose_covered_in_smoke` |
-| `door.standard` / `door.fire` (đang đóng) | Chèn khe cửa | Khi bị kẹt trong phòng: nhét bất kỳ đồ vải nào đang cầm (khăn, quần áo, chăn; ướt càng tốt) vào khe dưới cửa để giảm khói lọt vào | `door_gap_sealed` |
-| `power.breaker` | Tủ điện | Ngắt cầu dao | `power_cut_off` |
+| `item.blanket` | Chăn | Nhặt (đặt sẵn hoặc lấy từ giường), nhúng nước, Trùm chăn: chăn ướt vừa che mũi (`smokeIntakeMultiplierWhenCovered`) vừa chắn nóng (`heatMultiplierWhenWrapped`), chăn khô chỉ chắn nóng; mặc tới hết lượt hoặc tới khi khô (`dryAfterSeconds`) | `blanket_covered` (nhúng dùng `item_wetted`, che mũi dùng `nose_covered_in_smoke`) |
+| `furniture.bed` | Giường (từ IFC: `IfcFurniture` loại BED hoặc tên có bed/giường; worker tự nhận) | Lấy chăn rồi Lấy ga giường: mỗi lần sinh một đồ vải vào tay với tham số đặt trên giường trong kịch bản; không có event riêng | — |
+| `item.clothing` | Quần áo, đồ vải (áo, quần, khăn trải bàn, rèm) | Nhặt, nhúng nước, che mũi; ga giường, khăn trải bàn, rèm (theo nhãn) đủ lớn để Trùm lên người như chăn | dùng chung `item_wetted`, `nose_covered_in_smoke`; đồ vải lớn thêm `blanket_covered` |
+| `door.standard` / `door.fire` / `door.exit` (đang đóng) | Chèn khe cửa | Khi bị kẹt trong phòng: nhét bất kỳ đồ vải nào đang cầm (khăn, quần áo, chăn; ướt càng tốt) vào khe dưới cửa: một cuộn vải hiện ở chân cửa, khói lọt qua cửa chỉ còn một phần nhỏ; mở cửa ra là mất | `door_gap_sealed` |
+| `power.breaker` | Tủ điện | Ngắt cầu dao: cả tòa mất điện như sự kiện `event.power_outage` (đèn sự cố, biển EXIT vẫn sáng) | `power_cut_off` |
 | `gas.valve` | Van gas (bình gas, đường ống gas) | Khóa van gas; khóa kịp thì vụ nổ liên kết không xảy ra | `gas_valve_closed` |
 | `event.explosion` | Vụ nổ (sự kiện dòng thời gian, Hazard) | Không tương tác: nổ ở `atSeconds` tại vị trí đặt, bán kính `radius`, để lại đám cháy `fireIntensity`; nếu `gasValveId` trỏ tới van gas đã khóa thì không nổ. Người đứng trong bán kính bị thương theo khoảng cách | Không có event riêng; thương tích tính vào `HazardExposure` |
-| `door.fire_wedged` | Cửa chống cháy bị chèn mở | Gỡ vật chèn giữ cửa mở (nêm, ghế, thùng) cho cửa tự đóng; khác với chèn khe cửa ở trên | `wedge_removed` |
-| `door.exit_locked` | Cửa thoát bị khóa | Thử mở (bẫy, phải tìm lối khác) | `locked_exit_tried` |
+| `door.fire_wedged` | Cửa chống cháy bị chèn mở (gắn vào một `IfcDoor`) | Gỡ vật chèn giữ cửa mở (nêm dưới mép cánh) cho cửa tự đóng; sau đó cửa là `door.fire` bình thường | `wedge_removed` |
+| `door.exit_locked` | Cửa thoát bị khóa (gắn vào một `IfcDoor`, ổ khóa treo ở tay nắm) | Thử mở (bẫy, cửa rung và kêu, phải tìm lối khác); NPC cũng không đi qua | `locked_exit_tried` |
 | `phone.emergency` | Gọi 114 | Gọi 114 bằng điện thoại di động của người chơi (nút trên HUD, không đặt máy bàn trong tòa): đứng yên áp điện thoại lên tai khoảng 4 giây; `objectId` luôn là `player-phone` | `emergency_called` |
-| `signal.window` | Cửa sổ ra hiệu | Ra hiệu cứu hộ | `signaled_for_help` |
-| `ppe.escape_hood` | Mặt nạ thoát hiểm | Đeo | `escape_hood_worn` |
+| `signal.window` | Cửa sổ ra hiệu | Ra hiệu cứu hộ: đứng ở cửa sổ vẫy tay khoảng 3 giây (một chạm, vòng tự chạy) | `signaled_for_help` |
+| `ppe.escape_hood` | Mặt nạ thoát hiểm | Lấy rồi Đeo: lọc khói theo `smokeIntakeMultiplierWhenWorn` trong `filterSeconds` (không đặt thì cả lượt); HUD hiện viền mặt nạ | `escape_hood_worn` |
 | `firstaid.kit` | Hộp sơ cứu | Lấy và cầm theo; bắt buộc phải có mới sơ cứu được người bị thương | `first_aid_used` |
 | `npc.injured` | Người bị thương | Nằm trên sàn, không tự đi được. Cầm hộp sơ cứu tới gần rồi Sơ cứu (quỳ 4 giây, đi khỏi là hỏng); xong người đó đứng dậy và tự sơ tán chậm như một NPC bình tĩnh. Payload `{objectId: hộp sơ cứu, npcId}` | `injured_helped` |
 | `npc.wheelchair` + `refuge.area` | Người ngồi xe lăn, chỗ chờ cứu hộ | Đẩy xe lăn (hai tay trên tay đẩy, đi chậm hơn) tới chỗ chờ cứu hộ cạnh cầu thang (Goal `refuge.area`, ô sàn xanh có biểu tượng xe lăn, không kết thúc lượt); xe để lại đó chờ lính cứu hỏa. Payload `{objectId: chỗ chờ, npcId}` | `wheelchair_to_refuge` |
-| `assembly.point` | Điểm tập kết | Đi vào (Goal) | `assembly_point_reached` |
-| `window.openable` | Cửa sổ mở được | Mở thông gió (liên kết mô hình gió) | `window_opened` |
+| `assembly.point` | Điểm tập kết (Goal ngoài tòa nhà, biển xanh trên cột, ô `sizeMeters`) | Đi vào; không kết thúc lượt | `assembly_point_reached` |
+| `window.openable` | Cửa sổ mở được | Mở thông gió: các ô mô phỏng quanh cửa sổ (`ventRadiusMeters`, mặc định 1 m) thoát khói ra ngoài nhanh | `window_opened` |
 
 BE chấm theo `events[].metric` khai trong runtime catalog (BE #183, production 28/10/2026): mỗi metric đếm số lần event đó xảy ra. Runtime 2.1.0 đã đăng ký mà không khai `metric`, nên `hose_reel_used`/`gas_valve_closed` chỉ chấm được từ runtime 2.2.0 (khai đủ).
 
