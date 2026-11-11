@@ -54,7 +54,7 @@ Upload không tự index toàn bộ scenario/model. Tên, mục tiêu, hướng 
 ```text
 IFC revision -> IFC worker -> BIM fact store + quality flags
 Approved documents -> parser/OCR -> chunker -> Supabase PostgreSQL + pgvector
-`.NET API` identity/quota/scope -> Azure AI/RAG FastAPI -> hybrid retrieval + deterministic rules
+`.NET API` identity/quota/scope -> AI/RAG FastAPI (AWS EC2) -> hybrid retrieval + deterministic rules
   -> provider adapter -> selected LLM provider
   -> grounded answer/scenario draft + citations + audit -> human review or Trainee response
 ```
@@ -70,7 +70,7 @@ Approved documents -> parser/OCR -> chunker -> Supabase PostgreSQL + pgvector
 | `scenario_draft_service` | Tạo cấu hình kịch bản có schema; OrganizationUser phải chỉnh/xác nhận trong editor trước khi lưu hoặc publish. |
 | `ai_usage_service` | Trả usage kỹ thuật/request status cho backend; backend reserve/chốt quota có sẵn và cấp quota mua thêm qua payment riêng; không để AI/frontend tự tính tiền hoặc cho dùng overage trả sau. |
 
-AI/RAG service chạy Python/FastAPI riêng trên Azure; hướng dẫn AI hiện dùng Azure App Service Linux code deploy; Container Apps là phương án thay thế. IFC/Blender worker dùng Python/IfcOpenShell nhưng chạy job/process độc lập với chat. Dữ liệu quan hệ, chunk metadata và embedding nằm trong Supabase PostgreSQL; `pgvector` là vector store chuẩn, không dùng ChromaDB trong kiến trúc đích. Pipeline package 3D/Unity vẫn tách biệt và chỉ đọc revision facts đã kiểm soát quyền.
+AI/RAG service chạy Python/FastAPI riêng trên AWS EC2 Singapore sau Caddy. IFC/Blender worker dùng Python/IfcOpenShell nhưng chạy job/process độc lập với chat. Dữ liệu quan hệ, chunk metadata và embedding nằm trong Supabase PostgreSQL; `pgvector` là vector store chuẩn, không dùng ChromaDB trong kiến trúc đích. Pipeline package 3D/Unity vẫn tách biệt và chỉ đọc revision facts đã kiểm soát quyền.
 
 Production client gọi `.NET API`, không gọi trực tiếp AI service. Backend gửi request ID, idempotency key, canonical input hash, audience, scope, source/revision version và context tối thiểu; AI trả status, citations, model/version và usage kỹ thuật. Timeout được tra cứu theo request ID; retry cùng idempotency key không tạo response/usage thứ hai. AI service không có quyền sửa editor, publish, entitlement hoặc billing ledger.
 

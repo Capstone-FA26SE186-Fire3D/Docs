@@ -100,17 +100,17 @@ Backend là nguồn sự thật cho ownership scope, Building, revision, scenari
 | Authentication | BE email/password + Firebase Authentication cho Google Sign-In | BE hash password, refresh/reset token và cấp phiên Fire3D. Firebase chỉ xác minh Google ID token; Firebase không quyết định authorization nghiệp vụ. |
 | Push notification | Firebase Cloud Messaging (FCM) | Gửi notification đến installation đã đăng ký; token FCM phải được rotate/revoke và không dùng làm credential đăng nhập. |
 | Object storage | Amazon S3 (AWS S3) | Raw IFC, manifest, content package và avatar private qua object key server-side và signed URL TTL ngắn. |
-| AI/RAG service | Python + FastAPI trên Azure; hướng dẫn AI hiện dùng Azure App Service Linux code deploy; Container Apps là phương án thay thế | Service nội bộ cho retrieval, grounded generation, citations, safety gate và usage kỹ thuật; client không gọi trực tiếp. AI nghiệp vụ FE gọi .NET; direct FastAPI demo chỉ development. |
+| AI/RAG service | Python + FastAPI trên AWS EC2 Singapore (`ap-southeast-1`), FastAPI chạy dịch vụ systemd `fire3d-ai` sau Caddy (từ 09/11/2026; Azure App Service cũ đã ngừng 06/11/2026) | Service nội bộ cho retrieval, grounded generation, citations, safety gate và usage kỹ thuật; client không gọi trực tiếp. AI nghiệp vụ FE gọi .NET; direct FastAPI demo chỉ development. |
 | IFC/Blender worker | Python + IfcOpenShell (đợt 1 đã triển khai ở `Unity/Tools/GeometryWorker`, pull mode trên VM worker); Blender script khi cần LOD/thay asset | Nhận job qua lease bền vững, parse IFC, geometry, GlobalId/facts và QA; xuất `preview_glb` + `building_metadata` (xem [IFC ingestion mục 5.10](ifc_ingestion_visual_interaction.md#510-triển-khai-đợt-1--ifc--glb--unity-19102026)); worker không phục vụ chat đồng thời. |
-| Unity build worker | Unity Editor 6000.6.6f1 chạy batch trên Azure VM Windows (BE vận hành, BE#110) | Import GLB, gán material URP từ thư viện theo `libraryKey`, tạo collider, bake lightmap + light probe + reflection probe (bộ ánh sáng bình thường và mất điện), đóng AssetBundle theo tầng và manifest; không coi Python/GLB là AssetBundle nếu thiếu Unity Editor worker. |
+| Unity build worker | Unity Editor 6000.6.6f1 chạy batch trên Azure VM Windows (Azure for Students, Indonesia Central; BE#110) | Import GLB, gán material URP từ thư viện theo `libraryKey`, tạo collider, bake lightmap + light probe + reflection probe (bộ ánh sáng bình thường và mất điện), đóng AssetBundle theo tầng và manifest; không coi Python/GLB là AssetBundle nếu thiếu Unity Editor worker. |
 | LLM provider | OpenAI API hoặc Google Gemini API qua Google AI Studio | Chưa chọn nhà cung cấp cuối; dùng provider adapter và chỉ bật một provider production sau đánh giá chất lượng, chi phí và quota. |
 | Android shell | React Native/Expo + native Android bridge | Login, QR/list bài, download/verify/cache, local queue sau khi session bắt đầu và Unity handoff. |
 | Native Android bridge | Thành phần tích hợp Mobile–Unity | Nhận yêu cầu launch từ Mobile, truyền dữ liệu cho Unity và chuyển callback/event/result về Mobile. |
 | 3D runtime | Unity 6000.6.6f1 + URP + Entities (ECS); nạp AssetBundle trực tiếp, không dùng Addressables | Scene, navigation, hazard surrogate, A*, reusable NPC/interaction behaviors và event emission. Lửa/khói/nhiệt và NPC là Entities tạo lúc runtime từ metadata + scenario; player, camera, tương tác, UI và bridge dùng MonoBehaviour. Hậu kỳ URP: tonemapping, bloom, SSAO nhẹ. |
-| Compute/VPS | Azure cho AI/RAG; BE và worker còn lại chưa chốt | Azure là quyết định cho AI service. hướng dẫn AI hiện dùng Azure App Service Linux code deploy; Container Apps là phương án thay thế; SKU, region và chi phí vẫn cần spike. Unity build worker chạy trên Azure VM Windows do BE vận hành (quyết định 17/10/2026, BE#110). Không tự suy ra toàn bộ hệ thống chạy Azure. |
+| Compute/VPS | AWS EC2 Singapore cho BE và AI/RAG; Azure VM Windows cho IFC/Unity worker | BE (`t3.small`) chạy container `fire3d-api` + Redis sau Caddy; AI chạy máy EC2 riêng sau Caddy. Worker là Azure VM Windows Server 2022 Standard D4s v4, Indonesia Central (Azure for Students), tắt khi không dùng. Chuyển từ Azure App Service sang AWS ngày 09–10/11/2026 khi subscription Azure cũ hết hạn. |
 | Payments | PayOS production | Gói Building 6/12 tháng, entitlement/hạn mức người, nâng cấp gói và mua quota AI trả trước; webhook idempotent. |
 
-LLM vẫn là decision gate giữa OpenAI và Gemini; Azure cho AI service không có nghĩa đã chọn LLM. Code không được phụ thuộc trực tiếp vào SDK LLM hay hạ tầng provider ngoài adapter/configuration boundary.
+LLM vẫn là decision gate giữa OpenAI và Gemini; nơi chạy AI service không quyết định LLM. Code không được phụ thuộc trực tiếp vào SDK LLM hay hạ tầng provider ngoài adapter/configuration boundary.
 
 Source AI hiện có **RAG v2** tại `AI/rag-api/app/v2`, request store/recovery, `PgVectorIndex`/`MemoryIndex`, OpenAI/Gemini/fake adapters, safety gate và eval offline. ChromaDB cùng `/chat`, `/documents`, `/pccc/*` thuộc legacy (routes tắt mặc định), không đại diện toàn bộ implementation. FE gọi .NET cho AI nghiệp vụ; backend cấp scope/quota rồi mới gọi FastAPI. Có source không chứng minh dữ liệu đã migrate hoặc provider/pgvector/deployment production đã nghiệm thu.
 
@@ -532,27 +532,27 @@ Các ca sau là tiêu chí cho đầu việc code tiếp theo, chưa phải kế
 | Thành phần | Quyền sở hữu/trách nhiệm | Trạng thái |
 | :--- | :--- | :--- |
 | `.NET core` | Identity, tenant, Building, scenario, session, payment, entitlement, quota, usage ledger và dashboard | Đã chốt |
-| `OneShield` / `OnePortal` của iNET | Lớp edge/bảo vệ phía trước Nginx theo cấu hình của iNET; không quyết định identity, tenant, quota, billing hoặc authorization nghiệp vụ | Đã chọn nền tảng; capability/gói và cấu hình production chưa xác minh |
-| `Nginx` | Reverse proxy tại điểm vào HTTP(S), chuyển request API tới .NET | Đã chốt công nghệ; chưa triển khai |
-| `AI/RAG FastAPI` | Retrieval, generation, citations, safety và usage kỹ thuật; không tự tính tiền, sửa editor hoặc publish | Đã chốt chạy riêng trên Azure |
+| `OneShield` / `OnePortal` của iNET | DNS và lớp edge cho web `fet3d.io.vn` (proxy sang Vercel, SSL mode Full); `api.fet3d.io.vn` chỉ dùng DNS (A record tới EC2), không qua proxy, để Caddy tự cấp chứng chỉ; không quyết định identity, tenant, quota, billing hoặc authorization nghiệp vụ | Đang dùng cho web; WAF/rate limit cho API chưa bật |
+| `Caddy` | Reverse proxy + TLS (Let's Encrypt) trên từng máy EC2: BE chuyển tới container .NET `127.0.0.1:8080`, AI chuyển tới FastAPI | Đang chạy production (thay Nginx dự kiến trước đây) |
+| `AI/RAG FastAPI` | Retrieval, generation, citations, safety và usage kỹ thuật; không tự tính tiền, sửa editor hoặc publish | Chạy riêng trên AWS EC2 Singapore |
 | `IFC/Blender worker` | Job xử lý nặng, facts, geometry, artifact và QA; retry theo logical job/attempt/lease/hash | Thiết kế đề xuất |
-| `Unity build worker` | Unity Editor/toolchain, collider/NavMesh, bake ánh sáng, runtime package và manifest | Agent pull-mode đã có (Unity `Tools/PackageWorker`), VM Azure đã cài; chờ BE sửa lease 500 (BE#118) để chạy job thật |
+| `Unity build worker` | Unity Editor/toolchain, collider/NavMesh, bake ánh sáng, runtime package và manifest | Agent pull-mode chạy trên Azure VM (Unity `Tools/PackageWorker`, cùng VM với IFC geometry worker); checkout Unity trên VM đồng bộ bằng fetch + reset |
 | Notification/reconcile | Background task của BE, retry và audit | Chưa tách service riêng |
 
-Azure là provider đã chốt cho AI/RAG service. Hướng dẫn AI hiện dùng Azure App Service Linux code deploy cho FastAPI; Container Apps là phương án thay thế; Container Apps Jobs là ứng viên cho tác vụ hữu hạn như IFC/Blender. SKU, region và giá của các service khác còn mở. Máy Unity đã chốt 17/10/2026: Azure VM Windows Server 2022, Standard D4s v4, Malaysia West (Azure for Students), license Unity của tài khoản team kích hoạt qua Unity Hub; VM tắt (deallocate) khi không dùng. Không thêm Kubernetes/service mesh/database riêng cho từng module trong phạm vi tài liệu này.
+Từ 09–10/11/2026 BE và AI/RAG chạy trên AWS EC2 Singapore (`ap-southeast-1`), mỗi service một máy, Caddy giữ TLS; Supabase PostgreSQL và S3 cùng region. Máy worker: Azure VM Windows Server 2022, Standard D4s v4, Indonesia Central (tài khoản Azure for Students mới, tạo 10/11/2026 sau khi subscription cũ ở Malaysia West hết hạn), license Unity của tài khoản team kích hoạt qua Unity Hub; VM tắt (deallocate) khi không dùng. Không thêm Kubernetes/service mesh/database riêng cho từng module trong phạm vi tài liệu này.
 
 Luồng production mục tiêu là:
 
 ```text
-Web/Mobile -> OneShield / OnePortal (iNET) -> Nginx -> .NET API -> AI/RAG FastAPI on Azure
-                             -> transactional outbox -> IFC/Blender or Unity worker
+Web (Vercel, qua OneShield) / Mobile -> api.fet3d.io.vn -> Caddy -> .NET API (EC2) -> Caddy -> AI/RAG FastAPI (EC2)
+                                       -> transactional outbox -> IFC/Blender or Unity worker (Azure VM, pull)
 ```
 
 Prototype web/mobile còn gọi FastAPI trực tiếp; đây là hiện trạng cần chuyển đổi, không phải contract production. Client production chỉ gọi `.NET API`; backend xác minh Firebase, tenant, quota và scope trước khi gọi AI.
 
 ### 14.2. Contract liên service
 
-OneShield thuộc hệ thống OnePortal của iNET là lớp edge/bảo vệ đã được chọn cho ingress phía trước Nginx. Nginx là reverse proxy nội bộ trước API. Backend tiếp tục kiểm tra identity, tenant, quota và scope trước khi gọi AI; không mở tuyến proxy cho client bỏ qua backend để gọi FastAPI. OneShield không được coi là nguồn xác thực hoặc authorization nghiệp vụ. Capability thực tế, gói/SKU, DNS ownership, TLS termination, WAF/rate limits, health check, logging, SLA, region, chi phí và failover phải được xác minh với iNET trước production. Vị trí chạy Nginx, domain và cấu hình upstream cũng là phần triển khai còn lại. Quyết định này không thay đổi Azure cho AI hoặc biến Container Apps thành lựa chọn đã chốt. Cấu hình forwarded headers chỉ tin proxy được chỉ định; timeout, giới hạn request và retry cần phù hợp contract idempotency, không tự phát lại thao tác tính phí khi chưa biết kết quả.
+OneShield thuộc hệ thống OnePortal của iNET là lớp edge/bảo vệ cho web; API đi thẳng tới Caddy trên EC2. Caddy là reverse proxy trước API. Backend tiếp tục kiểm tra identity, tenant, quota và scope trước khi gọi AI; không mở tuyến proxy cho client bỏ qua backend để gọi FastAPI. OneShield không được coi là nguồn xác thực hoặc authorization nghiệp vụ. Capability thực tế, gói/SKU, DNS ownership, TLS termination, WAF/rate limits, health check, logging, SLA, region, chi phí và failover phải được xác minh với iNET trước production. Cấu hình forwarded headers chỉ tin proxy được chỉ định; timeout, giới hạn request và retry cần phù hợp contract idempotency, không tự phát lại thao tác tính phí khi chưa biết kết quả.
 
 - Request `.NET → AI` có `request_id`, idempotency key, audience, organization/building scope được phép, source/revision version, canonical input hash và timeout policy. Không gửi credential dài hạn hoặc raw IFC thừa.
 - Response `AI → .NET` có `response_type`, status, citations/source version, BIM anchors khi sử dụng facts, model/provider version và usage kỹ thuật. AI không quyết định giá, cấp quota hay quyền dịch vụ.
@@ -568,7 +568,7 @@ Quota phải được reserve bằng transaction PostgreSQL ngắn theo cùng th
 
 Transactional outbox nối thay đổi đã commit với Redis Streams thông qua dispatcher. Dispatcher có lease/attempt/retry riêng; consumer/worker claim lease của processing job qua PostgreSQL, rồi chỉ ACK message sau khi kết quả đã được ghi bền vững. Redis Streams là phương án giao event/job có thể đọc lại; Redis Pub/Sub chỉ dành cho thông báo tiến độ không bắt buộc. Payment Applied nhưng entitlement chưa cấp và AI timeout đều đi qua reconcile, không tự suy đoán thành công/thất bại.
 
-ACID áp dụng trong từng transaction PostgreSQL, không tạo một transaction nguyên tử xuyên Azure, S3, PayOS và LLM. PostgreSQL dùng `Read Committed` mặc định; quota/provisioning dùng row lock hoặc conditional update, chỉ dùng `Serializable` cho invariant thật sự cần và phải có retry giới hạn. Khi database/AI không khả dụng, không cấp quyền mới dựa trên cache; gameplay đã start vẫn tiếp tục và sync sau.
+ACID áp dụng trong từng transaction PostgreSQL, không tạo một transaction nguyên tử xuyên AI service, S3, PayOS và LLM. PostgreSQL dùng `Read Committed` mặc định; quota/provisioning dùng row lock hoặc conditional update, chỉ dùng `Serializable` cho invariant thật sự cần và phải có retry giới hạn. Khi database/AI không khả dụng, không cấp quyền mới dựa trên cache; gameplay đã start vẫn tiếp tục và sync sau.
 
 ### 14.3.1. Redis event/cache contract
 
@@ -592,7 +592,7 @@ Ma trận quyền tối thiểu cho outbox/requeue là: `fet3d_backend_executor`
 
 ### 14.4. Quyết định còn mở về vận hành
 
-Region Azure/Supabase/S3/Redis, OneShield/OnePortal plan/SKU, DNS ownership, TLS termination, WAF/rate limits, logging, SLA, failover, connection pool, timeout, RPO/RTO, backup/PITR, ngân sách AI, benchmark độ trễ liên cloud, catalog capability Unity, LLM/embedding model, Redis version/managed provider, stream retention, cache TTL/eviction, outbox recovery window và môi trường Unity build phải được chốt trước production. Tài liệu này không tuyên bố các ngưỡng đó đã benchmark hoặc hạ tầng đã tạo.
+OneShield/OnePortal plan/SKU, DNS ownership, TLS termination, WAF/rate limits, logging, SLA, failover, connection pool, timeout, RPO/RTO, backup/PITR, ngân sách AI, benchmark độ trễ liên cloud, catalog capability Unity, LLM/embedding model, Redis version/managed provider, stream retention, cache TTL/eviction, outbox recovery window và môi trường Unity build phải được chốt trước production. Tài liệu này không tuyên bố các ngưỡng đó đã benchmark hoặc hạ tầng đã tạo.
 
 ### 14.5. Các invariant đã sửa trong thiết kế đích
 

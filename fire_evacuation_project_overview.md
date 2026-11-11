@@ -77,16 +77,16 @@ IFC private storage on AWS S3
 
 - Web Next.js quản lý Building/IFC/scenario/editor, trạng thái xử lý, publish, QR, billing, AI usage và analytics; Three.js phục vụ landing và editor/preview.
 - Backend C#/ASP.NET Core trên .NET xác minh email/password hoặc Firebase Google ID token, ánh xạ role/tenant, quản lý hồ sơ, lifecycle revision/release/training, session, audit và URL S3 ngắn hạn. Mailgun gửi OTP đăng ký và thư reset mật khẩu; FCM chỉ gửi push.
-- OneShield thuộc hệ thống OnePortal của iNET là lớp edge/bảo vệ phía trước Nginx; Nginx là reverse proxy đã chốt trước API và client gọi AI qua backend. OneShield không thay thế authorization của .NET/PostgreSQL. Chi tiết triển khai theo mục 14.1–14.2 của [technology](fire-evacuation-training-technology.md); cấu hình edge/reverse proxy là kiến trúc đích chưa triển khai.
+- OneShield thuộc hệ thống OnePortal của iNET là DNS và lớp edge cho web; API đi qua Caddy (reverse proxy + TLS) trên EC2 và client gọi AI qua backend. OneShield không thay thế authorization của .NET/PostgreSQL. Chi tiết theo mục 14.1–14.2 của [technology](fire-evacuation-training-technology.md).
 - BE quản lý đăng nhập email/password; Firebase Authentication chỉ xác minh Google Sign-In; FCM cung cấp push notification. Authorization nghiệp vụ vẫn thuộc backend và PostgreSQL, không thuộc client hoặc custom claim đơn lẻ.
 - Supabase cung cấp managed PostgreSQL; `pgvector` lưu embedding/index của RAG. Supabase Auth không nằm trong stack đã chọn.
-- AI/RAG là service Python/FastAPI riêng trên Azure; hướng dẫn AI hiện dùng Azure App Service Linux code deploy; Container Apps là phương án thay thế. IFC/Blender và Unity build là worker độc lập nhận job bền vững. Worker tạo facts/artifact/QA nhưng không ghi billing, entitlement hoặc publish.
-- Redis là kiến trúc đích cho cache-aside và Redis Streams sau transactional outbox. Dispatcher/consumer có retry và dedup qua PostgreSQL; Redis không là nguồn quyền, quota, billing, session hay kết quả học tập. FE/Mobile chỉ gọi API qua OneShield/OnePortal → Nginx và không kết nối Redis trực tiếp.
+- AI/RAG là service Python/FastAPI riêng trên AWS EC2 Singapore; BE cũng chạy trên AWS EC2. IFC/Blender và Unity build là worker độc lập nhận job bền vững. Worker tạo facts/artifact/QA nhưng không ghi billing, entitlement hoặc publish.
+- Redis là kiến trúc đích cho cache-aside và Redis Streams sau transactional outbox. Dispatcher/consumer có retry và dedup qua PostgreSQL; Redis không là nguồn quyền, quota, billing, session hay kết quả học tập. FE/Mobile chỉ gọi API qua Caddy → .NET và không kết nối Redis trực tiếp.
 - AI service thực hiện ingestion/retrieval RAG qua `pgvector`; backend .NET kiểm tra identity, tenant, quyền bài và quota trả trước và ghi usage kỹ thuật thành ledger. Client production không gọi AI service trực tiếp.
 - AWS S3 lưu raw IFC riêng tư, manifest và content package bất biến.
 - React Native/Expo xử lý local email/password hoặc Google Sign-In, QR, danh sách bài, download/cache/verify, kiểm tra dịch vụ, FCM và handoff qua native Android bridge; Unity thực hiện scene, hazard surrogate, routing, hành vi tương tác và kết quả training.
 
-LLM production sẽ chọn **một** trong OpenAI API hoặc Google Gemini API (cấu hình qua Google AI Studio) sau đánh giá. Azure đã được chọn cho AI/RAG service; compute cho BE và IFC worker, cùng SKU/region/cost, vẫn là quyết định mở; Unity build worker chạy trên Azure VM do BE vận hành (BE#110).
+LLM production sẽ chọn **một** trong OpenAI API hoặc Google Gemini API (cấu hình qua Google AI Studio) sau đánh giá. BE và AI/RAG chạy trên AWS EC2 Singapore từ 09–10/11/2026; IFC geometry worker và Unity build worker chạy trên Azure VM Windows (BE#110).
 
 ## Mô hình thương mại và AI
 
@@ -124,13 +124,13 @@ Dashboard dùng các định nghĩa cố định: `Trainee unique` là số Trai
 | Đơn vị/hiệu lực/rollover quota AI, hoàn tiền/hủy; phí và thời hạn nâng cấp giữa kỳ | Mua thêm, provisioning và dữ liệu lịch sử | Billing lifecycle |
 | Catalog runtime ưu tiên; bộ rubric mẫu khuyến nghị theo loại bài (ngưỡng/trọng số gợi ý). Cơ chế chấm đã chốt, xem mục Đánh giá đạt/chưa đạt | Thư viện Organization, editor | Runtime authoring |
 | Bộ IFC, Android mục tiêu và benchmark | QA support matrix, package budget | IFC/Mobile release |
-| Unity project/build worker, LLM/embedding, Azure SKU/region và compute cho BE/worker | Toolchain, vector dimension, chi phí và vận hành | Production deployment |
+| Unity project/build worker, LLM/embedding, chi phí AWS/Azure cho BE, AI và worker | Toolchain, vector dimension, chi phí và vận hành | Production deployment |
 
 Đây là bảng nguồn chính cho các mục chưa chốt; không trình bày các lựa chọn này như đã triển khai.
 
 ## Ranh giới service và nhất quán dữ liệu
 
-`.NET core` là API nghiệp vụ duy nhất cho client và sở hữu identity, tenant, payment, Building entitlement, quota/usage, scenario, session và dashboard. AI/RAG FastAPI chạy riêng trên Azure; hướng dẫn AI hiện dùng Azure App Service Linux code deploy; Container Apps là phương án thay thế. IFC/Blender và Unity Editor là worker riêng nhận job. Notification và reconcile vẫn là background task của BE cho tới khi có nhu cầu scale độc lập được đo bằng benchmark.
+`.NET core` là API nghiệp vụ duy nhất cho client và sở hữu identity, tenant, payment, Building entitlement, quota/usage, scenario, session và dashboard. AI/RAG FastAPI chạy riêng trên AWS EC2. IFC/Blender và Unity Editor là worker riêng nhận job. Notification và reconcile vẫn là background task của BE cho tới khi có nhu cầu scale độc lập được đo bằng benchmark.
 
 Database dùng một Supabase PostgreSQL + `pgvector`; S3 giữ IFC, manifest và package lớn. PostgreSQL giữ Learn post/version, situation, bookmark và nguồn; `knowledge_sources/chunks` được dùng lại cho citation/RAG. `ai_requests` là nguồn trạng thái/kết quả kỹ thuật; reservation allocations và prepaid grants là nguồn quota; `integration_outbox_events` và `integration_event_consumptions` là nguồn giao/replay/dedup event. Publish/hide/show Learn phát `PlatformCacheInvalidation` trong cùng transaction với audit/state, sau đó dispatcher gửi; Redis không trở thành nguồn công khai hay nguồn RAG. Tenant enqueue chỉ nhận `ProcessingJobRequested` schema `1` qua entry point backend và suy tenant từ aggregate; system event chỉ nhận allowlist `SystemNotification`/`PlatformCacheInvalidation` schema `1` qua entry point/executor riêng; `ProcessingJobRequeue` chỉ do requeue gate tạo. Outbox bắt đầu `Pending`, khóa identity/payload/hash sau enqueue và dùng dispatcher lease riêng; worker claim attempt/lease riêng qua backend, không nhận lease worker từ Redis message. Consumer kiểm tra envelope/receipt trước tác động, ghi receipt cùng transaction với tác động rồi mới ACK. ACID chỉ áp dụng trong transaction PostgreSQL: quota reserve, payment provenance, provisioning, outbox và idempotency phải được cập nhật nguyên tử trong transaction ngắn. Không giữ transaction khi chờ LLM, PayOS, S3, Redis hoặc worker. Redis mất thì outbox/cache fallback xử lý theo contract; không tuyên bố transaction ACID xuyên Azure, S3, Redis và PayOS.
 

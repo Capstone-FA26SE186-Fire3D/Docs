@@ -16,7 +16,9 @@ Source AI hiện có **RAG v2** tại `AI/rag-api/app/v2`, request store/recover
 
 RAG là retrieval-augmented generation: tìm evidence được cấp quyền trước rồi mới tạo câu trả lời có nguồn. “v2” là tên phiên bản implementation trong FET3D, không phải chuẩn chung hay tên model. Xem [AI README](../AI/README.md) và [hướng dẫn AI](../AI/docs/huong-dan-ai.md). Backend sở hữu auth, tenant/scope, quota và accounting; FastAPI không tự cấp quyền, lưu scenario hoặc publish.
 
-Hướng dẫn triển khai AI hiện dùng [Azure App Service Linux, code deploy](../AI/docs/deploy-azure.md). Container Apps là phương án thay thế trước đó; tài liệu không xác nhận hạ tầng đã được tạo. Unity build worker dùng Azure VM Windows do BE vận hành; không suy compute BE/IFC từ lựa chọn Azure của AI.
+Hạ tầng đang chạy (11/11/2026): BE (`api.fet3d.io.vn`) và AI/RAG trên AWS EC2 Singapore, mỗi service một máy sau Caddy; IFC geometry worker và Unity build worker trên Azure VM Windows (Indonesia Central), pull job từ BE. Azure App Service và subscription Azure cũ đã ngừng 06/11/2026; hướng dẫn [deploy-azure.md](../AI/docs/deploy-azure.md) của AI không còn dùng cho production.
+
+CI/CD BE (workflow *Build and Deploy to AWS*, khôi phục 11/11/2026, BE#203): test processing (Postgres + Redis) và test deployment → kiểm tra migration bằng role chỉ đọc `fet3d_deploy_preflight` (chỉ `SELECT` `__EFMigrationsHistory`) → build image lên GHCR → SSH bằng khóa riêng của CI → đổi container và kiểm tra health. Phiên bản gói NuGet ghim cố định (BE#202). Sau sự cố token GitHub 10–11/11/2026, mọi secret CI của BE và Mobile đã thay mới; không dùng phiên bản gói trôi (`*`), không đặt credential quyền cao vào GitHub Secrets.
 
 ## Web và pipeline
 
@@ -24,7 +26,7 @@ FE đã có Learn CMS/public reader/search, bookmark, Hỏi đáp AI Trainee và
 
 Source FE đã có Organization/Admin console, Building/IFC, editor `fet3d.editor/1`, review/readiness/release, billing/quota, Library, analytics và playtest QR/deep link handoff. Building mutations dùng idempotency/If-Match; editor toolbar dẫn tới tab playtest. IFC có xác nhận thiết bị/chọn cửa thoát và QA codes. Three.js phục vụ landing/editor; Unity Android chạy gameplay qua Mobile. ThreeUI là reference cũ, không có trong dependencies FE hiện hành.
 
-BE có source Redis cache/Streams/recovery; không gọi toàn bộ Redis pipeline là chưa viết, cũng không suy nguồn PostgreSQL, migration hoặc deployment production đã đạt. Xem [context BE](../BE/.codex/context.md). OneShield/OnePortal → Nginx là ingress đích; cần kiểm chứng cấu hình/triển khai riêng.
+BE có source Redis cache/Streams/recovery; không gọi toàn bộ Redis pipeline là chưa viết, cũng không suy nguồn PostgreSQL, migration hoặc deployment production đã đạt. Xem [context BE](../BE/.codex/context.md). Ingress API hiện tại: DNS iNET → Caddy trên EC2 → .NET; OneShield/OnePortal chỉ đứng trước web.
 
 ## Cách dùng bằng chứng
 
