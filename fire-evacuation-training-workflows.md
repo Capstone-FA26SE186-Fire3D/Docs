@@ -331,7 +331,7 @@ IFC/Blender và Unity build không chạy trong request chat. Backend ghi proces
 
 ### 13.4. Redis Streams, outbox và cache
 
-Public API ingress theo kiến trúc đích là `Web/Mobile → OneShield/OnePortal (iNET) → Nginx → .NET API`. OneShield chỉ là lớp edge/bảo vệ; authorization, tenant scope và quyết định nghiệp vụ vẫn do .NET/PostgreSQL kiểm tra. Domain, TLS, WAF/rate limit, health check và cấu hình failover còn phải xác minh trước production.
+Public API ingress hiện tại là `Web/Mobile → api.fet3d.io.vn (DNS iNET) → Caddy (TLS, AWS EC2) → .NET API`; web `fet3d.io.vn` đi qua OneShield/OnePortal tới Vercel. OneShield chỉ là lớp edge/bảo vệ; authorization, tenant scope và quyết định nghiệp vụ vẫn do .NET/PostgreSQL kiểm tra. Domain, TLS, WAF/rate limit, health check và cấu hình failover còn phải xác minh trước production.
 
 1. Backend ghi thay đổi nghiệp vụ và integration_outbox_events trong cùng transaction PostgreSQL. Payload có event key, schema, scope, aggregate ID và canonical hash; commit thành công trước khi dispatcher được phép giao việc.
 2. `enqueue_integration_outbox_event` chỉ xử lý allowlist tenant `ProcessingJobRequested` + schema `1`; payload phải có `job_id` trùng aggregate và không mang worker lease/token. `enqueue_system_outbox_event` xử lý allowlist `SystemNotification`/`PlatformCacheInvalidation` + schema `1` bằng executor riêng. Event lạ, sai schema, sai payload hoặc sai scope bị từ chối. `ProcessingJobRequeue` chỉ đi qua `requeue_processing_job`; helper nội bộ không cấp cho runtime. Scope được suy từ aggregate, không nhận tin cậy từ client. Cùng event key cùng envelope trả bản ghi cũ, khác payload/scope/aggregate/schema trả conflict.

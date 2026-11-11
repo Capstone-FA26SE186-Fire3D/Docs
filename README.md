@@ -43,7 +43,7 @@ FET3D hỗ trợ một Organization quản lý nhiều Building. Mỗi Building 
 | 3D training runtime | Unity | Đã chốt |
 | Edge/security protection | OneShield thuộc hệ thống OnePortal của iNET | Đã chọn nền tảng; cấu hình gói/SKU, DNS, TLS, WAF, rate limit, log và SLA còn cần xác minh; chưa triển khai |
 | Backend | C# và ASP.NET Core trên .NET | Đã chốt |
-| Reverse proxy | Nginx | Đã chốt; chi tiết tại mục 14.1 của technology, chưa triển khai |
+| Reverse proxy | Caddy (TLS Let's Encrypt) trên từng máy EC2 của BE và AI | Đang chạy production từ 10/11/2026; thay Nginx dự kiến trước đây; chi tiết mục 14.1 của technology |
 | AI, RAG và IFC processing | Python + FastAPI; IfcOpenShell cho IFC khi phù hợp | Đã chốt |
 | Database | Supabase Database, dùng PostgreSQL | Đã chốt |
 | Vector database | `pgvector` trong PostgreSQL/Supabase | Đã chốt; thay cho hướng ChromaDB trong prototype cũ |
@@ -51,10 +51,10 @@ FET3D hỗ trợ một Organization quản lý nhiều Building. Mỗi Building 
 | Authentication và push | BE email/password; Firebase Authentication cho Google Sign-In; Firebase Cloud Messaging (FCM) | Đã chốt; Mailgun dùng cho OTP đăng ký và reset password |
 | LLM | OpenAI API hoặc Google Gemini API (khóa/cấu hình qua Google AI Studio) | Chưa chọn nhà cung cấp cuối; chỉ triển khai một adapter production sau đánh giá |
 | Object storage | Amazon S3 (AWS S3) | Đã chốt |
-| AI compute | Azure (AI/RAG); hướng dẫn AI hiện dùng Azure App Service Linux code deploy; Container Apps là phương án thay thế | Đã chốt provider Azure cho AI/RAG; SKU, region và chi phí còn cần spike |
-| BE/worker compute | BE và IFC/Blender worker chưa chọn; Unity build worker chạy trên Azure VM do BE vận hành | Không suy ra BE hoặc IFC/Blender worker chạy Azure chỉ vì AI đã chọn Azure |
+| AI compute | AWS EC2 Singapore (`ap-southeast-1`), FastAPI chạy dịch vụ systemd `fire3d-ai` sau Caddy (từ 09/11/2026; Azure App Service cũ đã ngừng 06/11/2026) | Đang chạy production; chi phí theo dõi trên AWS |
+| BE/worker compute | BE: AWS EC2 `t3.small` Singapore, container Docker image từ GHCR, Caddy giữ TLS cho `api.fet3d.io.vn`, Redis chạy cùng máy. IFC geometry worker và Unity build worker: Azure VM Windows (Azure for Students, Indonesia Central), pull job từ BE | Chuyển 09–10/11/2026 khi subscription Azure cũ hết hạn; VM worker tắt (deallocate) khi không dùng |
 
-OneShield thuộc hệ thống OnePortal của iNET là lớp edge/bảo vệ phía trước Nginx theo kiến trúc đích; capability, gói/SKU, DNS, TLS termination, WAF/rate limit, logging, SLA, region và chi phí phải xác minh trước production. OneShield không cấp quyền nghiệp vụ và không thay thế kiểm tra identity, tenant hoặc authorization của .NET/PostgreSQL.
+OneShield thuộc hệ thống OnePortal của iNET là DNS và lớp edge/bảo vệ cho web `fet3d.io.vn` (proxy sang Vercel); `api.fet3d.io.vn` chỉ dùng DNS tới Caddy trên EC2. Capability, gói/SKU, DNS, TLS termination, WAF/rate limit, logging, SLA, region và chi phí phải xác minh trước production. OneShield không cấp quyền nghiệp vụ và không thay thế kiểm tra identity, tenant hoặc authorization của .NET/PostgreSQL.
 
 Supabase chỉ cung cấp PostgreSQL/`pgvector` trong kiến trúc này, không thay Firebase Authentication. BE quản lý email/password và FET3D session; Firebase chỉ xác minh Google Sign-In, FCM chỉ gửi push, Mailgun gửi OTP đăng ký và reset password. Redis chỉ phục vụ cache-aside và vận chuyển event/job qua backend; FE/Mobile không kết nối Redis và cache không cấp quyền. PostgreSQL outbox là nguồn event/replay, dispatcher có lease riêng, còn worker claim attempt/lease sau khi nhận message; consumer ACK chỉ sau transaction ghi tác động và receipt thành công. Backend vẫn là nơi ánh xạ Firebase UID sang ba vai trò FET3D, kiểm tra `organizationId` và thực thi authorization. Azure đã được chọn cho AI/RAG service; LLM, BE/worker compute và các thông số production khác vẫn qua decision gate.
 
@@ -113,7 +113,7 @@ Bảng nguồn chính về quyết định còn mở, tác động và mốc ph�
 - Checkpoint sau mốc đáng kể và trước bàn giao; ghi phần đã xong/còn dở, branch/commit, kiểm tra thực tế và bước tiếp theo. Không hứa ghi kịp trước khi hết quota hoặc phiên ngắt đột ngột; không lưu secrets/transcript.
 - Giữ nguyên thư mục `Mẫu report/` đang untracked, không stage, xóa hoặc tự chỉnh file mẫu. Kiểm tra danh sách stage cụ thể, không dùng `git add -A` mù quáng.
 - Task chỉ sửa tài liệu: kiểm tra liên kết, tính nhất quán và `git diff --check`, không chạy toàn bộ build/test ứng dụng. Không có test chạy không đồng nghĩa đã kiểm thử nghiệp vụ.
-- Stack đã chốt cho nhóm nằm ở bảng Tổng quan công nghệ: web Next.js, Mobile React Native/Expo với native Android bridge gọi Unity, backend C#/.NET, AI/IFC Python/FastAPI, AI/RAG trên Azure, Supabase PostgreSQL + `pgvector`, Redis cache/Streams ở kiến trúc đích, Firebase Auth/FCM và AWS S3. Không triển khai Flutter. Redis có source cache/Streams/recovery ở BE, nghiệm thu deployment riêng; LLM và compute cho BE/worker vẫn phải qua bước chọn/benchmark trước khi gọi là production stack.
+- Stack đã chốt cho nhóm nằm ở bảng Tổng quan công nghệ: web Next.js, Mobile React Native/Expo với native Android bridge gọi Unity, backend C#/.NET, AI/IFC Python/FastAPI, BE và AI/RAG trên AWS EC2, worker Unity/IFC trên Azure VM, Supabase PostgreSQL + `pgvector`, Redis cache/Streams ở kiến trúc đích, Firebase Auth/FCM và AWS S3. Không triển khai Flutter. Redis có source cache/Streams/recovery ở BE, nghiệm thu deployment riêng; LLM vẫn phải qua bước chọn/benchmark trước khi gọi là production stack.
 
 ### Giới hạn sản phẩm
 
