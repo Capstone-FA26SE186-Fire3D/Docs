@@ -415,6 +415,35 @@ Capability `player.movement` (objectKind `Spawn`, không phải vật để đ�
 
 Gợi ý rubric: `fell_from_height` `eq 0` (bắt buộc) cho bài thoát nạn nhiều tầng; `jumped` `lte` một ngưỡng nhỏ nếu muốn phạt chạy nhảy thay vì đi bình tĩnh; `obstacle_climbed` dùng cho bài có vật cản chắn lối. Nhảy hay leo không thay cầu thang: tòa nhà vẫn chỉ thoát qua lối ra.
 
+#### Phá lối thoát, búa thoát hiểm, cửa sổ và bản đồ (runtime 2.4.0, 12/11/2026)
+
+Runtime 2.4.0 thêm cách xử lý khi lối thoát bị khóa hoặc bị kẹt sau kính, và sửa các điểm người chơi thử trên điện thoại thấy chưa hợp lý.
+
+| catalogKey | Tên hiển thị | Thao tác | Event cho rubric |
+| :--- | :--- | :--- | :--- |
+| `tool.emergency_hammer` | Búa thoát hiểm (treo trên giá gắn tường, thường cạnh cửa thoát) | Lấy búa: giá ở lại trên tường, búa nằm trong tay phải. Đang cầm búa (hoặc bình chữa cháy xách tay) thì có thêm "Đập khóa" ở cửa thoát bị khóa và "Đập kính" ở tấm kính trước mặt | Không có event riêng |
+| `door.exit_locked` 1.1.0 | Cửa thoát bị khóa | Ngoài "Thử mở" có thêm "Đạp cửa" (3 lần mới bung) và "Đập khóa" khi cầm búa hoặc bình (2 lần). Khóa rơi, cửa mở và lối thoát đó được tính lại: người chơi đi qua là thoát, mũi tên dẫn đường và NPC dùng được. Payload `{objectId, by: "kick" hoặc "strike"}` | `door_forced` |
+| `door.standard` / `door.fire` / `door.exit` 1.2.0 | Cửa đang bị chặn (cửa hố kỹ thuật, cửa kịch bản chặn) | "Đạp cửa": cửa rung và kêu nhưng không bung, người chơi được nhắc tìm lối khác; không phát event | `door_forced` chỉ có ở cửa thoát bị khóa |
+| `glass.pane` | Tấm kính của tòa nhà (không đặt trong kịch bản) | Cầm búa hoặc bình, đứng trước tấm kính: "Đập kính". Kính vỡ, khói quanh đó (bán kính 1,2 m) thoát ra ngoài; ở tầng cao người chơi được nhắc không trèo ra. Payload `{height}` | `glass_broken` |
+| `furniture.bed` 1.1.0 | Giường | Giường đặt trong kịch bản (không có sẵn trong IFC) hiện đúng là một chiếc giường đơn: khung gỗ, nệm, ga và chăn; lấy chăn thì chăn biến mất khỏi giường, lấy ga thì còn nệm | — |
+| `signal.window` / `window.openable` có `anchorId` là một `IfcWindow` | Cửa sổ | Cửa sổ của game thay đúng ô cửa sổ đó của tòa nhà (cùng vị trí, cùng kích thước), kính IFC được cất đi; "Mở cửa sổ" làm cánh kính xoay vào trong phòng. Hướng xoay của vật trong kịch bản cho biết phía nào là trong phòng | như cũ |
+
+Thay đổi trong ứng dụng, không thêm khóa catalog:
+
+- **Bản đồ**: góc phải trên có bản đồ nhỏ (vùng 36 m quanh người chơi, hướng bắc ở trên, mũi tên chỉ hướng người chơi đang quay); chạm vào mở bản đồ toàn màn hình theo từng tầng: kéo, chụm hai ngón để phóng to/thu nhỏ, nút +/−, dải chọn tầng, chú giải. Bản đồ vẽ tường, cửa, cầu thang, lối thoát, tên khu vực, vị trí và hướng người chơi, thiết bị (nút báo cháy, bình, tủ vòi, chăn, mặt nạ, hộp sơ cứu, tủ điện, van gas, búa thoát hiểm), giường, người bị thương và người ngồi xe lăn, cửa thoát bị khóa, lối ra và đường thoát đang gợi ý. Chế độ Đánh giá không hiện vùng cháy/khói trên bản đồ.
+- **Hiệu ứng khi phá lối**: kính bể thành mảnh văng ra hai phía rồi rơi xuống sàn, kèm một làn bụi kính; cửa bị đạp hoặc bị đập thì cánh rung theo cú đánh, tung bụi và dăm gỗ, đập vào ổ khóa thì tóe tia lửa; khóa vỡ rơi xuống sàn thay vì biến mất. Khi vung búa hoặc đạp cửa, tay còn lại nắm lại.
+- **Khóa van gas**: nhân vật tới sát bình, quỳ xuống khi van nằm thấp (bình gas đặt sàn), tay phải nắm vô lăng van và vặn ba lần theo chiều kim đồng hồ; van chỉ tính là đã khóa (và vụ nổ liên kết được ngăn) khi vặn xong, khoảng 2,5 giây.
+- **Vòi chữa cháy**: tia nước dày và mạnh hơn, ra đúng miệng lăng và đi theo hướng lăng đang chĩa, kể cả khi ngước lên hay cúi xuống.
+- **Biểu tượng nút**: Đạp cửa, Đập khóa và Đập kính có biểu tượng riêng (trước đây hiện ô vuông trống).
+- **Trùm chăn và chèn khe cửa**: chăn dài tới bắp chân, động tác trùm là quàng chăn qua đầu rồi khép trước ngực; chèn khe cửa là quỳ sát chân cửa, hai tay ấn cuộn vải dọc hết khe.
+- **Mặt đất ngoài trời** nằm ở tầng có nhiều lối thoát nhất (tòa xây trên dốc có tầng thấp hơn cửa ra thì tầng đó là tầng hầm), nên bước ra khỏi cửa thoát là đứng trên sân, không phải mép vực.
+- **Lưới đi lại**: ô cầu thang chỉ nằm trên vế thang thật, tường dày không còn ô đi được ở giữa, hai cầu thang khác nhau chồng lên nhau không bị nối thành một. Tòa IFC không có cầu thang liên tục sẽ báo "Chưa thấy lối thoát an toàn" thay vì vẽ một đường đi không có thật.
+- **Chế độ Hướng dẫn** chỉ thêm tới các việc trong rubric: rút chêm cửa chống cháy (`wedge_removed`), phá khóa cửa thoát (`door_forced`), sơ cứu (`injured_helped`), đưa xe lăn vào chỗ chờ (`wheelchair_to_refuge`).
+
+Gợi ý rubric: `door_forced` `gte 1` (không bắt buộc) cho bài có cửa thoát bị khóa kèm búa gần đó; `glass_broken` để ghi nhận, không nên bắt buộc vì đập kính ở tầng cao không phải lối thoát.
+
+Mobile cần `APP_RUNTIME_VERSION` 2.4.0 và bản Unity export tương ứng; kịch bản dùng `tool.emergency_hammer` yêu cầu runtime tối thiểu 2.4.0.
+
 ### 6.3. Sprinkler (đợt 1)
 
 `suppression.sprinkler` là thiết bị tự động, người chơi không tương tác trực tiếp:
