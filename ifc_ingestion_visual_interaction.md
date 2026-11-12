@@ -183,6 +183,18 @@ Thứ tự: class IFC → `PredefinedType` → property set → từ khóa tên 
 - `confidence ≥ 0.9` (class chuẩn) được dùng tự động; thấp hơn thì hiện trong danh sách "Thiết bị cần xác nhận" ở FE.
 - Từ điển từ khóa là dữ liệu cấu hình có version, không hard-code trong code worker.
 
+#### 5.2.1. Cửa: số cánh và kiểu mở (13/11/2026)
+
+Bề rộng không đủ để biết cửa mở thế nào: một mô hình trường học có cửa một cánh rộng 1,5 m, cửa hai cánh không đều, cửa cuốn, cửa trượt tự động và vách xếp 8 m, và 305/310 cửa để trống `OperationType`. Thứ tự quyết định:
+
+1. **IFC worker** ghi kiểu mở lên node GLB của cửa (`extras.fet3dDoorOperation`): `OperationType` của `IfcDoorStyle`/`IfcDoorType`/`IfcDoor` nếu khác `NOTDEFINED`; nếu trống thì đoán theo tên loại cửa (cuốn/overhead/rolling → `ROLLINGUP`; trượt/sliding/skyve → `SLIDING_*`; xếp/folding/operable → `FOLDING_*`; dobbel/double/hai cánh; enkel/single/một cánh). Không đổi schema `building_metadata.json`.
+2. **Unity build worker** dựng cửa theo thứ tự: kiểu cuốn/trượt/xếp của IFC quyết định ngay; nếu không, tìm **tay nắm** trong lưới của cửa (các mảnh rời, nhỏ, cao khoảng 0,8–1,25 m). Hai cụm tay nắm cạnh nhau = cửa hai cánh, hai cánh gặp nhau ở giữa hai cụm (kể cả cánh không đều); một cụm = một cánh dù rộng bao nhiêu. Không có tay nắm thì theo kiểu xoay của IFC, cuối cùng mới theo bề rộng: dưới 1,25 m một cánh, tới 2,3 m hai cánh đều, rộng hơn là cửa trượt (một tấm liền thì cuốn lên). GLB chuyển đổi trước ngày này (chưa có `extras`) vẫn được xử lý bằng bước tay nắm và bề rộng.
+3. **Runtime**: cửa trượt và cửa cuốn mở bằng cách trượt ngang hoặc đi lên thay vì xoay bản lề; va chạm đi theo cánh. Gói đã đóng trước đó không đổi cho tới khi đóng gói lại.
+
+Cùng đợt: cánh cửa hai cánh được **cắt** tại chỗ hai cánh gặp nhau (trước đây chia nguyên tam giác theo trọng tâm, tấm kính một ô thành hai nửa tam giác); đèn trần ở khu cầu thang chỉ đặt khi có sàn che phía trên giếng thang; runtime ẩn các vật nhỏ (dưới 2,5 m ngang, thấp hơn một tầng) cách người chơi hơn 20 m trên mặt sàn để tòa thấp tầng nhiều nội thất không làm GPU điện thoại quá tải.
+
+Chưa xử lý (do IFC thiếu, cần quyết định): khe trống cạnh cửa khi mô hình không vẽ tường ở cao độ sàn; mép sàn hụt không có lan can.
+
 ### 5.3. Lọc cho runtime
 
 - Loại khỏi geometry runtime: `IfcDuctSegment/Fitting`, `IfcPipeSegment/Fitting`, `IfcCableCarrier*`, `IfcFlowSegment/Fitting`, `IfcAnnotation`, `IfcOpeningElement`, `IfcSpace` (giữ làm dữ liệu vùng), proxy có vật liệu/tên `Default Mass`.
