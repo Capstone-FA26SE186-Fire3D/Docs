@@ -197,6 +197,7 @@ Cùng đợt: cánh cửa hai cánh được **cắt** tại chỗ hai cánh g�
 - Khe 0,1–1,1 m giữa cánh cửa và bức tường kế bên (đo ở độ cao 0,45–1,55 m) được lấp bằng một khối cùng vật liệu với bức tường đó; rộng hơn 1,1 m coi là lối đi, để nguyên.
 - Mép sàn trên khoảng hụt sâu hơn 1 m (giếng thang, giếng trời, sảnh hai tầng, ban công) mà trong 0,45 m ra ngoài mép không có gì chắn ở độ cao 0,25–1,05 m thì dựng lan can 1,05 m (cột, tay vịn, thanh giữa, va chạm cao 1,15 m). Mép sàn trên khoảng trống hoàn toàn (mô hình không có địa hình) chỉ rào ở các tầng trên tầng trệt; tầng trệt là tầng thấp nhất có cửa thoát `door.exit` (worker dời cao độ nên tầng hầm có thể ở 0). Lối xuống bậc thang không bị rào vì bậc đầu chỉ thấp hơn sàn khoảng một bậc.
 - Kết quả trên mô hình trường học: 47 khe được lấp, khoảng 277 m lan can.
+- Trần treo (vật liệu trần) và đèn trần do game thêm, nằm cao từ 1,8 m trên sàn, được bỏ mặt hướng lên: camera lùi vào khoảng trống phía trên trần thấp (cạnh giếng thang) nhìn xuyên xuống như mặt cắt, không còn thấy mặt trên tấm trần hay ô trắng của đèn; từ dưới nhìn lên không đổi, va chạm giữ nguyên.
 
 ### 5.3. Lọc cho runtime
 
