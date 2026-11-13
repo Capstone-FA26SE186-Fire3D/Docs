@@ -193,7 +193,10 @@ Bề rộng không đủ để biết cửa mở thế nào: một mô hình tr�
 
 Cùng đợt: cánh cửa hai cánh được **cắt** tại chỗ hai cánh gặp nhau (trước đây chia nguyên tam giác theo trọng tâm, tấm kính một ô thành hai nửa tam giác); đèn trần ở khu cầu thang chỉ đặt khi có sàn che phía trên giếng thang; runtime ẩn các vật nhỏ (dưới 2,5 m ngang, thấp hơn một tầng) cách người chơi hơn 20 m trên mặt sàn để tòa thấp tầng nhiều nội thất không làm GPU điện thoại quá tải.
 
-Chưa xử lý (do IFC thiếu, cần quyết định): khe trống cạnh cửa khi mô hình không vẽ tường ở cao độ sàn; mép sàn hụt không có lan can.
+**Lấp chỗ IFC vẽ thiếu (chốt 13/11/2026, user: "IFC thiếu thì thêm thanh chắn, khe do IFC vẽ lỗi thì lấp luôn")**: sau khi dựng cửa, Unity build worker dò từng tầng bằng va chạm vật lý (thấy cả các tầng dưới):
+- Khe 0,1–1,1 m giữa cánh cửa và bức tường kế bên (đo ở độ cao 0,45–1,55 m) được lấp bằng một khối cùng vật liệu với bức tường đó; rộng hơn 1,1 m coi là lối đi, để nguyên.
+- Mép sàn trên khoảng hụt sâu hơn 1 m (giếng thang, giếng trời, sảnh hai tầng, ban công) mà trong 0,45 m ra ngoài mép không có gì chắn ở độ cao 0,25–1,05 m thì dựng lan can 1,05 m (cột, tay vịn, thanh giữa, va chạm cao 1,15 m). Mép sàn trên khoảng trống hoàn toàn (mô hình không có địa hình) chỉ rào ở các tầng trên tầng trệt; tầng trệt là tầng thấp nhất có cửa thoát `door.exit` (worker dời cao độ nên tầng hầm có thể ở 0). Lối xuống bậc thang không bị rào vì bậc đầu chỉ thấp hơn sàn khoảng một bậc.
+- Kết quả trên mô hình trường học: 47 khe được lấp, khoảng 277 m lan can.
 
 ### 5.3. Lọc cho runtime
 
