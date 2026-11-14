@@ -507,6 +507,8 @@ Ví dụ metadata capability (minh họa, field cuối cùng chốt cùng catalo
 
 - Người chơi: Sức khỏe, Khói đã hít, Nhiệt, Thể lực; ô vật đang cầm (kèm thời gian khô của khăn); mục tiêu và đồng hồ.
 - NPC: chỉ biểu tượng trạng thái trên đầu (bình thường, hoảng loạn, bị thương, bất tỉnh, đang đi theo), không có thanh máu.
+- NPC đang đi theo không được chặn người chơi: khi người chơi đi về phía họ trong vòng 1,6 m, họ bước sang một bên; ở chỗ hẹp không còn chỗ tránh (toilet, hành lang cụt) họ lùi ra trước người chơi. Không ai đi xuyên qua ai (Unity, 14/11/2026).
+- Đèn pin điện thoại: nút trên HUD cạnh nút gọi 114, bật/tắt một chùm sáng từ ngực theo hướng người chơi. Chỉ là trợ giúp nhìn đường khi mất điện, không chấm điểm và không phát event. Chế độ Hướng dẫn nhắc bật đèn khi mất điện (Unity, 14/11/2026).
 - Assessment thu gọn HUD và không hiện gợi ý hay mục tiêu ẩn. Các chỉ số này là dữ liệu tập huấn mô phỏng, không phải chỉ số y khoa.
 
 ## 9. Quy trình OrganizationUser dựng kịch bản
