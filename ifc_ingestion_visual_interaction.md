@@ -385,7 +385,7 @@ Catalog do PlatformAdmin quản lý trong Organization Library (FR-LIBRARY-01/02
 | `water.sink` / `water.bath` / `water.shower` | FlowTerminal/Furnishing theo tên hoặc editor | Nhúng khăn/chăn (chạm một lần, chờ đủ vòng) | `item_wetted` |
 | `item.towel` | Editor | Nhặt, che mũi khi ướt | `nose_covered_in_smoke` |
 | `door.standard` / `door.fire` / `door.exit` | `IfcDoor` | Sờ cửa, mở, đóng | `checked_door_heat`, `closed_door` |
-| `transport.elevator` | **Chỉ từ IFC** (`IfcTransportElement`/`IfcSpace` tên thang máy). Thang máy thuộc tòa nhà: game tự đặt cửa thang ở mặt khối thang nhìn ra sàn đi lại, trong mọi bài của tòa nhà; trình soạn không cho thêm/xóa, bản nháp cũ có thang máy đặt tay bị báo `CAPABILITY_BUILDING_ONLY` (04/11/2026) | Gọi thang: cửa mở ra cabin; bước vào = thang dừng giữa tầng, khói lùa vào, mất máu (bẫy) | `used_elevator` (kịch bản chỉ quyết định có chấm hay không qua rubric) |
+| `transport.elevator` | **Chỉ từ IFC** (`IfcTransportElement`/`IfcSpace` tên thang máy). Thang máy thuộc tòa nhà: game tự đặt cửa thang ở mặt khối thang nhìn ra sàn đi lại, trong mọi bài của tòa nhà; trình soạn không cho thêm/xóa, bản nháp cũ có thang máy đặt tay bị báo `CAPABILITY_BUILDING_ONLY` (04/11/2026) | Gọi thang: cửa mở ra cabin. Còn điện và lửa, khói chưa tới thang thì thang chạy thật: vào cabin, chọn tầng, ra ở tầng đó, không mất máu; dùng thang vẫn bị ghi nhận để rubric trừ điểm. Mất điện hoặc lửa, khói dày đã tới cửa thang (kể cả giữa chuyến) = thang kẹt giữa tầng, khói lùa vào, mất máu, người chơi trở lại trước cửa tầng xuất phát (Unity, 14/11/2026; trước đó bước vào là kẹt ngay) | `used_elevator` (kịch bản chỉ quyết định có chấm hay không qua rubric) |
 | `exit.stair` / `exit.final` | `IfcStair`, cửa ra ngoài | Đi vào | `reached_exit`, thời gian thoát |
 | `bait.belongings` | Editor | Nhặt đồ (bẫy) | `went_back_for_belongings` |
 | `npc.guide` | Editor (spawn NPC) | Gọi, dẫn đường | `npc_guided` |
@@ -507,6 +507,8 @@ Ví dụ metadata capability (minh họa, field cuối cùng chốt cùng catalo
 
 - Người chơi: Sức khỏe, Khói đã hít, Nhiệt, Thể lực; ô vật đang cầm (kèm thời gian khô của khăn); mục tiêu và đồng hồ.
 - NPC: chỉ biểu tượng trạng thái trên đầu (bình thường, hoảng loạn, bị thương, bất tỉnh, đang đi theo), không có thanh máu.
+- NPC đang đi theo không được chặn người chơi: khi người chơi đi về phía họ trong vòng 1,6 m, họ bước sang một bên; ở chỗ hẹp không còn chỗ tránh (toilet, hành lang cụt) họ lùi ra trước người chơi. Không ai đi xuyên qua ai (Unity, 14/11/2026).
+- Đèn pin điện thoại: nút trên HUD cạnh nút gọi 114, bật/tắt một chùm sáng từ ngực theo hướng người chơi. Chỉ là trợ giúp nhìn đường khi mất điện, không chấm điểm và không phát event. Chế độ Hướng dẫn nhắc bật đèn khi mất điện (Unity, 14/11/2026).
 - Assessment thu gọn HUD và không hiện gợi ý hay mục tiêu ẩn. Các chỉ số này là dữ liệu tập huấn mô phỏng, không phải chỉ số y khoa.
 
 ## 9. Quy trình OrganizationUser dựng kịch bản
