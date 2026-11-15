@@ -110,6 +110,8 @@ Backend là nguồn sự thật cho ownership scope, Building, revision, scenari
 | Compute/VPS | AWS EC2 Singapore cho BE và AI/RAG; Azure VM Windows cho IFC/Unity worker | BE (`t3.small`) chạy container `fire3d-api` + Redis sau Caddy; AI chạy máy EC2 riêng sau Caddy. Worker là Azure VM Windows Server 2022 Standard D4s v4, Indonesia Central (Azure for Students), tắt khi không dùng. Chuyển từ Azure App Service sang AWS ngày 09–10/11/2026 khi subscription Azure cũ hết hạn. |
 | Payments | PayOS production | Gói Building 6/12 tháng, entitlement/hạn mức người, nâng cấp gói và mua quota AI trả trước; webhook idempotent. |
 
+> Hiện trạng FCM (15/11/2026): ứng dụng Android đăng ký mã FCM cho tài khoản học viên, nhưng máy chủ hiện chỉ gửi một loại thông báo (nhắc hạn dịch vụ công trình) tới tài khoản tổ chức, nên chưa có thông báo đẩy nào tới được điện thoại người dùng. Ứng dụng cũng chưa xử lý việc bấm vào thông báo. Chưa nghiệm thu trên thiết bị; phạm vi tính năng chờ nhóm quyết (Mobile#51).
+
 LLM vẫn là decision gate giữa OpenAI và Gemini; nơi chạy AI service không quyết định LLM. Code không được phụ thuộc trực tiếp vào SDK LLM hay hạ tầng provider ngoài adapter/configuration boundary.
 
 Source AI hiện có **RAG v2** tại `AI/rag-api/app/v2`, request store/recovery, `PgVectorIndex`/`MemoryIndex`, OpenAI/Gemini/fake adapters, safety gate và eval offline. ChromaDB cùng `/chat`, `/documents`, `/pccc/*` thuộc legacy (routes tắt mặc định), không đại diện toàn bộ implementation. FE gọi .NET cho AI nghiệp vụ; backend cấp scope/quota rồi mới gọi FastAPI. Có source không chứng minh dữ liệu đã migrate hoặc provider/pgvector/deployment production đã nghiệm thu.
@@ -382,6 +384,8 @@ POST /api/admin/learn/media/validate
 SQL v7 đặc tả data gate cho gửi/duyệt phiên bản, xác minh mã tham gia, thư viện, nâng cấp hạn mức và mua quota AI trả trước. API endpoint/service orchestration vẫn cần triển khai; endpoint `ai-overage-consents` của thiết kế cũ không áp dụng cho quota trả trước.
 
 Các nhóm nghiệp vụ ngoài auth vẫn là contract mục tiêu cần đối chiếu code. Nhóm auth đã đồng bộ theo [BE authentication](../BE/docs/authentication.md) và [API guide](../BE/docs/api-docs.md), source main `0683d90` ngày 03/10/2026.
+
+> Cập nhật 15/11/2026: đoạn đối chiếu trên làm với BE `0683d90` (03/10/2026). Sau đó BE thêm giới hạn số lần đăng nhập theo email và tiêu đề bảo mật (BE#141, `31920ec`) và sửa phần thu hồi thiết bị (`17f8470`); phần auth chưa được đối chiếu lại toàn bộ với BE `main` hiện tại (`46716f8`, 13/11/2026).
 
 Local registration theo form → request-otp → verify-otp → register(form + registrationToken) → login. Request OTP chưa tạo user/organization; register consume proof, tạo account verified/organization/owner và audit atomic, trả 201 AccountResponse. Password giữ trong bộ nhớ client; đổi email bỏ proof, reload quay về form. OTP sáu số hạn 10 phút, sai 5 lần vô hiệu; resend cooldown 60 giây, quota chung 5/email/giờ và 20/IP/giờ, mã mới vô hiệu mã/proof cũ. Proof hạn 15 phút, gắn email, dùng một lần; form sai không consume. Email normalize trim/lowercase trùng kể cả inactive/deleted trả 409 EMAIL_EXISTS và errors.email; proof sai trả 400 EMAIL_VERIFICATION_REQUIRED; quota vượt trả 429 OTP_RATE_LIMITED/Retry-After. `/api/auth/register` là alias Trainee; `/verify-email` chỉ cho pending legacy.
 

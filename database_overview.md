@@ -4,6 +4,8 @@
 
 **Đối chiếu auth BE 03/10/2026:** v7 biểu diễn flow main `0683d90`: form → OTP challenge → proof một lần → account verified → login, gồm challenge/proof/job và unique email trim/lowercase. Refresh rotation/family check, profile/organization ETag và reset/change transaction vẫn cần nghiệm thu trong DB/provider/deployment thực tế; Google onboarding/link đã có API; xem BE authentication hiện hành và nghiệm thu provider/client riêng. [BE authentication](../BE/docs/authentication.md) và [workflows](fire-evacuation-training-workflows.md) là nguồn flow đối chiếu.
 
+> Cập nhật 15/11/2026: đoạn đối chiếu trên làm với BE `0683d90` (03/10/2026). Sau đó BE thêm giới hạn số lần đăng nhập theo email và tiêu đề bảo mật (BE#141, `31920ec`) và sửa phần thu hồi thiết bị (`17f8470`); phần auth chưa được đối chiếu lại toàn bộ với BE `main` hiện tại (`46716f8`, 13/11/2026).
+
 > **Dự án:** Fire Evacuation Training 3D | **DB:** PostgreSQL | **Schema version:** v7.0
 > **Đối chiếu:** SQL v7 là nguồn thiết kế cho cấu trúc/field/FK/gate của quyết định 03/10/2026. Requirements là nguồn hành vi đích; schema không chứng minh migration, API hay worker đã chạy production.
 > Stored function/gate là contract thiết kế; chúng vẫn cần migration, phân quyền deploy và integration test.
