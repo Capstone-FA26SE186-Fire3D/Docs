@@ -67,6 +67,8 @@ Organization tự soạn hoặc dùng template tùy chọn, có thể kết hợ
 
 Nguồn đồng bộ auth: [BE authentication](../BE/docs/authentication.md) và [BE API guide](../BE/docs/api-docs.md), đối chiếu source BE main `0683d90` ngày 03/10/2026. Reset/change đã có transaction trong source; nghiệm thu PostgreSQL/provider/deployment và tích hợp client phải được xác nhận riêng. FE giữ password trong bộ nhớ, đổi email bỏ proof, reload quay về form; không lưu password vào URL/web storage. `/verify-email` chỉ phục vụ pending legacy. Forgot trả 202 chung; reset token 64 ký tự hex, hạn 30 phút, dùng một lần cho account có password local. Reset/change trả 204 và yêu cầu login lại.
 
+> Cập nhật 15/11/2026: đoạn đối chiếu trên làm với BE `0683d90` (03/10/2026). Sau đó BE thêm giới hạn số lần đăng nhập theo email và tiêu đề bảo mật (BE#141, `31920ec`) và sửa phần thu hồi thiết bị (`17f8470`); phần auth chưa được đối chiếu lại toàn bộ với BE `main` hiện tại (`46716f8`, 13/11/2026).
+
 ### FR-LEARN: Learn blog công khai và biên tập nội dung
 
 | ID | Yêu cầu | Phase |

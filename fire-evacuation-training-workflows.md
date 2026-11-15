@@ -65,6 +65,8 @@ PlatformAdmin có hai khu riêng: thư viện hỗ trợ Organization (template,
 
 Đối chiếu [BE authentication](../BE/docs/authentication.md) và [API guide](../BE/docs/api-docs.md), BE main `0683d90` ngày 03/10/2026. Đây là hành vi source hiện tại; nghiệm thu client và gửi Mailgun thật được kiểm tra riêng.
 
+> Cập nhật 15/11/2026: đoạn đối chiếu trên làm với BE `0683d90` (03/10/2026). Sau đó BE thêm giới hạn số lần đăng nhập theo email và tiêu đề bảo mật (BE#141, `31920ec`) và sửa phần thu hồi thiết bị (`17f8470`); phần auth chưa được đối chiếu lại toàn bộ với BE `main` hiện tại (`46716f8`, 13/11/2026).
+
 1. Trainee nhập email/username/password/confirmPassword; OrganizationUser nhập email/password/confirmPassword và tên/địa chỉ/điện thoại organization. Client giữ form/password trong bộ nhớ rồi chuyển sang OTP. Username Trainee lowercase, unique, pattern `[a-z0-9._-]{3,30}`; local login dùng email/password. Organization register chưa nhận username cá nhân; bổ sung qua profile sau.
 2. `POST /api/auth/registration/request-otp` nhận email. Email trim/lowercase đã có account, kể cả inactive/deleted, trả `409 EMAIL_EXISTS` và `errors.email`, không enqueue. Email mới trả 202, lưu challenge/job, chưa tạo user/organization. Mailgun worker gửi mã; 202 chưa chứng minh delivered.
 3. OTP sáu số giữ số 0 đầu, hạn 10 phút; verify sai đủ 5 lần vô hiệu challenge. `POST /api/auth/resend-verification` trong cooldown 60 giây trả 202 nhưng không tạo job mới; sau cooldown phát mã mới và vô hiệu mã/proof cũ. Hai route gửi mã chung quota 5/email/giờ, 20/IP/giờ; vượt trả `429 OTP_RATE_LIMITED` và `Retry-After`.
