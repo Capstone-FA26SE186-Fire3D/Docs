@@ -46,7 +46,7 @@ Organization tự soạn hoặc dùng template tùy chọn, có thể kết hợ
 ### 3.2. Scenario và ConfirmForTraining
 
 - Tạo version scenario với spawn, mục tiêu, hazard surrogate, time limit, rubric và cấu hình risk-aware A*.
-- Trên editor Three.js, chọn tầng, xoay/zoom/ẩn lớp, đặt và chỉnh nguồn lửa, tốc độ cháy, khói, hướng/cường độ gió, cửa/vùng chặn, bình chữa cháy, khăn, nguồn nước và các vật phẩm runtime đã hỗ trợ.
+- Trên editor Three.js, chọn tầng, xoay/zoom/ẩn lớp, đặt và chỉnh nguồn lửa, tốc độ cháy, khói, cửa/vùng chặn, bình chữa cháy, khăn, nguồn nước và các vật phẩm runtime đã hỗ trợ.
 - Lưu draft, undo/redo, validation và version scenario riêng với geometry. Đổi tham số scenario không convert lại toàn bộ IFC; đổi IFC tạo revision mới.
 - Preview web chỉ minh họa timeline/hiệu ứng; chạy thử đầy đủ hành vi, route và scoring bằng app Unity của organization.
 - Chạy checklist readiness: candidate package/manifest, graph, route kiểm tra và scenario; QR chưa tồn tại ở bước này.
@@ -124,7 +124,7 @@ Trainee tự chọn đọc Learn/blog, Learn trong Unity, Guided Drill hoặc v�
 | :--- | :--- |
 | Authoring | Building, IFC pipeline, geometry/connectivity QA, preview/editor 3D, revision và scenario. |
 | Readiness/release | ConfirmForTraining kỹ thuật, Admin duyệt phiên bản/rubric, payment dịch vụ, publish, manifest, package versioning và QR Building/list bài. |
-| Runtime | React Native/Expo shell, native Android Unity bridge, Unity library, lửa/khói/gió/cháy lan, tương tác, hazard surrogate, risk-aware A*, online start và sync sau mất mạng. |
+| Runtime | React Native/Expo shell, native Android Unity bridge, Unity library, lửa/khói/cháy lan, tương tác, hazard surrogate, risk-aware A*, online start và sync sau mất mạng. |
 | AI | RAG hướng dẫn organization, tạo scenario draft có nguồn, AI Trainee có quota ngày và debrief ngoài game. |
 | Billing/operations | Gói Building 6/12 tháng, hạn mức người/kỳ, nâng cấp gói, PayOS và mua quota AI trả trước. |
 | Dữ liệu | session, result, audit, analytics người duy nhất/lượt chơi/active session và usage billing. |
@@ -138,10 +138,10 @@ Thứ tự triển khai có thể chia thành các đợt kỹ thuật; các tí
 | AI organization | Hỏi đáp có nguồn, giải thích IFC/PCCC, draft scenario ở trạng thái `NeedsUserEdit`; người dùng tự edit và xác nhận. |
 | AI Trainee | Hỏi đáp kiến thức, mục tiêu/hướng dẫn của bài đã duyệt/phát hành có quyền chơi và kết quả cá nhân trên web/Mobile ngoài game; quota ngày riêng. |
 | Billing | Gói 6/12 tháng từng Building gồm phí game, hạn mức người và quota; quota AI cộng chung Organization, hết mua thêm trước. |
-| Runtime library | Hành vi di chuyển, camera, collider, cửa, vật phẩm, bình chữa cháy, khăn/nước theo rule đã kiểm tra, lửa/khói/gió/cháy lan và chấm điểm. Tác dụng khăn/nước/che mũi/khu vệ sinh không mặc định là đúng; phải có nội dung được duyệt. |
+| Runtime library | Hành vi di chuyển, camera, collider, cửa, vật phẩm, bình chữa cháy, khăn/nước theo rule đã kiểm tra, lửa/khói/cháy lan và chấm điểm. Tác dụng khăn/nước/che mũi/khu vệ sinh không mặc định là đúng; phải có nội dung được duyệt. |
 | Vận hành | feedback/support, expanded analytics, filter/cohort/export và debrief aggregate. |
 
-Chủ tòa chọn/cấu hình hành vi đã có; không viết script Unity cho từng Building. Hiệu ứng hiển thị và trạng thái mô phỏng dùng cùng scenario state. Gió/khói là mô hình game, không phải mô phỏng CFD. Basic NPC chỉ là tác nhân mô phỏng; không đại diện cho hành vi con người thật. Expanded analytics chỉ dùng để xem hoạt động học tập/mô phỏng.
+Chủ tòa chọn/cấu hình hành vi đã có; không viết script Unity cho từng Building. Hiệu ứng hiển thị và trạng thái mô phỏng dùng cùng scenario state. Lửa và khói là mô hình game, không phải mô phỏng CFD; sản phẩm không có gió (bỏ ngày 15/11/2026). Basic NPC chỉ là tác nhân mô phỏng; không đại diện cho hành vi con người thật. Expanded analytics chỉ dùng để xem hoạt động học tập/mô phỏng.
 
 PayOS request chỉ được tạo `Pending` qua function-only executor. Trusted webhook adapter xác thực `req.body` bằng SDK `webhooks.verify` hoặc canonicalize `data` theo thứ tự alphabet trước khi gọi database; database chỉ ghi attestation và đối soát, còn `returnUrl` không thể ghi `Paid`. Giá, quota, usage và quyền publish do backend quyết định; retry/webhook trùng không tạo usage hoặc quyền trùng.
 

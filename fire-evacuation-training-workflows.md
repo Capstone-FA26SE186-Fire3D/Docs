@@ -171,7 +171,7 @@ ReadyForScenario hoặc ConfirmedForTraining revision
 ```
 
 1. `OrganizationUser` chọn revision tương thích, tạo hoặc chọn logical `Scenario`, sau đó tạo `ScenarioDraft`; version mới không ghi đè version đã dùng.
-2. OrganizationUser dùng editor Three.js để đặt/chỉnh/xóa source lửa, khói, gió, tốc độ cháy, blocked elements, bình chữa cháy, khăn, nguồn nước, spawn, mục tiêu và các tương tác runtime đã có. Draft được lưu tách khỏi geometry.
+2. OrganizationUser dùng editor Three.js để đặt/chỉnh/xóa source lửa, khói, tốc độ cháy, blocked elements, bình chữa cháy, khăn, nguồn nước, spawn, mục tiêu và các tương tác runtime đã có. Draft được lưu tách khỏi geometry.
 3. AI Organization có thể tạo scenario draft từ facts IFC và corpus được phép; draft chỉ là gợi ý có citation và phải được người dùng tự edit/accept.
 4. Scenario ghi hazard parameters, time limit, rubric, route weights, seed, interaction config và version để replay được.
 5. Hệ thống chạy validation về route, blocked edge, floor portal, object anchors, package hash, protocol/schema, runtime version và giới hạn hiệu năng.
@@ -203,6 +203,36 @@ ConfirmedForTraining revision + confirmed ScenarioVersion
 6. Release/Training/scenario/version/organization phải khớp nhau. Hết hạn entitlement chặn publish/session mới nhưng không làm mất QR landing; revoke QR vì quản trị là trạng thái riêng.
 
 Quy ước sản phẩm là mỗi Building có một QR canonical ổn định. QR chỉ là mã resolve công khai; nó không chứa package, access token hoặc APK. Khi phát hành release mới, danh sách bài thay đổi nhưng QR không cần đổi; rotate/revoke chỉ là thao tác quản trị.
+
+### 5.1. Nội dung mã QR và hợp đồng liên kết (đối chiếu source 15/11/2026)
+
+Nguồn: `BE/docs/learner-sessions.md` (mục Building QR), `BE/Fire3D/Fire3D.Application/Learning/LearnerSessionContracts.cs`, `Mobile/app.json`, `Mobile/src/features/qr/qr-token.ts`, `FE/src/features/qr-landing`.
+
+**Mã QR chứa gì.** Một dòng chữ duy nhất là địa chỉ web của công trình: `https://fet3d.io.vn/qr/<mã>`. `<mã>` là 43 ký tự (chữ, số, `-`, `_`), sinh ngẫu nhiên từ 32 byte. Máy chủ chỉ lưu dấu băm SHA-256 của mã, và chỉ trả mã cùng dòng chữ để in (`content`) đúng một lần khi tạo hoặc tạo lại. Mã QR không chứa tên người, mật khẩu, quyền tham gia, gói bài hay tệp cài đặt.
+
+**Máy chủ nhận gì.**
+
+| Lời gọi | Kết quả |
+| :--- | :--- |
+| `POST /api/buildings/{id}/qr-codes` | Tạo mã cho công trình (tài khoản tổ chức sở hữu công trình hoặc quản trị). Mỗi công trình chỉ có một mã đang dùng; tạo lần hai trả `409 QR_ALREADY_EXISTS`. |
+| `POST /api/buildings/{id}/qr-codes/{qrId}/rotate` | Thu hồi mã cũ và cấp mã mới. |
+| `POST /api/buildings/{id}/qr-codes/{qrId}/revoke` | Thu hồi mã. |
+| `GET /api/qr/{mã}` | Cần đăng nhập. Trả mã công trình, tên, chế độ Công khai/Riêng tư, đã có quyền tham gia hay chưa (`hasAccess`), tình trạng dịch vụ (`Active`, `Expired`, `NotPurchased`), ngày hết dịch vụ và có được bắt đầu lượt mới hay không (`canStartNewSessions`). Dịch vụ hết hạn vẫn trả kết quả để màn hình giải thích được. |
+| `GET /api/qr/{mã}/trainings` | Danh sách bài đã phát hành mà tài khoản được phép xem. |
+
+Mã đã thu hồi hoặc đã bị thay trả `410 QR_REVOKED` (không bao giờ trả mã mới). Mã không tồn tại, mã của tổ chức khác (với tài khoản tổ chức) hoặc công trình đã lưu trữ trả `404 QR_NOT_FOUND`. Quét mã không cấp quyền: công trình Riêng tư vẫn cần mã tham gia, và lượt chơi mới vẫn được kiểm tra lại ở bước bắt đầu.
+
+**Ứng dụng đọc mã thế nào.** Màn quét của ứng dụng chấp nhận hai dạng: địa chỉ `https://…/qr/<mã>` (chỉ `https`, không có tham số hay dấu `#` phía sau) hoặc riêng 43 ký tự của mã. Ứng dụng lấy đoạn cuối của địa chỉ làm mã rồi gọi `GET /api/qr/{mã}`. Trang web `/qr/<mã>` làm cùng việc cho người chưa cài ứng dụng: yêu cầu đăng nhập, hiện công trình và hướng dẫn cài ứng dụng rồi quét lại; trang này không tự mở ứng dụng.
+
+**Liên kết mà ứng dụng khai báo (`Mobile/app.json`).**
+
+| Loại | Giá trị | Dùng cho |
+| :--- | :--- | :--- |
+| Tên gói Android | `com.fet3d.app` | Định danh ứng dụng |
+| Liên kết web | `https://fet3d.io.vn/qr/…` (bộ lọc `VIEW`, `autoVerify`) | Mã QR công trình |
+| Scheme riêng | `fet3d://` và `fire3d://` | Mã bàn giao chạy thử của tổ chức: `fet3d://playtest/handoff?code=<43 ký tự>` (cũng nhận `https://fet3d.io.vn/playtest/handoff?code=…`); mã có hạn 5 phút theo lời nhắc trong ứng dụng |
+
+Chưa xác nhận: việc Android tự mở ứng dụng khi bấm liên kết `https://fet3d.io.vn/qr/…` cần tệp xác minh `/.well-known/assetlinks.json` trên web; không tìm thấy tệp này trong `FE/public` và chưa thử trên máy. Cách chắc chắn hiện nay là mở ứng dụng rồi quét mã bằng màn quét trong ứng dụng.
 
 ## 6. Workflow quét QR, download và launch
 
@@ -306,11 +336,11 @@ Các buổi phản hồi chuyên môn, usability test và user study được t�
 
 ## 13. Workflow liên service, quota và recovery
 
-### 13.1. AI/RAG trên Azure
+### 13.1. AI/RAG trên AWS EC2
 
 1. Web/Mobile gửi request tới `.NET API`, không gọi trực tiếp FastAPI trong contract production.
 2. `.NET API` xác minh phiên FET3D, role, tenant, audience, corpus scope, quyền bài public/private và quota hiện có; nếu phiên bắt nguồn từ Google thì Firebase chỉ cung cấp bước xác minh Google identity.
-3. Backend tạo `ai_requests`, reserve quota và tạo request ledger bằng transaction PostgreSQL ngắn; khóa request/ledger/reservation/grants theo thứ tự ổn định; không cho quota âm hoặc tự dùng overage. Lock order/schema trả trước chi tiết cần đồng bộ riêng. Sau commit mới gọi AI/RAG FastAPI trên Azure.
+3. Backend tạo `ai_requests`, reserve quota và tạo request ledger bằng transaction PostgreSQL ngắn; khóa request/ledger/reservation/grants theo thứ tự ổn định; không cho quota âm hoặc tự dùng overage. Lock order/schema trả trước chi tiết cần đồng bộ riêng. Sau commit mới gọi AI/RAG FastAPI (chạy trên AWS EC2).
 4. AI trả `requestId`, response type/status, citations/source version, BIM anchors khi có, model/version và usage kỹ thuật. AI không quyết định giá, mua quota hoặc entitlement.
 5. Backend ghi kết quả qua contract `record_ai_request_result` sau khi xác minh request, evidence/citations, model và usage kỹ thuật; sau đó chốt `Recorded` hoặc giải phóng reservation đúng một lần. Timeout chuyển request/ledger sang `NeedsReconcile`; backend gọi `GET /api/ai/requests/{requestId}` hoặc reconcile nội bộ trước khi quyết định chốt/hoàn, không tự hoàn rồi tạo request mới.
 

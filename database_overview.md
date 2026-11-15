@@ -125,7 +125,7 @@ Không thêm certificate, curriculum/module/sprint hoặc role Visitor. V7 thêm
 | **Mục đích** | Lưu trạng thái ngắn hạn sau khi Firebase đã xác minh Google nhưng trước khi tạo/hoàn tất tài khoản FET3D |
 | **Cột quan trọng** | `firebase_uid`, `email`, `onboarding_token_hash`, `requested_role`, `organization_draft`, `expires_at`, `completed_at`, `completed_user_id`, `completed_input_hash` |
 | **Ràng buộc** | Chỉ nhận `Trainee` hoặc `OrganizationUser`; token chỉ lưu hash, có hạn và không tự cấp role/tenant; PlatformAdmin không đi qua onboarding này. Khi hoàn tất, lưu user đã tạo và hash input để retry trả kết quả cũ thay vì tạo user/tổ chức mới |
-| **Trạng thái** | Thiết kế đích; API Google onboarding và migration dữ liệu còn triển khai sau |
+| **Trạng thái** | Đã triển khai: BE có `POST /api/auth/google/onboarding/complete`, FE và Mobile đều gọi API này; bảng có trong schema production ngày 27/10/2026 (xem `ERD Logical Physical/2-Physical.md`). Nghiệm thu với tài khoản Google thật theo tài liệu BE |
 
 ---
 
