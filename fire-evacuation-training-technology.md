@@ -219,7 +219,7 @@ Organization tự soạn hoặc dùng template tùy chọn, có thể kết hợ
 
 Trainee tự chọn đọc Learn/blog, Learn trong Unity, Guided Drill hoặc vào Assessment ngay; không có prerequisite học/luyện. Assessment giảm/tắt gợi ý, chấm đạt/chưa đạt theo rubric đã duyệt và trả lý do/debrief. Lưu từng lần làm; thi lại không giới hạn và không bắt buộc luyện lại. Hoàn thành session không tự đồng nghĩa đạt; lỗi, hủy và chưa sync phải phân biệt với kết quả hợp lệ. Không cấp chứng nhận, không curriculum/module/sprint. Tiêu chí bắt buộc/tùy chọn, trọng số, ngưỡng điểm và lỗi khiến chưa đạt cần chốt theo từng loại bài, chưa hard-code con số.
 
-`ScenarioVersion` lưu spawn, goal, fire/smoke/wind parameters, interaction anchors/catalog IDs, blocked elements, time limit, rubric, seed, schema/algorithm version và trọng số A* để kết quả tái lập. Cấu hình scenario tách khỏi geometry artifact. Wind theo khu vực/cửa là mô hình game đề xuất, không phải airflow/CFD đã kiểm chứng. **Quyết định 15/11/2026: không làm gió.** Unity không dùng tham số gió trong mô phỏng và FE không có màn cấu hình gió; trường `wind_config` trong schema được để trống.
+`ScenarioVersion` lưu spawn, goal, fire/smoke parameters, interaction anchors/catalog IDs, blocked elements, time limit, rubric, seed, schema/algorithm version và trọng số A* để kết quả tái lập. Cấu hình scenario tách khỏi geometry artifact. **Quyết định 15/11/2026: không làm gió.** Unity không dùng tham số gió trong mô phỏng và FE không có màn cấu hình gió; trường `wind_config` trong schema được để trống.
 
 ```text
 cost(edge) = distance
@@ -229,11 +229,11 @@ cost(edge) = distance
            + blocked * wb
 ```
 
-Hazard runtime là surrogate nhẹ: grid lưu fire, smoke, visibility, wind influence và risk proxy. Lửa, khói, gió và cháy lan có lớp hiệu ứng hiển thị cùng trạng thái mô phỏng dùng cho visibility, exposure, route và scoring. Gió theo vùng/cửa/cửa sổ là mô hình game có thể kiểm thử, không phải CFD hoặc mô phỏng thông gió kỹ thuật. Phần gió đã bị bỏ theo quyết định 15/11/2026 (xem mục ScenarioVersion ở trên); mô phỏng chỉ còn lửa, khói và nhiệt.
+Hazard runtime là surrogate nhẹ: grid lưu fire, smoke, visibility và risk proxy. Lửa, khói và cháy lan có lớp hiệu ứng hiển thị cùng trạng thái mô phỏng dùng cho visibility, exposure, route và scoring; đây là mô hình game có thể kiểm thử, không phải CFD hoặc mô phỏng thông gió kỹ thuật. Không có gió: phần gió đã bị bỏ theo quyết định 15/11/2026 (xem mục ScenarioVersion ở trên); mô phỏng chỉ còn lửa, khói và nhiệt.
 
 **Khói và tư thế người chơi (Unity, 18/10/2026).** Khói bắt đầu tại đám cháy, màu trắng rồi chuyển đen dần sau khoảng 1 phút. Khói bốc lên, đọng dưới trần thành một lớp và lớp này dày dần xuống phía sàn khi phòng còn khói; khi phòng sạch khói thì lớp rút lên lại. Khói không đi xuyên tường; khói qua cửa mở và chỉ rò rất ít qua khe cửa đóng. Hiển thị khói lấy hình dạng trực tiếp từ grid mô phỏng nên phần người chơi thấy trùng với phần được tính phơi nhiễm. Người chơi có ba tư thế đứng, cúi và bò; lượng khói hít vào tính theo vị trí đầu so với đáy lớp khói, vì vậy cúi hoặc bò dưới lớp khói giảm phơi nhiễm. Chế độ Guided nhắc người chơi cúi hoặc bò khi lớp khói xuống tới đầu. Các thông số (trần 3 m, lớp dày tối đa 2,6 m, đầu đứng 1,55 m, cúi 1,0 m, bò 0,5 m) là giá trị game cho graybox, chưa hiệu chỉnh theo dữ liệu cháy thực tế và chưa đo trên thiết bị Android.
 
-Runtime có thư viện dùng chung cho movement, camera, collision, cửa và item interaction, lửa/khói/gió/cháy lan, event và scoring. Organization chỉ đặt/chọn/cấu hình capability; không viết script Unity cho từng Building. Basic NPC state machine/flow được triển khai theo budget thiết bị; analytics NPC chỉ mô tả scenario mô phỏng.
+Runtime có thư viện dùng chung cho movement, camera, collision, cửa và item interaction, lửa/khói/cháy lan, event và scoring. Organization chỉ đặt/chọn/cấu hình capability; không viết script Unity cho từng Building. Basic NPC state machine/flow được triển khai theo budget thiết bị; analytics NPC chỉ mô tả scenario mô phỏng.
 
 ## 8. Runtime package, QR và Android handoff
 
@@ -261,7 +261,7 @@ QR opens web/app context
   -> download missing content and verify hash/schema/runtime
   -> POST /api/training/sessions (prepare, idempotency key; chưa cấp quyền start)
   -> POST /api/training/sessions/{sessionId}/start (online quyền public/private/suất người/entitlement/QR/package check)
-  -> POST /api/training/sessions/{sessionId}/events (stable event id/sequence; backend receipt)
+  -> POST /api/training/sessions/{sessionId}/events:batch (stable event id/sequence; backend receipt)
   -> POST /api/training/sessions/{sessionId}/complete (result key/hash; backend receipt)
   -> native Android bridge launches Unity(sessionId, manifestPath, launchGrant, protocolVersion)
   -> Unity emits versioned events/result through bridge to React Native/Expo
@@ -418,7 +418,7 @@ Forgot trả 202 chung, enqueue chỉ cho account có password local hoạt đ�
 | Playtest | Organization-only draft/version package, entitlement Trial/Active kiểm tra ở start, giới hạn thử, loại khỏi learner analytics | Chưa có contract/runtime đã triển khai | Thiết kế grant/session type, quota reservation và native Unity flow |
 | Billing | Gói Building 6/12 tháng gồm game, hạn mức người và quota; nâng cấp gói và mua AI trả trước | SQL v7 đã thay period/overage bằng prepaid quota contract; entity/payment runtime chưa chứng minh hỗ trợ | Cần EF/API/provisioning và kiểm thử integration/concurrency |
 | AI quota | Quỹ chung Organization từ các gói/mua thêm; Trainee quota ngày riêng; reserve/settle idempotent, hết quota chặn request tính phí | Prototype chưa có production accounting trả trước | Cần đặc tả đơn vị/hiệu lực/quota và migration/API/tenant/evidence tests |
-| Identity/profile | `users` là nguồn chính cho local auth, Google link, username, display name, avatar key và profile revision; organization giữ name/address/phone/revision; Google onboarding session là thiết kế đích còn cần triển khai | Không lưu confirm password, signed URL, avatar base64 hoặc provider secret; `organizations.plan` bị loại | BE main 0683d90 đã có OTP/register/login/refresh/reset/change/profile/organization ETag/avatar/session revoke; v7 đồng bộ data contract local auth, còn onboarding completion/link API và DB/provider/deployment chưa nghiệm thu |
+| Identity/profile | `users` là nguồn chính cho local auth, Google link, username, display name, avatar key và profile revision; organization giữ name/address/phone/revision; Google onboarding session đã có trong BE và schema production | Không lưu confirm password, signed URL, avatar base64 hoặc provider secret; `organizations.plan` bị loại | BE main 0683d90 đã có OTP/register/login/refresh/reset/change/profile/organization ETag/avatar/session revoke; v7 đồng bộ data contract local auth. Google onboarding đã có ở cả ba repo: BE `POST /api/auth/google/onboarding/complete`, `POST /api/me/link-google`, `POST /api/me/password`; FE gọi cả ba (`FE/src/features/auth/api.ts`); Mobile có màn `app/google-onboarding.tsx` và gọi complete + link (`Mobile/src/api/google.contract.ts`). Nghiệm thu với tài khoản Google thật theo tài liệu BE |
 | Building location | `buildings.address/city/district/latitude/longitude/geojson` là nguồn chính | Bỏ `building_locations`; không bỏ dữ liệu vị trí, chỉ hợp nhất vào Building | EF mapping/migration/backfill và kiểm thử cập nhật đồng thời còn thiếu |
 | Learn blog | `learn_posts` + immutable `learn_post_versions` + situations/bookmarks; `learn_post_version_sources` nối Common knowledge; post `Unpublished/Published/Hidden/Deleted` | Giữ revision/pointer/source/history; Hidden không public nhưng RAG hợp lệ, Deleted soft-delete và loại khỏi RAG; không có Approved step riêng của Learn | Prototype FE có Learn/chat demo; chưa có CMS, DB/API bookmark hoặc provider embed production; cần EF/API/SQL migration, provider validation, outbox/cache invalidation và RAG state filter |
 
@@ -473,7 +473,7 @@ Start phải kiểm tra/ghi nhận user ID theo Building/kỳ nguyên tử: hai 
 ## 12. Kiểm thử và đánh giá capstone
 
 - Pipeline: IFC upload → IfcOpenShell/Blender/Unity artifacts → QA/issues → preview/editor → `ReadyForScenario` → scenario/candidate package → `ConfirmForTraining` → `ConfirmedForTraining` → release `Built` + package + `Training` → entitlement → publish → QR Building → list/select Training → Android package → session/result → analytics.
-- Editor: đặt lửa/khói/gió/blocked elements/items hợp lệ, lưu draft/version, undo/redo, issue anchor và AI draft không tự mutate.
+- Editor: đặt lửa/khói/blocked elements/items hợp lệ, lưu draft/version, undo/redo, issue anchor và AI draft không tự mutate.
 - Runtime: hash mismatch, invalid grant, expired entitlement, revoked QR, route blocked, session retry, mất mạng giữa session, Unity bridge, nhiều lần mở/đóng và Android performance.
 - Commercial/AI: duplicate PayOS webhook, duplicate AI request, quota trả trước/top-up, hạn mức người, invoice snapshot, tenant RAG isolation, citations và safety gate.
 - Đánh giá chuyên môn, usability testing và user study thu thập phản hồi cho đồ án; chúng không là quyền trong kiến trúc và không tạo ra chứng nhận hoặc phê duyệt PCCC.

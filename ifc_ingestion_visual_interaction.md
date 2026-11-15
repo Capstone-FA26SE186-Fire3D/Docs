@@ -4,7 +4,7 @@
 
 Tài liệu này bổ sung cho [technology mục 6–8](fire-evacuation-training-technology.md#6-ifc-pipeline-tự-động) và [workflows mục 3–4](fire-evacuation-training-workflows.md#3-workflow-building-và-ifc). Nó gom kết quả spike ngày 14/10/2026 với 25 file IFC công khai thành contract đề xuất cho IFC/Blender worker, Unity build worker, BE, FE editor, Mobile và Unity runtime.
 
-**Trạng thái:** thiết kế đích + bằng chứng spike cục bộ. Chưa có migration, API, worker production, Unity code hay benchmark Android. Mọi mục ghi "đề xuất" cần team chốt trước khi triển khai. Tài liệu không thay đổi quyết định đã chốt: IFC là source duy nhất, chủ tòa không làm thủ công trong Blender/Unity, kích thước và cấu trúc công trình được bảo toàn.
+**Trạng thái:** thiết kế đích + bằng chứng spike cục bộ (14–15/10/2026). Từ đó tới nay đã có worker, Unity runtime và số đo trên điện thoại: phần đã làm ghi ở mục 5.2.1, 5.10, 6 và 10. Mọi mục ghi "đề xuất" cần team chốt trước khi triển khai. Tài liệu không thay đổi quyết định đã chốt: IFC là source duy nhất, chủ tòa không làm thủ công trong Blender/Unity, kích thước và cấu trúc công trình được bảo toàn.
 
 ## 1. Tóm tắt quyết định đề xuất
 
@@ -135,9 +135,9 @@ Thử nghiệm "cháy ban đêm, mất điện" trên cùng hành lang FM_ARC_Di
 
 FE hiển thị checklist này ở màn hình upload; BE trả issue có mã (mục 5.9) để FE dẫn người dùng tới mục cần sửa.
 
-## 4. Nhiều IFC cho một revision (đề xuất, cần chốt)
+## 4. Nhiều IFC cho một revision (đề xuất, chưa làm)
 
-Model PCCC/nước thường nằm ở file bộ môn riêng. Đề xuất: một `BuildingRevision` nhận **một file kiến trúc bắt buộc** và **0..n file bộ môn** (MEP, plumbing, fire protection). Worker hợp nhất theo tọa độ chung, kiểm tra cùng đơn vị/gốc tọa độ/tầng, và ghi hash từng file vào provenance. Nếu team chưa chốt, giữ một file IFC và hướng dẫn "Include linked files" khi xuất. Thay đổi này ảnh hưởng FR-IFC-01, schema `IfcSource` và UI upload nên cần cập nhật requirements/SQL trong task riêng.
+Model PCCC/nước thường nằm ở file bộ môn riêng. Đề xuất: một `BuildingRevision` nhận **một file kiến trúc bắt buộc** và **0..n file bộ môn** (MEP, plumbing, fire protection). Worker hợp nhất theo tọa độ chung, kiểm tra cùng đơn vị/gốc tọa độ/tầng, và ghi hash từng file vào provenance. **Hiện trạng 15/11/2026: mỗi revision nhận đúng một tệp IFC.** Bộ chuyển đổi nhận một tệp cho mỗi lượt chạy và `building_metadata.sources` luôn có một mục vai trò `architecture`; đề xuất nhiều tệp chưa được chốt và chưa được làm. Mô hình tách theo bộ môn phải gộp khi xuất ("Include linked files"). Thay đổi này ảnh hưởng FR-IFC-01, schema `IfcSource` và UI upload nên cần cập nhật requirements/SQL trong task riêng.
 
 ## 5. Pipeline chi tiết
 
@@ -206,7 +206,7 @@ Cùng đợt: cánh cửa hai cánh được **cắt** tại chỗ hai cánh g�
 
 ### 5.4. Ngân sách hình học và thay thế asset
 
-- Mục tiêu ban đầu (cần đo trên Android tầm trung trước khi chốt): **≤ 150k tam giác đang hiển thị**, nạp tầng hiện tại + tầng kề, ≤ 150 draw call sau batching.
+- Ngưỡng cảnh báo của IFC worker: **150 000 tam giác mỗi tầng**; tầng vượt ngưỡng nhận `IFC_TRIANGLE_BUDGET_EXCEEDED` (cảnh báo, không chặn). Đã đo trên máy nghiệm thu (mục 10.2): trường học có tầng 642 486 tam giác, tổng khoảng 1,4 triệu, vẫn chơi được ở 30 khung hình/giây sau khi game ẩn vật nhỏ ở xa (Unity PR #114) và chọn mức đồ họa theo máy (Unity PR #87). Mục tiêu ≤ 150 draw call sau batching chưa đo trên điện thoại.
 - Thay thế theo bounding box, giữ `GlobalId`, vị trí, hướng và kích thước gốc: cửa (theo số cánh/kính), đèn, thiết bị vệ sinh, tủ/kệ hộp (`Kubus-Einrichtung`), bình/tủ chữa cháy. Không thay tường, sàn, trần, cầu thang, lan can.
 - Phần tử vượt ngân sách nhưng không có asset thay: decimate có giới hạn sai số hình học và ghi `IFC_TRIANGLE_BUDGET_EXCEEDED`.
 - LOD0/LOD1 cho phần tử lặp nhiều; occlusion culling theo phòng.
@@ -537,7 +537,7 @@ Bổ sung cho [workflows mục 4](fire-evacuation-training-workflows.md#4-workfl
 1. Ngay khi geometry đã accept (revision `NeedsFix` chỉ vì thiếu cửa thoát hoặc đã `ReadyForScenario`), xem **Danh sách thiết bị phát hiện được** kèm độ tin cậy; xác nhận, sửa loại hoặc bỏ. Nếu có issue `IFC_EXIT_UNKNOWN`, chọn cửa thoát trong bước này để revision chuyển `ReadyForScenario`.
 2. Khi revision đã `ReadyForScenario`, chọn template (ví dụ cháy bếp giờ hành chính, cháy điện ban đêm) hoặc trang trắng.
 3. Đặt spawn người chơi, NPC theo loại và số lượng trong budget.
-4. Đặt nguồn lửa (loại điện/dầu/chất rắn, tốc độ lan, thời điểm), khói, gió.
+4. Đặt nguồn lửa (loại điện/dầu/chất rắn, tốc độ lan, thời điểm) và khói.
 5. Lập **dòng thời gian sự kiện**: đầu báo kích hoạt hoặc bị vô hiệu, mất điện, cầu thang bị khói chặn.
 6. Đặt vật dụng rời và tình huống thử thách (bình hết, cửa thoát hiểm khóa, đồ có giá trị).
 7. Chọn mục tiêu và rubric; mỗi tiêu chí gắn với event ở mục 6.
@@ -550,17 +550,99 @@ Editor chỉ thêm vật lên artifact; không sửa tường, cửa, sàn hay k
 - Fixture: 25 file ở mục 2.1 giữ ở máy/CI riêng (không commit vì license chưa rõ). Mỗi file có kỳ vọng về số tầng, phòng, cửa, ứng viên vệ sinh/PCCC và issue.
 - IFC worker: KIT phải dựng đủ 119 tường; Revit MEP phải tìm 6 sprinkler và 11 thiết bị vệ sinh; Revit ARC và S_Office phải phát `IFC_NO_SPACES`; S_Office phát `IFC_NO_BODY_GEOMETRY`.
 - Blender worker: 100% mesh runtime có UV0; ≥ 90% vật liệu có tên ánh xạ được trên bộ fixture; số tam giác mỗi chunk ghi vào provenance.
-- Unity: mở hành lang đại diện ở camera third-person, đạt mục tiêu 30 FPS Android tầm trung trong phiên 15 phút (technology mục 1.2); đo lại ngân sách mục 5.4.
+- Unity: chơi bài trên hai công trình nghiệm thu (mục 10.1) bằng thiết bị ở mục 10.2. Số đã đo và số chưa đo ghi ở mục 10.2; phiên 15 phút liên tục (technology mục 1.2) chưa đo.
 - Runtime tương tác: các ca ở mục 7 (bồn nước không hiện nút khi tay không; khăn khô không giảm khói; bẫy vẫn hiện nút; Assessment không làm nổi bật).
+
+### 10.1. Hai công trình nghiệm thu
+
+Hai tệp IFC dưới đây là bộ nghiệm thu của nhóm. Cả hai lấy từ kho tệp thử công khai của ThatOpen (`engine_web-ifc/tests/ifcfiles/public`, xem mục 12). **Giấy phép sử dụng của hai tệp mẫu này chưa được xác nhận**: kho nguồn không ghi giấy phép cho từng tệp. Vì vậy tệp IFC không nằm trong repo nào của nhóm; chúng chỉ ở máy của nhóm (`artifacts/FET3D_Demo/ifc/`, ngoài Git) và trong kho lưu trữ riêng của hệ thống sau khi tải lên.
+
+Các con số bên dưới đọc từ `result.json` và `building_metadata.json` do IFC geometry worker sinh ra, lưu ở `Unity/Builds/SchoolInput` và `Unity/Builds/TowerInput` (thư mục dựng tại máy, không commit).
+
+| | Trường học | Tòa tháp |
+| :--- | :--- | :--- |
+| Tên trên hệ thống | "Trường học NUS 5 tầng" | Bản thử nghiệm của "Tòa nhà lớn nhiều tầng" |
+| Tệp nguồn | `ISSUE_068_ARK_NUS_skolebygg.ifc` | `ISSUE_098_R8_F1_MAB_AR_M3_XX_XXX_MO_7000.ifc` |
+| Dung lượng tệp nguồn | 57 304 675 byte | 72 882 778 byte |
+| sha256 tệp nguồn | `362f0f5e5ad35557014100a6c4de75ec166f6dbd9197933170dc1423f4af2a76` | `08ab44c7a0e68efe6c1722c54235b405c0d649195254d92f964eaa47438aa62e` |
+| Tệp thực sự đưa vào xử lý | Chính tệp nguồn, không sửa | Bản sửa `ISSUE_098_co-phong-tu-sinh.ifc`, 86 502 319 byte, sha256 `f5041513b16114a852d3dbaa90227a0d24a10972bb7f73029c97429a36ca7df7` (xem ghi chú dưới bảng) |
+| Phần mềm xuất, schema | Autodesk Revit 2019 (ENG), IFC2X3 | Autodesk Revit 2022 (ENG), IFC2X3 |
+| Số tầng | 5 (`Plan 00U` 0,0 m; `Plan 01` 4,0 m; `Plan 02` 8,0 m; `Plan 03` 12,06 m; `Plan 04` 16,03 m) | 28 (hai tầng hầm `B02`, `B01`; mốc `L00 -40`; tầng trệt `L00`; các tầng trên từ `L01`) |
+| Phần tử / tam giác | 4 456 / 1 416 633 | 11 246 / 1 588 316 |
+| Phòng (`spaces`) | 307 | 1 916 (tự sinh, xem ghi chú) |
+| Cửa và lối (`portals`) | 330: 310 cửa, 20 cầu thang; 26 cửa ra ngoài | 1 644: 1 458 cửa, 186 cầu thang; không cửa nào được đánh dấu ra ngoài |
+| Thiết bị gợi ý (`interactables`) | 352: 211 cửa thường, 73 cửa chống cháy, 26 cửa thoát, 42 bồn rửa | 1 519: 1 458 cửa thường, 61 thang máy |
+| Cảnh báo của bước kiểm tra | Vật liệu chưa có trong từ điển; 3 tầng vượt 150 000 tam giác (tầng `L2` có 642 486); không có thiết bị báo/chữa cháy; thiết bị nhận diện độ tin cậy thấp; phòng không có sàn bên dưới | Vật liệu chưa có trong từ điển; 1 tầng vượt 150 000 tam giác; chưa xác định cửa thoát; không có thiết bị báo/chữa cháy; không có nguồn nước; 7 phòng không có sàn bên dưới |
+| sha256 `building.glb` tại máy | `0a81b00595fea999a737b36087259fd81aa84b02f8d78e0f6f7a28cc0bfc2094` (123 879 544 byte) | `8a8b5f1eb41cfae8cd50ad2cf99f9ad707ba9633174edbe14bdd257cdeeb4518` (122 431 464 byte) |
+| sha256 `building_metadata.json` tại máy | `f39bba7f676f083435784ca9cdde284f8a33365ffee631465f06152fcc0f4888` | `f879783299d4ee9a4672b6f20e7b241adbbe408b97d53b1271cfcec2043c863f` |
+| Gói dựng tại máy để thử trong Unity Editor | `Unity/Builds/SchoolPackage`: 5 gói tầng, bản Windows, runtime 2.4.0, mã lượt dựng `20261113052624`, sha256 `manifest.json` `b814d75adb6e81b6a8d31aa2a48a0afc78fa2cec830291972c72f3dc3a223f89` | `Unity/Builds/TowerPackage`: 28 gói tầng, bản Windows, runtime 2.3.0, mã lượt dựng `20261112071933`, sha256 `manifest.json` `31f00661e32d9ca1a712fe0fac4fc9ed7b68cfa0c7be08623f58d072e75da0f5` |
+
+Ghi chú:
+
+- **Tòa tháp dùng bản sửa, không dùng tệp gốc.** Tệp gốc không có phòng (`IfcSpace`) nên bước kiểm tra báo lỗi `IFC_NO_SPACES`. Bản sửa (tạo 06/11/2026, sửa tiếp 12/11/2026) thêm 1 916 phòng suy ra từ tường, thêm khối thang máy vào các giếng thang (còn 61 sau lần sửa 12/11), thêm sàn cho chiếu nghỉ và sảnh đệm cầu thang, bỏ 2 tấm sàn bãi xe không có hình 3D. Loại phòng là suy đoán từ hình dạng, không biết đâu là bếp hay nhà vệ sinh. Cách sửa ghi ở `artifacts/FET3D_Demo/ifc/thu-nghiem/GHI-CHU.md` (máy của nhóm).
+- **Số liệu trường học tại máy là của lượt xử lý 12/11/2026.** Trên production, trường học được xử lý lại ngày 13/11/2026 với cùng tệp nguồn (cùng sha256) bằng bản worker mới hơn, nhận thêm vòi sen: 28 vòi sen và 106 bồn rửa. Số đó lấy từ ghi chú bàn giao của nhóm, chưa đối chiếu lại với production trong lần rà này.
+- **Gói trên production khác gói tại máy.** Gói mà học viên tải là bản Android do Unity build worker trên máy ảo dựng. Hai thư mục gói ở bảng trên là bản Windows, không bake ánh sáng, chỉ để thử trong Unity Editor. Mã băm của gói Android đang phát hành trên production chưa được ghi lại trong Docs.
+- Trạng thái phát hành: bài trên trường học đã phát hành cho học viên (bản 3, ngày 13/11/2026, theo ghi chú bàn giao). Tòa tháp đã được chơi trên điện thoại bằng bản thử; việc phát hành bài của tòa tháp cho học viên trên production chưa xác nhận trong lần rà này.
+
+**Dựng lại một gói tại máy** (theo `Unity/Tools/GeometryWorker/README.md` và `Unity/README.md`):
+
+1. Chuyển IFC thành mô hình và dữ liệu mô tả, trong `Unity/Tools/GeometryWorker`:
+   `.\.venv\Scripts\python.exe run_converter.py convert --ifc <tệp.ifc> --out <thư mục đầu vào>`
+   Kết quả: `building.glb`, `preview_metadata.json`, `building_metadata.json`, `result.json`.
+2. Tạo một kịch bản thử tối thiểu (điểm xuất phát và cửa thoát):
+   `python Test\make_scenario.py <thư mục đầu vào> --spawn-space <tên phòng> --exit-door <GlobalId của cửa>`
+3. Dựng gói bằng Unity Editor 6000.6.6f1:
+   `Unity.exe -batchmode -projectPath <dự án Unity> -executeMethod Fire3D.Unity.Editor.ContentPipeline.BuildWorker.Run -fet3dInput <thư mục đầu vào> -fet3dOutput <thư mục gói> [-fet3dTarget Android] [-fet3dNoBake]`
+   Bản Windows không bake mất khoảng 24 phút với trường học và 27 phút với tòa tháp trên máy của nhóm.
+
+Trên production không chạy tay các bước này: tài khoản tổ chức tải IFC lên ở web, worker trên máy ảo tự xử lý và dựng gói Android khi tạo bản phát hành ([workflows mục 3–5](fire-evacuation-training-workflows.md#3-workflow-building-và-ifc)).
+
+### 10.2. Thiết bị nghiệm thu và số đo trên máy
+
+Sản phẩm chỉ nhắm Android. Thiết bị nghiệm thu là một điện thoại tầm trung:
+
+| Mục | Giá trị |
+| :--- | :--- |
+| Máy | Xiaomi Redmi Note 10S (mã máy `M2101K7BG`) |
+| Chip / đồ họa | MediaTek Helio G95 / Mali-G76 |
+| Hệ điều hành | Android 13 |
+
+Số đã đo trên máy này:
+
+| Ngày | Bài | Trước | Sau | Thay đổi |
+| :--- | :--- | :--- | :--- | :--- |
+| 04/11/2026 | Cháy bếp | Khoảng 2 khung hình/giây ở cửa bếp đang cháy; CPU 75 °C, vỏ máy 53 °C | 30 khung hình/giây ổn định; CPU 47–52 °C, vỏ máy 39–45 °C | Unity PR #87: chọn mức đồ họa theo máy (máy yếu: tỉ lệ vẽ 0,7, khử răng cưa 2x, tắt HDR, giới hạn 30 khung hình/giây) |
+| 13/11/2026 | Trường học | Không vào được bài: máy mất thiết bị đồ họa (lỗi Vulkan −4) khoảng 1 giây sau khi dựng xong tòa nhà. Gói có khoảng 1,4 triệu tam giác, vẽ 5 194 trên 5 328 vật, 253 ms mỗi khung | 17–18 khung hình/giây (77 ms mỗi khung), không còn sập trong 10 phút chơi | Unity PR #114: ẩn vật nhỏ (ngang dưới 2,5 m, cao dưới 2,6 m) ở xa hơn 20 m |
+| 15/11/2026 | Trường học, runtime 2.5.0 | — | 30 khung hình/giây đều (33 ms mỗi khung; khoảng 4 % số khung mất 50–66 ms); luồng chính dùng khoảng 38 % một nhân CPU | Bản phát hành 15/11/2026 |
+
+Ghi nhận thêm ở lần thử 15/11/2026:
+
+- Máy ấm lên khi chơi lâu. Trưởng nhóm chấp nhận mức này cho máy tầm trung; nhiệt độ lần này chưa đo.
+- Lỗi Vulkan −4 lúc vào bài xuất hiện một lần, hai lần vào bài sau đó không lặp lại.
+
+Chưa đo (không ghi con số nào cho các mục này cho tới khi có lượt đo):
+
+| Mục | Trạng thái |
+| :--- | :--- |
+| Mức RAM cao nhất khi chơi | chưa đo |
+| Thời gian tải bài (từ lúc bấm bắt đầu tới lúc chơi được) | chưa đo |
+| Giới hạn dung lượng gói bài | chưa đo, chưa đặt giới hạn |
+| Số người trong tòa nhà (NPC) tối đa mà máy chịu được | chưa đo |
+| Một phiên chơi liên tục 15 phút | chưa đo (lần dài nhất có ghi là 10 phút, ngày 13/11/2026) |
+| Số lệnh vẽ (draw call) trên điện thoại | chưa đo |
+| Tòa tháp 28 tầng: khung hình/giây và nhiệt độ | chưa đo thành số; chỉ ghi nhận là chạy bình thường trên cùng bản thử ngày 13/11/2026 |
+| Máy Android khác ngoài Redmi Note 10S | chưa thử |
 
 ## 11. Giới hạn và quyết định còn mở
 
-- Nhiều IFC cho một revision (mục 4) chưa chốt; ảnh hưởng requirements, SQL và UI.
-- Ngân sách tam giác/draw call là mục tiêu ban đầu, phải đo trên thiết bị.
+- Nhiều IFC cho một revision (mục 4) chưa chốt và chưa làm; hiện mỗi revision một tệp IFC.
+- Số đo trên thiết bị nghiệm thu và danh sách mục chưa đo nằm ở mục 10.2 (RAM, thời gian tải, dung lượng gói, số NPC, phiên 15 phút, draw call).
 - Thư viện asset thay thế và decal cần người làm 3D tạo một lần; mô hình AI-generate (ví dụ Tripo) phải kiểm license và dọn lưới trước khi dùng.
 - Texture CC0 từ ambientCG dùng được cho thương mại; vẫn ghi nguồn trong thư viện. Mô hình trên Sketchfab có license riêng từng mục, không tự đưa vào sản phẩm.
-- Tác dụng của khăn ướt, chăn ướt, che mũi, chèn khe cửa và nơi trú tạm cần chuyên gia PCCC duyệt nội dung; game chỉ là mô phỏng tập huấn, không phải hướng dẫn khẩn cấp thực tế.
-- Kết quả spike là bằng chứng kỹ thuật cục bộ, không phải bằng chứng worker production, package Android hay hiệu năng thiết bị.
+- Tác dụng của khăn ướt, chăn ướt, che mũi, chèn khe cửa và nơi trú tạm chưa được chuyên gia PCCC duyệt; game chỉ là mô phỏng tập huấn, không phải hướng dẫn khẩn cấp thực tế.
+- Kết quả spike (mục 2) là bằng chứng kỹ thuật cục bộ, không phải bằng chứng worker production, package Android hay hiệu năng thiết bị; số đo trên thiết bị nằm ở mục 10.2.
+- Giấy phép của hai tệp IFC nghiệm thu (mục 10.1) chưa được xác nhận.
+- Không có gió và không có nét mặt hoảng loạn (bỏ ngày 15/11/2026); chỉ chạy trên Android.
 - `ERD Logical Physical/` sinh từ schema production nên vẫn còn `revision_style_selections` và hai giá trị `StylePreset`/`ColorScheme` của `organization_library_items.kind` cho tới khi BE#194 lên production; sinh lại theo `ERD Logical Physical/_sinh-lai/README.md` sau đó, không sửa tay.
 
 ## 12. Nguồn tham khảo
