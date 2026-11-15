@@ -639,7 +639,7 @@ Chưa đo (không ghi con số nào cho các mục này cho tới khi có lượ
 - Số đo trên thiết bị nghiệm thu và danh sách mục chưa đo nằm ở mục 10.2 (RAM, thời gian tải, dung lượng gói, số NPC, phiên 15 phút, draw call).
 - Thư viện asset thay thế và decal cần người làm 3D tạo một lần; mô hình AI-generate (ví dụ Tripo) phải kiểm license và dọn lưới trước khi dùng.
 - Texture CC0 từ ambientCG dùng được cho thương mại; vẫn ghi nguồn trong thư viện. Mô hình trên Sketchfab có license riêng từng mục, không tự đưa vào sản phẩm.
-- Tác dụng của khăn ướt, chăn ướt, che mũi, chèn khe cửa và nơi trú tạm chưa được chuyên gia PCCC duyệt; game chỉ là mô phỏng tập huấn, không phải hướng dẫn khẩn cấp thực tế.
+- Tác dụng của khăn ướt, chăn ướt, che mũi, chèn khe cửa và nơi trú tạm do PlatformAdmin duyệt (quyết định 16/11/2026), không có chuyên gia PCCC bên ngoài; game chỉ là mô phỏng tập huấn, không phải hướng dẫn khẩn cấp thực tế.
 - Kết quả spike (mục 2) là bằng chứng kỹ thuật cục bộ, không phải bằng chứng worker production, package Android hay hiệu năng thiết bị; số đo trên thiết bị nằm ở mục 10.2.
 - Giấy phép của hai tệp IFC nghiệm thu (mục 10.1) chưa được xác nhận.
 - Không có gió và không có nét mặt hoảng loạn (bỏ ngày 15/11/2026); chỉ chạy trên Android.
