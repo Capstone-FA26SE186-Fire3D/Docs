@@ -120,10 +120,10 @@ Cập nhật 15/11/2026: cột Trạng thái ghi mục nào đã có câu trả 
 
 | Quyết định | Tác động | Chốt trước | Trạng thái 15/11/2026 |
 |---|---|---|---|
-| Giá gói 6/12 tháng, mức người, quota AI đi kèm/mua thêm và hạn mức Trial | UI billing, entitlement, quota trả trước | Payment/quota production | Còn mở |
+| Giá gói 6/12 tháng, mức người, quota AI đi kèm/mua thêm và hạn mức Trial | UI billing, entitlement, quota trả trước | Payment/quota production | **Đã chốt 16/11/2026.** Tài liệu không cố định con số: PlatformAdmin đặt giá, hạn mức người và quota AI đi kèm cho từng dòng khi lập báo giá từng Building; báo giá lưu bản chụp các giá trị đó (BE `BillingService`). Hạn mức Trial cũng do PlatformAdmin cấu hình |
 | Redis provider/version, region, cache TTL/eviction, Streams retention và outbox recovery window | Retry, replay, chi phí, tải database và khả năng phục hồi | Trước triển khai event/cache production | Còn mở. Đã biết: Redis chạy cùng máy EC2 với BE ([README, bảng Tổng quan công nghệ](README.md#tổng-quan-công-nghệ)); TTL, retention và recovery window chưa được ghi lại |
 | OneShield/OnePortal plan/SKU, DNS ownership, TLS termination, WAF/rate limits, logging, SLA, region, cost và failover | Edge protection, ingress, observability và chi phí vận hành | Trước public production ingress | Còn mở. Đã biết: OneShield đang đứng trước web `fet3d.io.vn`; `api.fet3d.io.vn` chỉ dùng DNS tới Caddy trên EC2 (README) |
-| Đơn vị/hiệu lực/rollover quota AI, hoàn tiền/hủy; phí và thời hạn nâng cấp giữa kỳ | Mua thêm, provisioning và dữ liệu lịch sử | Billing lifecycle | Còn mở |
+| Đơn vị/hiệu lực/rollover quota AI, hoàn tiền/hủy; phí và thời hạn nâng cấp giữa kỳ | Mua thêm, provisioning và dữ liệu lịch sử | Billing lifecycle | **Đã chốt 16/11/2026.** Quota AI mua thêm có thời hạn do PlatformAdmin chọn khi lập báo giá, hết hạn thì hết, không cộng dồn sang kỳ sau. **Không hoàn tiền** sau khi đã thanh toán; chỉ hủy được báo giá chưa thanh toán. Phí nâng cấp giữa kỳ do PlatformAdmin đặt trong báo giá nâng cấp |
 | Catalog runtime ưu tiên | Thư viện Organization, editor | Runtime authoring | **Đã có.** Mỗi phiên bản runtime có một tệp danh mục năng lực trong `Unity/Tools/RuntimeCatalog/runtime-<phiên bản>.json`; quản trị đăng ký và bật tệp đó ở trang Phiên bản runtime. Bản đang dùng: 2.5.0 ([release-manifest.md](release-manifest.md); danh mục vật thể ở [IFC mục 6](ifc_ingestion_visual_interaction.md#6-danh-mục-vật-thể-tương-tác-catalog)) |
 | Bộ rubric mẫu khuyến nghị theo loại bài (ngưỡng/trọng số gợi ý). Cơ chế chấm đã chốt, xem mục Đánh giá đạt/chưa đạt | Thư viện Organization | Runtime authoring | Còn mở (chưa có danh sách ngưỡng/trọng số khuyến nghị trong Docs) |
 | Bộ IFC, Android mục tiêu và benchmark | QA support matrix, package budget | IFC/Mobile release | **Đã có.** Bộ IFC nghiệm thu là hai công trình ở [IFC mục 10.1](ifc_ingestion_visual_interaction.md#101-hai-công-trình-nghiệm-thu); chỉ nhắm Android, thiết bị thử và số đo ở [IFC mục 10.2](ifc_ingestion_visual_interaction.md#102-thiết-bị-nghiệm-thu-và-số-đo-trên-máy). Các số chưa đo được liệt kê ở cùng mục |
@@ -132,6 +132,14 @@ Cập nhật 15/11/2026: cột Trạng thái ghi mục nào đã có câu trả 
 | Chi phí AWS/Azure cho BE, AI và worker | Chi phí vận hành | Production deployment | Còn mở (chưa có số liệu chi phí trong Docs) |
 
 Đây là bảng nguồn chính cho các mục chưa chốt; không trình bày các mục "Còn mở" như đã triển khai.
+
+### Quyết định của trưởng nhóm ngày 16/11/2026
+
+- **Giá và hoàn tiền:** xem hai dòng "Đã chốt 16/11/2026" ở bảng trên. Không hoàn tiền.
+- **Một IFC cho mỗi phiên bản công trình:** mỗi công trình (Building) dùng một tệp IFC và được tính tiền theo công trình; không làm nhiều IFC cho một phiên bản (BE#103). Mô hình tách theo bộ môn phải gộp khi xuất.
+- **Số người trong tòa nhà (NPC):** do người soạn kịch bản đặt trong trình soạn thảo, không sinh ngẫu nhiên; hệ thống không đặt giới hạn cứng (Unity#11). Người soạn tự cân số lượng cho máy yếu.
+- **Duyệt nội dung an toàn cháy:** PlatformAdmin là người có chuyên môn và là người duyệt nội dung (bài Learn, kịch bản trước khi phát hành, thư viện mẫu) qua luồng duyệt và phát hành của Admin. Không có bước chuyên gia PCCC bên ngoài; game là mô phỏng tập huấn, không phải chứng nhận PCCC.
+- **Giấy phép tài sản 3D và động tác:** không rà thêm điều khoản thương mại; dự án dùng cho mục đích học tập, phi thương mại. Nguồn từng tài sản ghi ở `Unity/Assets/_Fire3D/Art/Characters/CREDITS.md` (Unity#56).
 
 ## Ranh giới service và nhất quán dữ liệu
 
