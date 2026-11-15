@@ -402,7 +402,7 @@ Chốt 28/10/2026 để Unity (runtime 2.1.0), FE và BE dùng một bộ tên. 
 | `item.blanket` | Chăn | Nhặt (đặt sẵn hoặc lấy từ giường), nhúng nước, Trùm chăn: chăn ướt vừa che mũi (`smokeIntakeMultiplierWhenCovered`) vừa chắn nóng (`heatMultiplierWhenWrapped`), chăn khô (chưa nhúng hoặc đã khô sau `dryAfterSeconds`) không che chắn gì, máu giảm như không có chăn; đang trùm vẫn nhúng ướt lại được ở bồn rửa hoặc vòi sen ("Nhúng ướt chăn" / "Nhúng lại chăn") (Unity, 14/11/2026; trước đó chăn khô vẫn chắn nóng) | `blanket_covered` (nhúng dùng `item_wetted`, che mũi dùng `nose_covered_in_smoke`) |
 | `furniture.bed` | Giường (từ IFC: `IfcFurniture` loại BED hoặc tên có bed/giường; worker tự nhận) | Lấy chăn rồi Lấy ga giường: mỗi lần sinh một đồ vải vào tay với tham số đặt trên giường trong kịch bản; không có event riêng | — |
 | `item.clothing` | Quần áo, đồ vải (áo, quần, khăn trải bàn, rèm) | Nhặt, nhúng nước, che mũi; ga giường, khăn trải bàn, rèm (theo nhãn) đủ lớn để Trùm lên người như chăn | dùng chung `item_wetted`, `nose_covered_in_smoke`; đồ vải lớn thêm `blanket_covered` |
-| `door.standard` / `door.fire` / `door.exit` (đang đóng) | Chèn khe cửa | Khi bị kẹt trong phòng: nhét bất kỳ đồ vải nào đang cầm (khăn, quần áo, chăn; ướt càng tốt) vào khe dưới cửa: một cuộn vải hiện ở chân cửa, khói lọt qua cửa chỉ còn một phần nhỏ; mở cửa ra là mất | `door_gap_sealed` |
+| `door.standard` / `door.fire` / `door.exit` (đang đóng) | Chèn khe cửa | Khi bị kẹt trong phòng: nhét bất kỳ đồ vải nào đang cầm (khăn, quần áo, chăn; ướt càng tốt) vào khe dưới cửa: một cuộn vải hiện ở chân cửa, khói lọt qua cửa chỉ còn một phần nhỏ; mở cửa ra thì khe hết được chèn, đồ vải rơi lại xuống sàn cạnh cửa, nhặt lên dùng lại được | `door_gap_sealed` |
 | `power.breaker` | Tủ điện | Ngắt cầu dao: cả tòa mất điện như sự kiện `event.power_outage` (đèn sự cố, biển EXIT vẫn sáng) | `power_cut_off` |
 | `gas.valve` | Van gas (bình gas, đường ống gas) | Khóa van gas; khóa kịp thì vụ nổ liên kết không xảy ra | `gas_valve_closed` |
 | `event.explosion` | Vụ nổ (sự kiện dòng thời gian, Hazard) | Không tương tác: nổ ở `atSeconds` tại vị trí đặt, bán kính `radius`, để lại đám cháy `fireIntensity`; nếu `gasValveId` trỏ tới van gas đã khóa thì không nổ. Người đứng trong bán kính bị thương theo khoảng cách | Không có event riêng; thương tích tính vào `HazardExposure` |
@@ -434,6 +434,16 @@ Gợi ý rubric: `fell_from_height` `eq 0` (bắt buộc) cho bài thoát nạn 
 #### Runtime 2.5.0 (15/11/2026)
 
 Runtime 2.5.0 giữ nguyên giao thức, manifest, danh sách thiết bị và hợp đồng của 2.4.0; gói đã dựng cho 2.0.0 đến 2.4.0 vẫn chơi được. Bản này chỉ đổi hành vi trong ứng dụng: nhân vật người chơi và NPC mới, chọn nhân vật Nam/Nữ, NPC đi theo tự tránh đường, đèn pin điện thoại, thang máy chạy được cho tới khi mất điện hoặc lửa khói tới thang, chấm điểm tập kết sau khi ra cửa, biển chỉ cầu thang và ghim cầu thang trên bản đồ, chỉ chăn ướt mới che chắn, đồ đang cầm ẩn cùng thân người khi camera sát tường. Mobile cần `APP_RUNTIME_VERSION` 2.5.0 và bản Unity export tương ứng; payload đăng ký là `Unity/Tools/RuntimeCatalog/runtime-2.5.0.json`.
+
+Sửa sau khi thử trên điện thoại (15/11/2026, vẫn là 2.5.0, không đổi hợp đồng):
+
+- **Tay khi mở, đóng, sờ cửa**: đổi Nam/Nữ ở thẻ giới thiệu xong thì nhân vật vẫn đưa tay ra tay nắm cửa (trước đó đổi nhân vật một lần là mất động tác tay ở cả hai nhân vật).
+- **Bình bột xách tay**: rút chốt xong, đầu vòi rời thân bình và nằm trong tay trái, tay phải xách bình; bột phun ra từ đầu vòi (như loa phun bình CO2 và lăng bình bọt).
+- **Đồ vải chèn khe cửa**: mở cửa đã chèn thì đồ vải rơi xuống sàn cạnh cửa, nhặt lại và chèn lại được (trước đó biến mất).
+- **Đèn pin điện thoại**: bật đèn thì tay trái cầm điện thoại giơ ngang ngực để soi (đang bò thì không giơ). Cầm đèn chỉ cần một tay: tay không hoặc đang cầm một món (ở tay phải) đều bật được; chỉ khi hai tay đều đang cầm đồ hoặc đang làm việc hai tay thì chưa bật được, có lời nhắc. Đang bật đèn mà làm việc cần hai tay (phun bình, rút chốt, lấy vòi hoặc chăn chữa cháy, nhúng nước, trùm chăn, đeo mặt nạ, chèn khe cửa, lấy chăn ga, sơ cứu, đẩy xe lăn, phủ chăn lên đám cháy) thì game nhắc tắt đèn pin trước. Đang bật đèn thì món mới nhặt thay cho món ở tay phải, không chuyển sang tay trái.
+- **Gọi 114**: tay phải cầm điện thoại, nên món đang ở tay phải chuyển sang tay trái; tay trái cũng bận hoặc món cần hai tay thì món đó được đặt xuống sàn (trước đó bình chữa cháy lơ lửng cạnh tay). Đèn pin tự tắt trong lúc gọi.
+- **Hai tay hai món**: món nào ở tay nào hiện đúng tay đó, kể cả sau khi đổi tay (trước đó khăn, đồ vải và búa luôn vẽ ở tay phải nên tay trái trông như trống).
+- **Nút thao tác ở góc nhìn thứ nhất**: các nút của vật trước mặt luôn nằm trong màn hình, kể cả khi vật ở dưới chân hoặc sát người (trước đó phải ngước lên mới thấy).
 
 #### Phá lối thoát, búa thoát hiểm, cửa sổ và bản đồ (runtime 2.4.0, 12/11/2026)
 
