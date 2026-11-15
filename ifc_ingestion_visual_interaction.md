@@ -444,6 +444,9 @@ Sửa sau khi thử trên điện thoại (15/11/2026, vẫn là 2.5.0, không �
 - **Gọi 114**: tay phải cầm điện thoại, nên món đang ở tay phải chuyển sang tay trái; tay trái cũng bận hoặc món cần hai tay thì món đó được đặt xuống sàn (trước đó bình chữa cháy lơ lửng cạnh tay). Đèn pin tự tắt trong lúc gọi.
 - **Hai tay hai món**: món nào ở tay nào hiện đúng tay đó, kể cả sau khi đổi tay (trước đó khăn, đồ vải và búa luôn vẽ ở tay phải nên tay trái trông như trống).
 - **Nút thao tác ở góc nhìn thứ nhất**: các nút của vật trước mặt luôn nằm trong màn hình, kể cả khi vật ở dưới chân hoặc sát người (trước đó phải ngước lên mới thấy).
+- **Đi qua cửa vừa mở**: mở cửa xong nhân vật đứng lệch về phía tay nắm; đẩy cần đi thẳng thì game tự lái nhân vật vào giữa ô cửa (trước đó ở cửa hẹp 0,8 m nhân vật tì vào mép khung và đứng im).
+- **Nút của cửa không hiện xuyên tường**: cửa chỉ hiện nút khi không có gì chắn giữa người chơi và cánh cửa.
+- **Cửa vẽ hai lần trong một ô cửa** (mô hình IFC chép trùng, hai cánh cách nhau một gang tay và chặn nhau): game giữ một cánh, bỏ cánh trùng.
 
 #### Phá lối thoát, búa thoát hiểm, cửa sổ và bản đồ (runtime 2.4.0, 12/11/2026)
 
