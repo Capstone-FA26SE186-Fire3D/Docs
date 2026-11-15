@@ -219,7 +219,7 @@ Organization tự soạn hoặc dùng template tùy chọn, có thể kết hợ
 
 Trainee tự chọn đọc Learn/blog, Learn trong Unity, Guided Drill hoặc vào Assessment ngay; không có prerequisite học/luyện. Assessment giảm/tắt gợi ý, chấm đạt/chưa đạt theo rubric đã duyệt và trả lý do/debrief. Lưu từng lần làm; thi lại không giới hạn và không bắt buộc luyện lại. Hoàn thành session không tự đồng nghĩa đạt; lỗi, hủy và chưa sync phải phân biệt với kết quả hợp lệ. Không cấp chứng nhận, không curriculum/module/sprint. Tiêu chí bắt buộc/tùy chọn, trọng số, ngưỡng điểm và lỗi khiến chưa đạt cần chốt theo từng loại bài, chưa hard-code con số.
 
-`ScenarioVersion` lưu spawn, goal, fire/smoke/wind parameters, interaction anchors/catalog IDs, blocked elements, time limit, rubric, seed, schema/algorithm version và trọng số A* để kết quả tái lập. Cấu hình scenario tách khỏi geometry artifact. Wind theo khu vực/cửa là mô hình game đề xuất, không phải airflow/CFD đã kiểm chứng.
+`ScenarioVersion` lưu spawn, goal, fire/smoke/wind parameters, interaction anchors/catalog IDs, blocked elements, time limit, rubric, seed, schema/algorithm version và trọng số A* để kết quả tái lập. Cấu hình scenario tách khỏi geometry artifact. Wind theo khu vực/cửa là mô hình game đề xuất, không phải airflow/CFD đã kiểm chứng. **Quyết định 15/11/2026: không làm gió.** Unity không dùng tham số gió trong mô phỏng và FE không có màn cấu hình gió; trường `wind_config` trong schema được để trống.
 
 ```text
 cost(edge) = distance
@@ -229,7 +229,7 @@ cost(edge) = distance
            + blocked * wb
 ```
 
-Hazard runtime là surrogate nhẹ: grid lưu fire, smoke, visibility, wind influence và risk proxy. Lửa, khói, gió và cháy lan có lớp hiệu ứng hiển thị cùng trạng thái mô phỏng dùng cho visibility, exposure, route và scoring. Gió theo vùng/cửa/cửa sổ là mô hình game có thể kiểm thử, không phải CFD hoặc mô phỏng thông gió kỹ thuật.
+Hazard runtime là surrogate nhẹ: grid lưu fire, smoke, visibility, wind influence và risk proxy. Lửa, khói, gió và cháy lan có lớp hiệu ứng hiển thị cùng trạng thái mô phỏng dùng cho visibility, exposure, route và scoring. Gió theo vùng/cửa/cửa sổ là mô hình game có thể kiểm thử, không phải CFD hoặc mô phỏng thông gió kỹ thuật. Phần gió đã bị bỏ theo quyết định 15/11/2026 (xem mục ScenarioVersion ở trên); mô phỏng chỉ còn lửa, khói và nhiệt.
 
 **Khói và tư thế người chơi (Unity, 18/10/2026).** Khói bắt đầu tại đám cháy, màu trắng rồi chuyển đen dần sau khoảng 1 phút. Khói bốc lên, đọng dưới trần thành một lớp và lớp này dày dần xuống phía sàn khi phòng còn khói; khi phòng sạch khói thì lớp rút lên lại. Khói không đi xuyên tường; khói qua cửa mở và chỉ rò rất ít qua khe cửa đóng. Hiển thị khói lấy hình dạng trực tiếp từ grid mô phỏng nên phần người chơi thấy trùng với phần được tính phơi nhiễm. Người chơi có ba tư thế đứng, cúi và bò; lượng khói hít vào tính theo vị trí đầu so với đáy lớp khói, vì vậy cúi hoặc bò dưới lớp khói giảm phơi nhiễm. Chế độ Guided nhắc người chơi cúi hoặc bò khi lớp khói xuống tới đầu. Các thông số (trần 3 m, lớp dày tối đa 2,6 m, đầu đứng 1,55 m, cúi 1,0 m, bò 0,5 m) là giá trị game cho graybox, chưa hiệu chỉnh theo dữ liệu cháy thực tế và chưa đo trên thiết bị Android.
 
