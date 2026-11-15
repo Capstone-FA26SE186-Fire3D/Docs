@@ -431,6 +431,10 @@ Capability `player.movement` (objectKind `Spawn`, không phải vật để đ�
 
 Gợi ý rubric: `fell_from_height` `eq 0` (bắt buộc) cho bài thoát nạn nhiều tầng; `jumped` `lte` một ngưỡng nhỏ nếu muốn phạt chạy nhảy thay vì đi bình tĩnh; `obstacle_climbed` dùng cho bài có vật cản chắn lối. Nhảy hay leo không thay cầu thang: tòa nhà vẫn chỉ thoát qua lối ra.
 
+#### Runtime 2.5.0 (15/11/2026)
+
+Runtime 2.5.0 giữ nguyên giao thức, manifest, danh sách thiết bị và hợp đồng của 2.4.0; gói đã dựng cho 2.0.0 đến 2.4.0 vẫn chơi được. Bản này chỉ đổi hành vi trong ứng dụng: nhân vật người chơi và NPC mới, chọn nhân vật Nam/Nữ, NPC đi theo tự tránh đường, đèn pin điện thoại, thang máy chạy được cho tới khi mất điện hoặc lửa khói tới thang, chấm điểm tập kết sau khi ra cửa, biển chỉ cầu thang và ghim cầu thang trên bản đồ, chỉ chăn ướt mới che chắn, đồ đang cầm ẩn cùng thân người khi camera sát tường. Mobile cần `APP_RUNTIME_VERSION` 2.5.0 và bản Unity export tương ứng; payload đăng ký là `Unity/Tools/RuntimeCatalog/runtime-2.5.0.json`.
+
 #### Phá lối thoát, búa thoát hiểm, cửa sổ và bản đồ (runtime 2.4.0, 12/11/2026)
 
 Runtime 2.4.0 thêm cách xử lý khi lối thoát bị khóa hoặc bị kẹt sau kính, và sửa các điểm người chơi thử trên điện thoại thấy chưa hợp lý.
