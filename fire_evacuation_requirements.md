@@ -111,11 +111,11 @@ Nguồn đồng bộ auth: [BE authentication](../BE/docs/authentication.md) và
 
 | ID | Yêu cầu | Phase |
 | :--- | :--- | :--- |
-| FR-SCENARIO-01 | OrganizationUser tự soạn hoặc tùy chỉnh template không bắt buộc trên revision hợp lệ; hỗ trợ kết hợp mục tiêu trong capability runtime. Admin cung cấp rubric mẫu, Organization chỉnh rồi gửi duyệt cùng bài. Template của hệ thống gồm nguồn lửa, tốc độ cháy, khói, gió, cửa/vùng chặn, vật phẩm, mục tiêu, thời lượng và rubric mẫu; quy mô không gian lấy từ IFC của chính công trình, không phải tham số của template. Mục tiêu "hỗ trợ người khác" là dạng thoát nạn có cứu hộ trong capability hiện có; NPC cần cứu thuộc Phase 2. | 1 |
+| FR-SCENARIO-01 | OrganizationUser tự soạn hoặc tùy chỉnh template không bắt buộc trên revision hợp lệ; hỗ trợ kết hợp mục tiêu trong capability runtime. Admin cung cấp rubric mẫu, Organization chỉnh rồi gửi duyệt cùng bài. Template của hệ thống gồm nguồn lửa, tốc độ cháy, khói, cửa/vùng chặn, vật phẩm, mục tiêu, thời lượng và rubric mẫu; quy mô không gian lấy từ IFC của chính công trình, không phải tham số của template. Mục tiêu "hỗ trợ người khác" là dạng thoát nạn có cứu hộ trong capability hiện có; NPC cần cứu thuộc Phase 2. | 1 |
 | FR-SCENARIO-02 | Hệ thống lưu cấu hình risk-aware A* cùng version scenario để replay và so sánh được. | 1 |
 | FR-SCENARIO-03 | ConfirmForTraining ghi readiness kỹ thuật theo revision/version sau validation. Organization gửi mọi phiên bản kịch bản/rubric cho PlatformAdmin duyệt nội dung; từ chối có lý do, sửa phải tạo bản mới và gửi lại. Readiness không thay approval nội dung. | 1 |
 | FR-SCENARIO-04 | Màn hình readiness phải hiển thị rõ giới hạn của mô phỏng và không dùng ngôn ngữ chứng nhận hoặc phê duyệt PCCC. | 1 |
-| FR-SCENARIO-05 | Scenario hỗ trợ cấu hình nguồn lửa, tốc độ cháy, khói, hướng/cường độ gió, cửa/vùng chặn, spawn, mục tiêu, thời lượng và các tương tác runtime đã được cung cấp. | 1 |
+| FR-SCENARIO-05 | Scenario hỗ trợ cấu hình nguồn lửa, tốc độ cháy, khói, cửa/vùng chặn, spawn, mục tiêu, thời lượng và các tương tác runtime đã được cung cấp. Không có cấu hình gió (bỏ ngày 15/11/2026). | 1 |
 | FR-SCENARIO-06 | AI có thể tạo draft scenario từ tài liệu/facts được phép; draft không tự lưu, sửa editor hoặc publish và phải có nguồn/giả định. | 1 |
 
 ### FR-RELEASE: publish, QR và content package
@@ -137,7 +137,7 @@ Nguồn đồng bộ auth: [BE authentication](../BE/docs/authentication.md) và
 | FR-TRAINING-04 | Prepare pin bài/QR/package đã được phép và tải/verify, không cấp quyền start. Online start kiểm tra quyền public/private, entitlement, quota người và package/runtime trước launch grant; package cache không cho start offline. | 1 |
 | FR-TRAINING-05 | Basic NPC: scenario hỗ trợ số lượng NPC giới hạn, state đơn giản và budget hiệu năng trên Android. | 2 |
 | FR-TRAINING-06 | Mỗi session mới kiểm tra online ở bước start kể cả package đã cache; sau khi launch grant/gameplay đã bắt đầu, mất mạng hoặc entitlement hết hạn không dừng gameplay, event/result được xếp hàng và đồng bộ khi có mạng. `training`, `release`, `scenario`, tenant và QR đã pin không được đổi. Gate event/result dùng actor sở hữu session, event ID/sequence hoặc result key/hash để replay an toàn; không kiểm tra lại entitlement hay trạng thái active hiện tại để chặn sync phiên đã bắt đầu. | 1 |
-| FR-TRAINING-07 | Unity runtime cung cấp thư viện dùng chung cho movement, camera 3D góc nhìn thứ ba (third-person) bám theo nhân vật, collision, cửa, vật phẩm, lửa/khói/gió/cháy lan và chấm điểm. Camera hỗ trợ orbit/zoom có giới hạn và xử lý vật cản trong không gian BIM; dùng chung cho training/playtest, giữ cấu trúc và kích thước công trình. Organization chỉ cấu hình capability đã có. | 1 |
+| FR-TRAINING-07 | Unity runtime cung cấp thư viện dùng chung cho movement, camera 3D góc nhìn thứ ba (third-person) bám theo nhân vật, collision, cửa, vật phẩm, lửa/khói/cháy lan và chấm điểm. Camera hỗ trợ orbit/zoom có giới hạn và xử lý vật cản trong không gian BIM; dùng chung cho training/playtest, giữ cấu trúc và kích thước công trình. Organization chỉ cấu hình capability đã có. | 1 |
 | FR-TRAINING-08 | Backend chấm Assessment theo rubric đã pin của phiên bản bài: rubric gồm `pass_threshold` (0–1) và danh sách tiêu chí; mỗi tiêu chí so một chỉ số do server tính từ event của Unity (`reached_exit`, `completion_time_seconds`, `wrong_exits`, `hazard_exposure`, `distance_meters`, số lần dùng thiết bị mà runtime đã khai báo) với ngưỡng bằng `gte`/`lte`/`eq`, có cờ bắt buộc và trọng số. Điểm = tổng trọng số tiêu chí đạt / tổng trọng số (lưu theo %). Đạt khi mọi tiêu chí bắt buộc đạt và điểm ≥ ngưỡng; kết quả là `Passed`/`NotPassed`/`Incomplete` (bỏ dở) kèm lý do (`MANDATORY_CRITERION_FAILED`, `BELOW_PASS_THRESHOLD`, `ALL_REQUIREMENTS_MET`…); Learn và Guided Drill là `NotAssessed`. Ngưỡng và trọng số do Organization đặt trong rubric (bắt đầu từ rubric mẫu của Admin) và được Admin duyệt cùng bài; hệ thống không gợi ý con số. Thi lại không giới hạn, mọi lần đều lưu; một người chơi lại hoặc chơi nhiều bài cùng tòa trong kỳ chỉ tính một suất người. Hoàn thành khác với đạt; không chứng nhận, module/sprint hoặc điều kiện luyện trước. | 1 |
 | FR-TRAINING-09 | Khói trong runtime đọng dưới trần và hạ dần, chuyển từ trắng sang đen theo thời gian, không xuyên tường và chỉ rò qua khe cửa. Người chơi đứng, cúi hoặc bò; phơi nhiễm khói tính theo độ cao đầu so với lớp khói. Thông số là mô hình game, không phải mô phỏng CFD. | 1 |
 
@@ -148,6 +148,23 @@ Nguồn đồng bộ auth: [BE authentication](../BE/docs/authentication.md) và
 | FR-ANALYTICS-01 | `OrganizationUser` xem aggregate cơ bản theo định nghĩa: `Trainee unique` là số Trainee khác nhau có session đã bắt đầu; `Learner plays` là số session Trainee đã bắt đầu; `Active sessions` là session có heartbeat trong cửa sổ cấu hình; `Completion rate` = session hoàn tất / session đã bắt đầu; `Duration` chỉ tính session có `started_at` và `ended_at` hợp lệ. Playtest, preparation và session chưa bắt đầu không tính learner analytics; session chưa đồng bộ ghi riêng và chưa tính hoàn thành cho tới khi backend xác nhận. | 1 |
 | FR-ANALYTICS-02 | `Trainee` xem kết quả của chính mình theo policy của mode. | 1 |
 | FR-ANALYTICS-03 | Expanded analytics bổ sung filter theo Building/scenario/thời gian, so sánh cohort, export và debrief aggregate. | 2 |
+
+**Hợp đồng báo cáo đang chạy ở BE (BE#80, đối chiếu source `BE` main `46716f8`).** Nguồn: `BE/docs/learner-analytics.md`, `Fire3D.Infrastructure/Reporting/LearnerAnalytics.cs`, `ReportingRange.cs`, `Persistence/Sql/TrainingAnalyticsV2.sql`, `Fire3D.Application/Reporting` (`TrainingAnalyticsCsv`).
+
+| Quy tắc | Giá trị trong code |
+| :--- | :--- |
+| Nhóm so sánh (cohort) | Một cohort là tập các lượt chơi của học viên **bắt đầu** trong khoảng thời gian báo cáo. Lượt chuẩn bị (prepare) và lượt chạy thử của tổ chức không tính. Kết quả gửi muộn sau khi mất mạng vẫn tính cho cohort của ngày bắt đầu lượt. |
+| Cách chia nhóm (`groupBy`) | `day`, `week` (tuần bắt đầu thứ Hai, khóa là ngày thứ Hai), `month` (khóa `YYYY-MM`) theo giờ UTC của lúc bắt đầu; hoặc `building`, `scenario`. Mỗi nhóm có: lượt chơi, số học viên khác nhau, hoàn thành, bỏ dở, chờ đồng bộ, được chấm, đạt, tỉ lệ đạt, thời lượng trung bình. Số học viên khác nhau chỉ đếm trong từng nhóm; không cộng các nhóm để ra tổng. |
+| Hoàn thành / bỏ dở | Hoàn thành = lượt đã có kết quả được máy chủ nhận, không kể lượt bỏ dở (`Abandoned`); bỏ dở và chờ đồng bộ báo riêng. Tỉ lệ đạt = Đạt / (Đạt + Chưa đạt). Thời lượng lấy từ thời gian chơi do runtime ghi (`completion_time_seconds`), không tính thời gian chờ đồng bộ. Tỉ lệ hoặc trung bình không có mẫu trả `null`, không phải 0. |
+| Khoảng thời gian | UTC `[from, to)`, thời điểm phải ghi kèm múi giờ. Mặc định 30 ngày gần nhất. Tối đa **90 ngày**; vượt quá hoặc `to` không sau `from` trả `400 VALIDATION_ERROR`. |
+| Lọc | `buildingId`, `scenarioId` trong phạm vi của báo cáo; mã của tổ chức khác trả `404`. |
+| Xuất tệp | `GET {đường dẫn báo cáo}/export` trả CSV (UTF-8 có BOM) với cùng bộ lọc; không chọn `groupBy` thì chia theo ngày. Chỉ có dòng tổng hợp theo nhóm, không có tên, email hay mã học viên. |
+| Giới hạn số dòng | Tối đa **10 000 dòng**. Nhiều hơn trả `422 EXPORT_ROW_LIMIT_EXCEEDED`; không cắt bớt. |
+| Giới hạn số lần xuất | Tối đa **10 lần xuất thành công mỗi tài khoản mỗi ngày (UTC)**. Vượt trả `429 EXPORT_DAILY_LIMIT_EXCEEDED` kèm `Retry-After`. Mỗi lần xuất được ghi vào `analytics_exports` và nhật ký (`Download`, `AnalyticsExport`). |
+| Chống chèn công thức bảng tính | Ô bắt đầu bằng `=`, `+`, `-`, `@`, ký tự tab hoặc xuống dòng (CR) được thêm dấu nháy đơn `'` phía trước, trừ khi cả ô là một con số (ví dụ `-5`). Ô có dấu phẩy, nháy kép hoặc xuống dòng được bọc trong nháy kép. |
+| Nhóm nhỏ | Không ẩn nhóm có ít người (theo quyết định ghi trong BE#80). |
+
+Lưu ý lệch với FR-ANALYTICS-01: yêu cầu ghi `Duration` theo `started_at`/`ended_at`, còn BE hiện tính theo thời gian chơi do runtime ghi (đổi ở BE#80). Trên web, nút xuất CSV chỉ có ở báo cáo Huấn luyện của tài khoản tổ chức (`FE/src/features/analytics/components/analytics-workspace.tsx`).
 
 ### FR-BILLING: quotation, thanh toán và hỗ trợ
 
@@ -190,11 +207,11 @@ Nguồn đồng bộ auth: [BE authentication](../BE/docs/authentication.md) và
 - **Security:** web đi qua OneShield/OnePortal của iNET; API đi qua Caddy (TLS) trên EC2 tới .NET; edge không thay thế authorization backend. Raw IFC nằm trong AWS S3 private hoặc workstation được kiểm soát; mobile nhận package runtime qua manifest và signed URL có TTL. API xác minh Firebase ID token; mọi query tenant-scoped, gồm retrieval `pgvector`, phải lọc `organizationId`. Không đưa Firebase Admin, Supabase service-role, AWS hoặc LLM key vào client.
 - **Integrity:** package, manifest, event batch và webhook thanh toán phải có hash, schema/version hoặc idempotency key phù hợp.
 - **Privacy:** chỉ thu thập dữ liệu cần cho tập huấn, analytics và vận hành; `Trainee` không xem dữ liệu của người khác.
-- **Availability:** backend stateless, worker retry có kiểm soát; lỗi processing hoặc hash mismatch không được publish im lặng. AI/RAG chạy thành service riêng trên Azure; IFC/Blender và Unity build retry theo job/attempt/hash.
+- **Availability:** backend stateless, worker retry có kiểm soát; lỗi processing hoặc hash mismatch không được publish im lặng. AI/RAG chạy thành service riêng trên AWS EC2 Singapore (từ 09–10/11/2026); IFC/Blender và Unity build retry theo job/attempt/hash.
 - **Consistency:** reserve quota phải khóa grant theo thứ tự cố định và ghi allocation cho một hoặc nhiều grant trong transaction PostgreSQL ngắn; không dùng `SKIP LOCKED` để báo hết quota giả. Payment provenance, entitlement provisioning và idempotency cũng nằm trong transaction ngắn; không giữ transaction khi chờ LLM, PayOS, S3 hoặc worker. Transactional outbox, lease fencing và reconcile xử lý giao tiếp phân tán.
 - **Failure policy:** khi nguồn có thẩm quyền không khả dụng, không cấp quyền mới dựa trên cache; session đã bắt đầu được tiếp tục offline và sync sau. Timeout AI phải tra trạng thái bằng request ID trước khi retry hoặc hoàn reservation.
 - **Compatibility:** Android 10 trở lên; web vận hành trên các trình duyệt hiện đại.
-- **Portability:** LLM đi qua provider adapter để chọn OpenAI hoặc Gemini. Azure đã được chọn cho AI/RAG service; compute cho BE, IFC worker và Unity worker, SKU/region/license vẫn phải chốt bằng spike trước production.
+- **Portability:** LLM đi qua provider adapter (OpenAI hoặc Gemini; production đang chạy Gemini). BE và AI/RAG chạy trên AWS EC2 Singapore từ 09–10/11/2026; IFC worker và Unity worker chạy trên một máy ảo Azure Windows. Chi tiết máy chủ ở [technology mục 14.1](fire-evacuation-training-technology.md).
 
 ## 5. Phạm vi bản cuối và thứ tự triển khai
 

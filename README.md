@@ -24,7 +24,11 @@ Thư mục này chứa tài liệu sản phẩm và kiến trúc cho **Fire Evac
 | `fire_evacuation_bim_rag_pccc.md` | Thiết kế RAG Python dùng BIM để tạo gợi ý PCCC cần chuyên gia thẩm tra. |
 | `fire3d-web-ux-design.md` | Đặc tả UX web, landing POV 3D, hai hướng nhu cầu, Learn, Góc học tập và ranh giới Android/Unity. |
 | `fire3d-web-implementation.md` | Prototype đã triển khai, khác biệt so với thiết kế đầu, lỗi, giải pháp và giới hạn kiểm chứng. |
-| `ifc_ingestion_visual_interaction.md` | Spike 12 file IFC, hướng dẫn xuất IFC, chọn Body, nhận diện thiết bị, thư viện vật liệu PBR, mã issue QA, catalog vật thể tương tác, luật tương tác theo ngữ cảnh và trách nhiệm từng worker/repo. |
+| `release-manifest.md` | Bản phát hành 15/11/2026: commit `main` của từng repo, runtime 2.5.0, bản Unity ghim trong Mobile, phiên bản app và máy chủ production. |
+| `huong-dan-hoc-vien.md` | Hướng dẫn cho học viên: cài ứng dụng, đăng nhập, quét QR, tải bài, chơi và đọc kết quả. |
+| `huong-dan-quan-tri.md` | Hướng dẫn cho quản trị FET3D: duyệt kịch bản, phiên bản runtime, thư viện mẫu và bài học. |
+| `kich-ban-uat.md` | Kịch bản kiểm thử chấp nhận (UAT) cho Quản trị, Tổ chức và Học viên, gồm các ca bị từ chối quyền. |
+| `ifc_ingestion_visual_interaction.md` | Spike 25 file IFC, hai công trình nghiệm thu, thiết bị thử và số đo trên máy, hướng dẫn xuất IFC, chọn Body, nhận diện thiết bị, thư viện vật liệu PBR, mã issue QA, catalog vật thể tương tác, luật tương tác theo ngữ cảnh và trách nhiệm từng worker/repo. |
 
 Requirements là nguồn yêu cầu sản phẩm; technology mô tả service/transaction boundary và contract kỹ thuật. SQL và ERD v7 là overlay/hợp đồng thiết kế cho các quyết định ngày 03/10/2026, không phải bằng chứng migration, API hay vận hành production; schema thật hiện hành nằm ở `ERD Logical Physical/`. `Mẫu report/` là tài sản mẫu độc lập và không thuộc phạm vi đồng bộ này.
 
@@ -49,14 +53,14 @@ FET3D hỗ trợ một Organization quản lý nhiều Building. Mỗi Building 
 | Vector database | `pgvector` trong PostgreSQL/Supabase | Đã chốt; thay cho hướng ChromaDB trong prototype cũ |
 | Cache/event transport | Redis cache-aside và Redis Streams | Có source BE cache/Streams/recovery, deployment phải kiểm riêng; client không kết nối trực tiếp, PostgreSQL vẫn là nguồn sự thật |
 | Authentication và push | BE email/password; Firebase Authentication cho Google Sign-In; Firebase Cloud Messaging (FCM) | Đã chốt; Mailgun dùng cho OTP đăng ký và reset password |
-| LLM | OpenAI API hoặc Google Gemini API (khóa/cấu hình qua Google AI Studio) | Chưa chọn nhà cung cấp cuối; chỉ triển khai một adapter production sau đánh giá |
+| LLM | Google Gemini API (khóa/cấu hình qua Google AI Studio); source AI vẫn giữ adapter OpenAI | Production đang chạy Gemini (`LLM_PROVIDER=gemini` theo [AI/docs/tong-quan-va-env.md](../AI/docs/tong-quan-va-env.md)); chưa thấy biên bản đánh giá so sánh hai nhà cung cấp |
 | Object storage | Amazon S3 (AWS S3) | Đã chốt |
 | AI compute | AWS EC2 Singapore (`ap-southeast-1`), FastAPI chạy dịch vụ systemd `fire3d-ai` sau Caddy (từ 09/11/2026; Azure App Service cũ đã ngừng 06/11/2026) | Đang chạy production; chi phí theo dõi trên AWS |
 | BE/worker compute | BE: AWS EC2 `t3.small` Singapore, container Docker image từ GHCR, Caddy giữ TLS cho `api.fet3d.io.vn`, Redis chạy cùng máy. IFC geometry worker và Unity build worker: Azure VM Windows (Azure for Students, Indonesia Central), pull job từ BE | Chuyển 09–10/11/2026 khi subscription Azure cũ hết hạn; VM worker tắt (deallocate) khi không dùng |
 
 OneShield thuộc hệ thống OnePortal của iNET là DNS và lớp edge/bảo vệ cho web `fet3d.io.vn` (proxy sang Vercel); `api.fet3d.io.vn` chỉ dùng DNS tới Caddy trên EC2. Capability, gói/SKU, DNS, TLS termination, WAF/rate limit, logging, SLA, region và chi phí phải xác minh trước production. OneShield không cấp quyền nghiệp vụ và không thay thế kiểm tra identity, tenant hoặc authorization của .NET/PostgreSQL.
 
-Supabase chỉ cung cấp PostgreSQL/`pgvector` trong kiến trúc này, không thay Firebase Authentication. BE quản lý email/password và FET3D session; Firebase chỉ xác minh Google Sign-In, FCM chỉ gửi push, Mailgun gửi OTP đăng ký và reset password. Redis chỉ phục vụ cache-aside và vận chuyển event/job qua backend; FE/Mobile không kết nối Redis và cache không cấp quyền. PostgreSQL outbox là nguồn event/replay, dispatcher có lease riêng, còn worker claim attempt/lease sau khi nhận message; consumer ACK chỉ sau transaction ghi tác động và receipt thành công. Backend vẫn là nơi ánh xạ Firebase UID sang ba vai trò FET3D, kiểm tra `organizationId` và thực thi authorization. Azure đã được chọn cho AI/RAG service; LLM, BE/worker compute và các thông số production khác vẫn qua decision gate.
+Supabase chỉ cung cấp PostgreSQL/`pgvector` trong kiến trúc này, không thay Firebase Authentication. BE quản lý email/password và FET3D session; Firebase chỉ xác minh Google Sign-In, FCM chỉ gửi push, Mailgun gửi OTP đăng ký và reset password. Redis chỉ phục vụ cache-aside và vận chuyển event/job qua backend; FE/Mobile không kết nối Redis và cache không cấp quyền. PostgreSQL outbox là nguồn event/replay, dispatcher có lease riêng, còn worker claim attempt/lease sau khi nhận message; consumer ACK chỉ sau transaction ghi tác động và receipt thành công. Backend vẫn là nơi ánh xạ Firebase UID sang ba vai trò FET3D, kiểm tra `organizationId` và thực thi authorization. Từ 09–10/11/2026 BE và AI/RAG chạy trên AWS EC2 Singapore; Azure chỉ còn máy ảo chạy IFC geometry worker và Unity build worker. Các thông số production còn mở nằm ở bảng quyết định của tổng quan dự án.
 
 Source AI hiện có **RAG v2** tại `AI/rag-api/app/v2`, request store/recovery, `PgVectorIndex`/`MemoryIndex`, OpenAI/Gemini/fake adapters, safety gate và eval offline. ChromaDB cùng `/chat`, `/documents`, `/pccc/*` thuộc legacy (routes tắt mặc định), không đại diện toàn bộ implementation. FE gọi .NET cho AI nghiệp vụ; backend cấp scope/quota rồi mới gọi FastAPI. Có source không chứng minh dữ liệu đã migrate hoặc provider/pgvector/deployment production đã nghiệm thu.
 
@@ -77,8 +81,8 @@ Source AI hiện có **RAG v2** tại `AI/rag-api/app/v2`, request store/recover
 ## Quyết định đã chốt trong phiên thiết kế
 
 - Organization được import IFC, xem preview/editor trên web và tự chỉnh scenario. AI chỉ trả lời có nguồn hoặc tạo draft; không tự sửa editor và không tự publish.
-- Lửa, khói, gió, cháy lan, cửa, bình chữa cháy, khăn, nguồn nước và hành vi nhân vật là thư viện runtime Unity do nhóm xây dựng. Organization chỉ đặt/chọn/cấu hình những capability đã có.
-- Gió và khói tác động theo mô hình game có thể kiểm thử, không phải CFD hoặc mô phỏng thông gió kỹ thuật.
+- Lửa, khói, cháy lan, cửa, bình chữa cháy, khăn, nguồn nước và hành vi nhân vật là thư viện runtime Unity do nhóm xây dựng. Organization chỉ đặt/chọn/cấu hình những capability đã có.
+- Khói tác động theo mô hình game có thể kiểm thử, không phải CFD hoặc mô phỏng thông gió kỹ thuật. Gió không có trong sản phẩm: nhóm bỏ tính năng gió ngày 15/11/2026.
 - Trainee dùng AI trên web và Mobile ngoài lượt đánh giá, hỏi bài đã duyệt/phát hành có quyền chơi và kết quả cá nhân; quota ngày miễn phí do PlatformAdmin cấu hình và không trừ vào quota AI organization.
 - Quota AI đi kèm các Building cộng chung cho Organization; hết quota phải mua thêm và thanh toán trước khi tiếp tục dùng AI tính phí. Không tự cho dùng vượt quota rồi đối soát cuối kỳ. Trainee giữ quota ngày miễn phí riêng, không trừ quỹ Organization. Đơn vị/lượng quota, hiệu lực và xử lý quota còn dư chưa chốt. Reserve/settle và retry phải chống trừ/cấp quota trùng; timeout reconcile bằng request ID trước khi hoàn hoặc gọi lại.
 - QR ổn định theo Building mở danh sách bài. Session mới phải kiểm tra online; mất mạng sau khi session bắt đầu không làm mất phiên hoặc kết quả.
@@ -113,8 +117,22 @@ Bảng nguồn chính về quyết định còn mở, tác động và mốc ph�
 - Checkpoint sau mốc đáng kể và trước bàn giao; ghi phần đã xong/còn dở, branch/commit, kiểm tra thực tế và bước tiếp theo. Không hứa ghi kịp trước khi hết quota hoặc phiên ngắt đột ngột; không lưu secrets/transcript.
 - Giữ nguyên thư mục `Mẫu report/` đang untracked, không stage, xóa hoặc tự chỉnh file mẫu. Kiểm tra danh sách stage cụ thể, không dùng `git add -A` mù quáng.
 - Task chỉ sửa tài liệu: kiểm tra liên kết, tính nhất quán và `git diff --check`, không chạy toàn bộ build/test ứng dụng. Không có test chạy không đồng nghĩa đã kiểm thử nghiệp vụ.
-- Stack đã chốt cho nhóm nằm ở bảng Tổng quan công nghệ: web Next.js, Mobile React Native/Expo với native Android bridge gọi Unity, backend C#/.NET, AI/IFC Python/FastAPI, BE và AI/RAG trên AWS EC2, worker Unity/IFC trên Azure VM, Supabase PostgreSQL + `pgvector`, Redis cache/Streams ở kiến trúc đích, Firebase Auth/FCM và AWS S3. Không triển khai Flutter. Redis có source cache/Streams/recovery ở BE, nghiệm thu deployment riêng; LLM vẫn phải qua bước chọn/benchmark trước khi gọi là production stack.
+- Stack đã chốt cho nhóm nằm ở bảng Tổng quan công nghệ: web Next.js, Mobile React Native/Expo với native Android bridge gọi Unity, backend C#/.NET, AI/IFC Python/FastAPI, BE và AI/RAG trên AWS EC2, worker Unity/IFC trên Azure VM, Supabase PostgreSQL + `pgvector`, Redis cache/Streams ở kiến trúc đích, Firebase Auth/FCM và AWS S3. Không triển khai Flutter. Redis có source cache/Streams/recovery ở BE, nghiệm thu deployment riêng; LLM production đang dùng Gemini, chưa có benchmark so sánh được ghi lại.
 
 ### Giới hạn sản phẩm
 
 FET3D phục vụ học tập, tập huấn và hoạt động đánh giá của đồ án. Kết quả mô phỏng, analytics và `ConfirmForTraining` không được dùng để kết luận công trình an toàn, đáp ứng quy chuẩn hay thay thế hướng dẫn khẩn cấp tại hiện trường.
+
+### Giới hạn đã biết của bản phát hành 15/11/2026
+
+Các giới hạn dưới đây là hiện trạng của bản đang chạy (xem [release-manifest.md](release-manifest.md)), không phải lỗi chờ sửa trong đợt này.
+
+| Giới hạn | Chi tiết | Nguồn |
+| :--- | :--- | :--- |
+| Chỉ có Android | Bài tập huấn 3D chỉ chạy trong ứng dụng Android. Web dùng để đọc bài học, quản lý công trình và soạn kịch bản; không có bản iOS. | `Mobile/app.json` chỉ khai báo Android; [technology mục 12](fire-evacuation-training-technology.md#12-gameplay-third-person-và-biểu-diễn-bim) |
+| Không có gió | Tính năng gió bị bỏ ngày 15/11/2026. Lửa và khói vẫn lan theo mô hình game. | Quyết định của nhóm 15/11/2026 |
+| Không có nét mặt hoảng loạn | Nhân vật không đổi nét mặt khi hoảng loạn; trạng thái của người trong tòa nhà chỉ hiện bằng biểu tượng trên đầu. | Quyết định của nhóm 15/11/2026; [IFC mục 8](ifc_ingestion_visual_interaction.md#8-hud-trạng-thái) |
+| Máy ấm lên khi chơi lâu | Trên điện thoại tầm trung dùng để nghiệm thu (Redmi Note 10S), máy ấm lên khi chơi lâu. Trưởng nhóm chấp nhận mức này; nhiệt độ của lần thử 15/11/2026 chưa đo. | [IFC mục 10.2](ifc_ingestion_visual_interaction.md#102-thiết-bị-nghiệm-thu-và-số-đo-trên-máy) |
+| Chưa lên Google Play công khai | Google Play từ chối đưa ứng dụng lên kênh chính thức cho tới khi có đủ 12 người thử trong 14 ngày. Hiện ứng dụng chỉ phát qua kênh thử nghiệm của Google Play hoặc tệp cài do nhóm gửi. | Lần nộp ngày 15/11/2026 (versionCode 1001901) bị từ chối với lý do này |
+| Nội dung PCCC chưa được chuyên gia duyệt | Tác dụng của khăn ướt, chăn ướt, che mũi miệng, chèn khe cửa và chỗ trú tạm trong game là mô phỏng để tập huấn, chưa được chuyên gia PCCC thẩm tra. | [IFC mục 11](ifc_ingestion_visual_interaction.md#11-giới-hạn-và-quyết-định-còn-mở) |
+| Mỗi lần nhập chỉ một tệp IFC | Mỗi phiên bản mô hình của công trình (revision) nhận đúng một tệp IFC. Mô hình tách theo bộ môn phải được gộp khi xuất (ví dụ "Include linked files" trong Revit). | [IFC mục 4](ifc_ingestion_visual_interaction.md#4-nhiều-ifc-cho-một-revision-đề-xuất-chưa-làm) |
