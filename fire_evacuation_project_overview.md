@@ -86,7 +86,7 @@ IFC private storage on AWS S3
 - AWS S3 lưu raw IFC riêng tư, manifest và content package bất biến.
 - React Native/Expo xử lý local email/password hoặc Google Sign-In, QR, danh sách bài, download/cache/verify, kiểm tra dịch vụ, FCM và handoff qua native Android bridge; Unity thực hiện scene, hazard surrogate, routing, hành vi tương tác và kết quả training.
 
-LLM production hiện là Google Gemini API (cấu hình qua Google AI Studio); source AI vẫn giữ adapter OpenAI. BE và AI/RAG chạy trên AWS EC2 Singapore từ 09–10/11/2026; IFC geometry worker và Unity build worker chạy trên Azure VM Windows (BE#110).
+LLM production hiện là mô hình Gemini `gemini-3.6-flash` gọi qua một cổng trung gian trả phí tương thích OpenAI (vibi.top); Google AI Studio đã bỏ từ 10/11/2026 vì hết hạn mức miễn phí (AI#32). Embedding chạy cục bộ trên máy AI. BE và AI/RAG chạy trên AWS EC2 Singapore từ 09–10/11/2026; IFC geometry worker và Unity build worker chạy trên Azure VM Windows (BE#110).
 
 ## Mô hình thương mại và AI
 
@@ -128,7 +128,7 @@ Cập nhật 15/11/2026: cột Trạng thái ghi mục nào đã có câu trả 
 | Bộ rubric mẫu khuyến nghị theo loại bài (ngưỡng/trọng số gợi ý). Cơ chế chấm đã chốt, xem mục Đánh giá đạt/chưa đạt | Thư viện Organization | Runtime authoring | Còn mở (chưa có danh sách ngưỡng/trọng số khuyến nghị trong Docs) |
 | Bộ IFC, Android mục tiêu và benchmark | QA support matrix, package budget | IFC/Mobile release | **Đã có.** Bộ IFC nghiệm thu là hai công trình ở [IFC mục 10.1](ifc_ingestion_visual_interaction.md#101-hai-công-trình-nghiệm-thu); chỉ nhắm Android, thiết bị thử và số đo ở [IFC mục 10.2](ifc_ingestion_visual_interaction.md#102-thiết-bị-nghiệm-thu-và-số-đo-trên-máy). Các số chưa đo được liệt kê ở cùng mục |
 | Unity project/build worker | Toolchain và vận hành | Production deployment | **Đã có.** Unity Editor 6000.6.6f1; build worker và IFC geometry worker chạy trên một máy ảo Azure Windows, lấy việc từ BE ([technology mục 4 và 14.1](fire-evacuation-training-technology.md)) |
-| LLM/embedding | Vector dimension, chi phí | Production deployment | **LLM: đã có.** Production chạy Google Gemini (`LLM_PROVIDER=gemini`, [AI/docs/tong-quan-va-env.md](../AI/docs/tong-quan-va-env.md)). Không tìm thấy biên bản đánh giá so sánh với OpenAI. Mô hình embedding đang dùng trên production: chưa xác nhận trong lần rà này (mặc định trong repo AI cho Gemini là `gemini-embedding-001`) |
+| LLM/embedding | Vector dimension, chi phí | Production deployment | **Đã có (AI#32, 10–13/11/2026).** Trò chuyện: `gemini-3.6-flash` qua cổng trung gian trả phí tương thích OpenAI (vibi.top). Embedding: `intfloat/multilingual-e5-small` chạy cục bộ trên máy AI, 384 chiều. Chưa có lần đánh giá so sánh nhà cung cấp nào được lưu lại; chi phí theo tháng chưa ghi |
 | Chi phí AWS/Azure cho BE, AI và worker | Chi phí vận hành | Production deployment | Còn mở (chưa có số liệu chi phí trong Docs) |
 
 Đây là bảng nguồn chính cho các mục chưa chốt; không trình bày các mục "Còn mở" như đã triển khai.
