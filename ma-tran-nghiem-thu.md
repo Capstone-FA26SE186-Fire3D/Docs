@@ -190,7 +190,7 @@ Không tìm thấy chu kỳ phụ thuộc: Docs#42 phụ thuộc #37–#41, còn
 - **NPC:** FR-TRAINING-05 ghi "số lượng NPC giới hạn … budget hiệu năng"; quyết định 16/11 là không giới hạn cứng (Unity#11).
 - **NavMesh và Blender:** FR-IFC-02/FR-IFC-05 ghi worker tạo NavMesh và dùng Blender script; bản đang chạy dùng lưới trong app và worker Python IfcOpenShell trong `Unity/Tools/GeometryWorker`.
 - **Bảng quyết định** trong overview ghi "Bộ IFC, Android mục tiêu và benchmark: Đã có", trong khi Docs#40 còn mở vì ngưỡng chưa chốt.
-- `implementation-status.md` vẫn ghi đối chiếu ngày 21/10/2026; `release-manifest.md` ghi commit tối 15/11 (FE `7be3008`, BE `46716f8`, Unity `ae71e04`, Mobile `3ada34b`) trong khi `main` ngày 16/11 đã là FE `f1a7a22`, BE `528f9c4`, Unity `43839c2`, Mobile `533b6ee`.
+- `implementation-status.md` vẫn ghi đối chiếu ngày 21/10/2026. (`release-manifest.md` đã cập nhật theo `main` ngày 16/11/2026.)
 - FE#70 bình luận 15/11 ghi FE#51, #52, #53, #54, #58, #61, #104 "đang mở", nhưng các issue này đã đóng cùng ngày.
 - Một test FE đang đỏ: `tests/e2e/library-admin.spec.ts` dòng 408 (FE#54), chưa sửa.
 
