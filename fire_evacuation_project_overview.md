@@ -140,6 +140,7 @@ Cập nhật 15/11/2026: cột Trạng thái ghi mục nào đã có câu trả 
 - **Số người trong tòa nhà (NPC):** do người soạn kịch bản đặt trong trình soạn thảo, không sinh ngẫu nhiên; hệ thống không đặt giới hạn cứng (Unity#11). Người soạn tự cân số lượng cho máy yếu.
 - **Duyệt nội dung an toàn cháy:** PlatformAdmin là người có chuyên môn và là người duyệt nội dung (bài Learn, kịch bản trước khi phát hành, thư viện mẫu) qua luồng duyệt và phát hành của Admin. Không có bước chuyên gia PCCC bên ngoài; game là mô phỏng tập huấn, không phải chứng nhận PCCC.
 - **Giấy phép tài sản 3D và động tác:** không rà thêm điều khoản thương mại; dự án dùng cho mục đích học tập, phi thương mại. Nguồn từng tài sản ghi ở `Unity/Assets/_Fire3D/Art/Characters/CREDITS.md` (Unity#56).
+- **Hai tệp IFC nghiệm thu:** không rà thêm giấy phép (quyết định 16/11/2026). Đây là tệp thử nội bộ của nhóm, dùng cho học tập, phi thương mại, không phát hành kèm sản phẩm; công trình thật do tổ chức tự tải tệp IFC của mình lên. Tệp vẫn không commit vào repo (Docs#40).
 
 ## Ranh giới service và nhất quán dữ liệu
 

@@ -555,7 +555,7 @@ Editor chỉ thêm vật lên artifact; không sửa tường, cửa, sàn hay k
 
 ### 10.1. Hai công trình nghiệm thu
 
-Hai tệp IFC dưới đây là bộ nghiệm thu của nhóm. Cả hai lấy từ kho tệp thử công khai của ThatOpen (`engine_web-ifc/tests/ifcfiles/public`, xem mục 12). **Giấy phép sử dụng của hai tệp mẫu này chưa được xác nhận**: kho nguồn không ghi giấy phép cho từng tệp. Vì vậy tệp IFC không nằm trong repo nào của nhóm; chúng chỉ ở máy của nhóm (`artifacts/FET3D_Demo/ifc/`, ngoài Git) và trong kho lưu trữ riêng của hệ thống sau khi tải lên.
+Hai tệp IFC dưới đây là bộ nghiệm thu của nhóm. Cả hai lấy từ kho tệp thử công khai của ThatOpen (`engine_web-ifc/tests/ifcfiles/public`, xem mục 12). Kho nguồn không ghi giấy phép cho từng tệp; trưởng nhóm quyết định ngày 16/11/2026 không rà thêm vì đây là tệp thử nội bộ, dùng cho học tập, phi thương mại, không phát hành kèm sản phẩm (công trình thật do tổ chức tự tải tệp IFC của mình lên). Tệp IFC vẫn không nằm trong repo nào của nhóm; chúng chỉ ở máy của nhóm (`artifacts/FET3D_Demo/ifc/`, ngoài Git) và trong kho lưu trữ riêng của hệ thống sau khi tải lên.
 
 Các con số bên dưới đọc từ `result.json` và `building_metadata.json` do IFC geometry worker sinh ra, lưu ở `Unity/Builds/SchoolInput` và `Unity/Builds/TowerInput` (thư mục dựng tại máy, không commit).
 
@@ -641,7 +641,7 @@ Chưa đo (không ghi con số nào cho các mục này cho tới khi có lượ
 - Texture CC0 từ ambientCG dùng được cho thương mại; vẫn ghi nguồn trong thư viện. Mô hình trên Sketchfab có license riêng từng mục, không tự đưa vào sản phẩm.
 - Tác dụng của khăn ướt, chăn ướt, che mũi, chèn khe cửa và nơi trú tạm do PlatformAdmin duyệt (quyết định 16/11/2026), không có chuyên gia PCCC bên ngoài; game chỉ là mô phỏng tập huấn, không phải hướng dẫn khẩn cấp thực tế.
 - Kết quả spike (mục 2) là bằng chứng kỹ thuật cục bộ, không phải bằng chứng worker production, package Android hay hiệu năng thiết bị; số đo trên thiết bị nằm ở mục 10.2.
-- Giấy phép của hai tệp IFC nghiệm thu (mục 10.1) chưa được xác nhận.
+- Hai tệp IFC nghiệm thu (mục 10.1) chỉ dùng thử nội bộ, không rà giấy phép (quyết định 16/11/2026); không đưa vào repo hay phát hành kèm sản phẩm.
 - Không có gió và không có nét mặt hoảng loạn (bỏ ngày 15/11/2026); chỉ chạy trên Android.
 - `ERD Logical Physical/` sinh từ schema production nên vẫn còn `revision_style_selections` và hai giá trị `StylePreset`/`ColorScheme` của `organization_library_items.kind` cho tới khi BE#194 lên production; sinh lại theo `ERD Logical Physical/_sinh-lai/README.md` sau đó, không sửa tay.
 
