@@ -24,10 +24,13 @@ Thư mục này chứa tài liệu sản phẩm và kiến trúc cho **Fire Evac
 | `fire_evacuation_bim_rag_pccc.md` | Thiết kế RAG Python dùng BIM để tạo gợi ý PCCC cần chuyên gia thẩm tra. |
 | `fire3d-web-ux-design.md` | Đặc tả UX web, landing POV 3D, hai hướng nhu cầu, Learn, Góc học tập và ranh giới Android/Unity. |
 | `fire3d-web-implementation.md` | Prototype đã triển khai, khác biệt so với thiết kế đầu, lỗi, giải pháp và giới hạn kiểm chứng. |
-| `release-manifest.md` | Bản phát hành 15/11/2026: commit `main` của từng repo, runtime 2.5.0, bản Unity ghim trong Mobile, phiên bản app và máy chủ production. |
+| `release-manifest.md` | Bản phát hành 16/11/2026: commit `main` của từng repo, runtime 2.5.0, bản Unity ghim trong Mobile, phiên bản app và máy chủ production. |
 | `huong-dan-hoc-vien.md` | Hướng dẫn cho học viên: cài ứng dụng, đăng nhập, quét QR, tải bài, chơi và đọc kết quả. |
 | `huong-dan-quan-tri.md` | Hướng dẫn cho quản trị FET3D: duyệt kịch bản, phiên bản runtime, thư viện mẫu và bài học. |
-| `kich-ban-uat.md` | Kịch bản kiểm thử chấp nhận (UAT) cho Quản trị, Tổ chức và Học viên, gồm các ca bị từ chối quyền. |
+| `kich-ban-uat.md` | Kịch bản kiểm thử chấp nhận (UAT) cho Quản trị, Tổ chức và Học viên, gồm các ca bị từ chối quyền, phiếu góp ý, sổ lỗi và biên bản nghiệm thu để điền. |
+| `ma-tran-nghiem-thu.md` | Trạng thái và bằng chứng của 89 mã yêu cầu, 9 nhóm NFR và checklist (Docs#37), các yêu cầu mồ côi và việc còn chặn mức 100%. |
+| `cau-hinh-va-thu-vien.md` | Mục lục hướng dẫn vận hành của từng repo, tên biến cấu hình (không kèm giá trị) và danh mục thư viện, tài sản kèm giấy phép. |
+| `bien-ban-ban-giao.md` | Mẫu biên bản bàn giao bản cuối: nội dung bàn giao, tình trạng tiêu chí D5, phần ký. |
 | `ifc_ingestion_visual_interaction.md` | Spike 25 file IFC, hai công trình nghiệm thu, thiết bị thử và số đo trên máy, hướng dẫn xuất IFC, chọn Body, nhận diện thiết bị, thư viện vật liệu PBR, mã issue QA, catalog vật thể tương tác, luật tương tác theo ngữ cảnh và trách nhiệm từng worker/repo. |
 
 Requirements là nguồn yêu cầu sản phẩm; technology mô tả service/transaction boundary và contract kỹ thuật. SQL và ERD v7 là overlay/hợp đồng thiết kế cho các quyết định ngày 03/10/2026, không phải bằng chứng migration, API hay vận hành production; schema thật hiện hành nằm ở `ERD Logical Physical/`. `Mẫu report/` là tài sản mẫu độc lập và không thuộc phạm vi đồng bộ này.

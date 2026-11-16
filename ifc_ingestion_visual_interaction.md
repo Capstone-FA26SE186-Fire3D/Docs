@@ -206,7 +206,7 @@ Cùng đợt: cánh cửa hai cánh được **cắt** tại chỗ hai cánh g�
 
 ### 5.4. Ngân sách hình học và thay thế asset
 
-- Ngưỡng cảnh báo của IFC worker: **150 000 tam giác mỗi tầng**; tầng vượt ngưỡng nhận `IFC_TRIANGLE_BUDGET_EXCEEDED` (cảnh báo, không chặn). Đã đo trên máy nghiệm thu (mục 10.2): trường học có tầng 642 486 tam giác, tổng khoảng 1,4 triệu, vẫn chơi được ở 30 khung hình/giây sau khi game ẩn vật nhỏ ở xa (Unity PR #114) và chọn mức đồ họa theo máy (Unity PR #87). Mục tiêu ≤ 150 draw call sau batching chưa đo trên điện thoại.
+- Ngưỡng cảnh báo của IFC worker: **150 000 tam giác mỗi tầng**; tầng vượt ngưỡng nhận `IFC_TRIANGLE_BUDGET_EXCEEDED` (cảnh báo, không chặn). Đã đo trên máy nghiệm thu (mục 10.2): trường học có tầng 642 486 tam giác, tổng khoảng 1,4 triệu, vẫn chơi được ở 30 khung hình/giây sau khi game ẩn vật nhỏ ở xa (Unity PR #114) và chọn mức đồ họa theo máy (Unity PR #87). Mục tiêu cũ ≤ 150 draw call chưa từng đo trên điện thoại nên không dùng làm ngưỡng; ngưỡng đề xuất cho tam giác và draw call nằm ở mục 10.2.
 - Thay thế theo bounding box, giữ `GlobalId`, vị trí, hướng và kích thước gốc: cửa (theo số cánh/kính), đèn, thiết bị vệ sinh, tủ/kệ hộp (`Kubus-Einrichtung`), bình/tủ chữa cháy. Không thay tường, sàn, trần, cầu thang, lan can.
 - Phần tử vượt ngân sách nhưng không có asset thay: decimate có giới hạn sai số hình học và ghi `IFC_TRIANGLE_BUDGET_EXCEEDED`.
 - LOD0/LOD1 cho phần tử lặp nhiều; occlusion culling theo phòng.
@@ -620,18 +620,55 @@ Ghi nhận thêm ở lần thử 15/11/2026:
 - Máy ấm lên khi chơi lâu. Trưởng nhóm chấp nhận mức này cho máy tầm trung; nhiệt độ lần này chưa đo.
 - Lỗi Vulkan −4 lúc vào bài xuất hiện một lần, hai lần vào bài sau đó không lặp lại.
 
-Chưa đo (không ghi con số nào cho các mục này cho tới khi có lượt đo):
+Số đo tòa tháp 28 tầng, ghi trong ghi chú bàn giao Unity đêm 10–11/11/2026 (bản thử runtime 2.3.0, bài "Cháy căn hộ tầng 3…", trước khi phát hành):
 
-| Mục | Trạng thái |
-| :--- | :--- |
-| Mức RAM cao nhất khi chơi | chưa đo |
-| Thời gian tải bài (từ lúc bấm bắt đầu tới lúc chơi được) | chưa đo |
-| Giới hạn dung lượng gói bài | chưa đo, chưa đặt giới hạn |
-| Số người trong tòa nhà (NPC) tối đa mà máy chịu được | chưa đo |
-| Một phiên chơi liên tục 15 phút | chưa đo (lần dài nhất có ghi là 10 phút, ngày 13/11/2026) |
-| Số lệnh vẽ (draw call) trên điện thoại | chưa đo |
-| Tòa tháp 28 tầng: khung hình/giây và nhiệt độ | chưa đo thành số; chỉ ghi nhận là chạy bình thường trên cùng bản thử ngày 13/11/2026 |
-| Máy Android khác ngoài Redmi Note 10S | chưa thử |
+| Lúc | Khung hình/giây | Nhiệt độ | Thời gian vào bài |
+| :--- | :--- | :--- | :--- |
+| Trước khi sửa | 1–2 | CPU 77 °C | — |
+| Sau khi chỉ bật 6 hộp phản chiếu gần người chơi (Unity PR #106) | 20–29, có lúc 14–19 | CPU 70–80 °C, vỏ máy 52–57 °C | khoảng 56–65 giây |
+
+Tòa tháp chưa đo lại trên runtime 2.4.0/2.5.0; ngày 13/11/2026 chỉ ghi nhận là chạy bình thường.
+
+#### Ngưỡng nghiệm thu đề xuất (16/11/2026)
+
+Mọi ngưỡng dưới đây là **đề xuất, chờ trưởng nhóm duyệt**. Ngưỡng nào có số đo làm cơ sở thì ghi rõ lần đo; ngưỡng nào chưa có số đo thì chỉ ghi cách chốt, không đặt con số.
+
+| Mục | Ngưỡng đề xuất | Cơ sở |
+| :--- | :--- | :--- |
+| Khung hình/giây | Trung bình ≥ 29 trong cả phiên (game khóa 30); khung chậm hơn 50 ms ≤ 5 % số khung; không có giây nào dưới 20 khung hình/giây, trừ lúc đang tải | Trường học 15/11/2026: 30 đều, khoảng 4 % khung 50–66 ms. Mức 30 lấy theo yêu cầu (`fire_evacuation_requirements.md`, mục Performance). Mức sàn 20 lấy từ cận dưới tòa tháp 10–11/11 |
+| Nhiệt độ sau 15 phút | Trạng thái nhiệt của máy (`dumpsys thermalservice`) chưa tới mức nặng (SEVERE); khung hình/giây vẫn đạt dòng trên ở phút thứ 15; vỏ máy không quá 57 °C | 57 °C là mức cao nhất đã ghi (tòa tháp 10–11/11). Trưởng nhóm đã chấp nhận máy ấm khi chơi lâu (15/11) |
+| Thời gian vào bài (gói đã tải sẵn, từ lúc bấm bắt đầu tới lúc điều khiển được nhân vật) | Tòa tháp ≤ 65 giây (không chậm hơn lần đo 10–11/11); trường học: đo lần đầu, ngưỡng = số đo được làm tròn lên 5 giây | Chỉ có số đo tòa tháp |
+| Tam giác mỗi gói | Tổng ≤ 1,6 triệu tam giác (đã chơi được với trường học 1,42 triệu và tòa tháp 1,59 triệu); vượt mức này phải đo lại trên máy trước khi phát hành. Cảnh báo 150 000 tam giác mỗi tầng của IFC worker giữ nguyên (cảnh báo, không chặn) | Mục 10.1 và các lần đo 13/11, 15/11 |
+| Draw call | Không đặt ngưỡng chặn; ghi số draw call trong mỗi phiên đo để so giữa các bản. Tiêu chí chặn là khung hình/giây | Chưa từng đo trên điện thoại. Trong Unity Editor, trường học vẽ khoảng 2 580–2 893 vật sau Unity PR #114 |
+| RAM | App không bị hệ thống đóng trong 15 phút; ngưỡng = mức cao nhất đo được ở lần đo đầu cộng 20 % | Chưa đo |
+| Dung lượng gói bài Android | Ngưỡng = gói lớn nhất đã chơi đạt các dòng trên (trường học hoặc tòa tháp); gói lớn hơn phải đo lại trên máy | Chưa ghi dung lượng gói Android. Tệp `building.glb` đầu vào tại máy khoảng 124 MB (trường học) và 122 MB (tòa tháp), không phải dung lượng gói |
+| Số người trong tòa nhà (NPC) | Không phải giới hạn của hệ thống: tác giả bài tự đặt số NPC, không có mức trần (quyết định 16/11/2026). Mức thử đề xuất: đo bài có nhiều NPC nhất đang phát hành và bản gấp đôi số đó trên trường học; bài vượt mức đã đo thì không bảo đảm đạt dòng khung hình/giây | Chưa đo |
+| Kết quả gửi lại (cùng một lượt chơi) | Giống hệt, dung sai 0: gửi lại cùng dữ liệu không đổi kết quả, dữ liệu khác bị từ chối | Backend đã làm theo cách này (FR-TRAINING-RECOVERY-01) |
+| Mức phơi nhiễm khi chơi lại cùng bài, cùng đường đi | Chốt sau khi đo 3 lượt người chơi tự động (AutoPilot) cùng điểm xuất phát; ngưỡng = chênh lệch lớn nhất giữa 3 lượt | Chưa đo. Mô phỏng nguy hiểm xác định theo kịch bản, nhưng đường đi và thời điểm của người chơi khác nhau giữa các lượt |
+
+Còn phải đo trước khi chốt: RAM, thời gian vào bài trường học, dung lượng gói Android, số NPC, draw call trên điện thoại, mức phơi nhiễm khi chơi lại, phiên 15 phút liên tục (lần dài nhất có ghi là 10 phút, ngày 13/11/2026), tòa tháp trên runtime 2.5.0. Máy Android khác ngoài Redmi Note 10S chưa thử.
+
+#### Cách đo một phiên 15 phút
+
+Máy nối USB, bật gỡ lỗi USB; trong Git Bash chạy lệnh `adb shell` có đường dẫn thì đặt `MSYS_NO_PATHCONV=1` trước lệnh.
+
+1. Gói bài đã tải sẵn. Xóa số liệu khung hình cũ: `adb shell dumpsys SurfaceFlinger --timestats -clear -enable`.
+2. Bấm "Bắt đầu" và bấm giờ tới lúc điều khiển được nhân vật (thời gian vào bài).
+3. Chơi liên tục 15 phút. Mỗi phút ghi:
+   - RAM: `adb shell dumpsys meminfo com.fet3d.app`, dòng `TOTAL PSS`; lấy mức cao nhất.
+   - Nhiệt: `adb shell dumpsys thermalservice`, phần "Current temperatures from HAL" (CPU, vỏ máy) và "Thermal Status".
+4. Hết 15 phút: `adb shell dumpsys SurfaceFlinger --timestats -dump`, tìm lớp `SurfaceView[com.fet3d.app/…UnityHostActivity](BLAST)`, dòng `averageFPS` nằm khoảng 20 dòng bên dưới. Khung hình thấp nhất và khung chậm đọc thêm từ dòng `[Fire3D perf]` trong `adb logcat`.
+5. Draw call, tam giác đang vẽ: dùng bản APK phát triển và Unity Profiler (mục Rendering) hoặc người chơi tự động AutoPilot (bản phát triển, mở bằng `fet3dAutoplay`), không đo trên bản phát hành.
+6. Dung lượng gói: ghi kích thước tệp gói Android của bản phát hành trong kho lưu trữ.
+7. Máy nóng hoặc giật: lấy mẫu `simpleperf` trước khi đoán nguyên nhân (cách làm ở ghi chú Unity).
+
+#### Biên bản phiên đo 15 phút
+
+| Ngày | Bản (runtime, mã bản xuất) | Bài | Khung hình/giây thấp nhất / trung bình | Nhiệt CPU / vỏ máy cao nhất | RAM cao nhất (PSS) | Thời gian vào bài | Ghi chú |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| | | | | | | | |
+| | | | | | | | |
+| | | | | | | | |
 
 ## 11. Giới hạn và quyết định còn mở
 
