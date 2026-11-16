@@ -7,7 +7,7 @@ Mẫu biên bản bàn giao bản cuối của đồ án FET3D (FA26SE186), theo
 | Mục | Nội dung |
 | :--- | :--- |
 | Sản phẩm | FET3D — hệ thống tập huấn thoát nạn cháy trên mô hình 3D từ tệp IFC |
-| Bản bàn giao | Bản phát hành 16/11/2026, runtime 2.5.0, ứng dụng Android 1.0.0 (versionCode 1002250) |
+| Bản bàn giao | Bản phát hành 16/11/2026, runtime 2.5.0, ứng dụng Android 1.0.0 (versionCode 1002350) |
 | Ngày lập biên bản | ____/____/________ |
 | Địa điểm | |
 
@@ -21,10 +21,10 @@ Sáu repo trong tổ chức GitHub `Capstone-FA26SE186-Fire3D`, nhánh `main`, �
 | :--- | :--- | :--- | :---: |
 | BE | `528f9c4` | API nghiệp vụ .NET | ☐ |
 | AI | `47efb6d` | Dịch vụ AI/RAG FastAPI | ☐ |
-| FE | `f1a7a22` | Web Next.js | ☐ |
-| Mobile | `533b6ee` | Ứng dụng Android React Native/Expo, ghim bản Unity 2.5.0 | ☐ |
+| FE | `51f705b` | Web Next.js | ☐ |
+| Mobile | `7807eee` | Ứng dụng Android React Native/Expo, ghim bản Unity 2.5.0 | ☐ |
 | Unity | `43839c2` | Runtime 3D, worker IFC, worker dựng gói | ☐ |
-| Docs | `a3abe37` hoặc commit gộp bộ hồ sơ này | Tài liệu dự án | ☐ |
+| Docs | `ad49be8` hoặc commit mới hơn | Tài liệu dự án | ☐ |
 
 ### 2.2. Hệ thống đang chạy
 
@@ -40,7 +40,7 @@ Sáu repo trong tổ chức GitHub `Capstone-FA26SE186-Fire3D`, nhánh `main`, �
 
 | Sản phẩm | Nhận dạng | Đã nhận |
 | :--- | :--- | :---: |
-| Gói Android đã ký (AAB) | versionCode 1002250, dựng từ Mobile `533b6ee`, sha256 `eb81f9ad10ec5b893f037dedf4cf1b85421fa211b6e3227628435272d320cd20` | ☐ |
+| Gói Android đã ký (AAB) | versionCode 1002350, dựng từ Mobile `7807eee`, sha256 `136146bbf85d361b0d93fd05c17ca88e1f2456365100242a5b51c6f45d712237` | ☐ |
 | Bản Unity ghim trong ứng dụng | Thẻ `unity-runtime-2.5.0-202611151038-portable.1`, sha256 `122cd6a6a347ca364733475c99aae64e5d28684277da0cc1e058efae20708319` | ☐ |
 | Danh mục năng lực runtime | `Unity/Tools/RuntimeCatalog/runtime-2.5.0.json` | ☐ |
 

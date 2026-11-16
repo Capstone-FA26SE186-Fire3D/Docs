@@ -9,11 +9,11 @@ Cách lấy số liệu: commit đọc bằng `git rev-parse --short origin/main
 | Repo | Commit `main` | Ngày giờ commit (giờ Việt Nam) | Thay đổi so với danh mục 15/11/2026 |
 | :--- | :--- | :--- | :--- |
 | Unity | `43839c2` | 16/11/2026 00:28 | Gộp PR #144: worker dựng gói báo cáo cảnh báo dựng thật về BE (#143); ghi nguồn nhân vật, động tác vào `CREDITS.md` (#141). Runtime vẫn 2.5.0 |
-| Mobile | `533b6ee` | 16/11/2026 00:30 | Gộp PR #103: câu báo lỗi dễ hiểu khi đăng nhập Google (#102); cấu hình Firebase có khóa ký của Google Play (#100); gọi lấy token Google một lần (#98). Bản Unity ghim không đổi |
-| FE | `f1a7a22` | 15/11/2026 22:05 | Gộp PR #236: sửa và dừng tình huống trong bài học, nguồn gốc mục thư viện (#235); mã QR in nội dung từ BE, trang tải ứng dụng (#233/#234); giao yêu cầu doanh nghiệp cho Admin khác (#232) |
+| Mobile | `7807eee` | 16/11/2026 11:46 | Gộp PR #105: dòng "Nhận thông báo" ghi đúng loại thông báo, chỉ hiện cho tài khoản tổ chức (#104). Trước đó PR #103: câu báo lỗi dễ hiểu khi đăng nhập Google (#102); cấu hình Firebase có khóa ký của Google Play (#100); gọi lấy token Google một lần (#98). Bản Unity ghim không đổi |
+| FE | `51f705b` | 16/11/2026 11:40 | Gộp PR #239: trang "Nguồn và giấy phép" ở footer, ghi tác giả các mô hình CC BY 4.0 (#238); sửa test e2e thư viện (#237). Trước đó PR #236: sửa và dừng tình huống trong bài học, nguồn gốc mục thư viện (#235); mã QR in nội dung từ BE, trang tải ứng dụng (#233/#234); giao yêu cầu doanh nghiệp cho Admin khác (#232) |
 | BE | `528f9c4` | 15/11/2026 23:05 | Gộp PR #205: sửa quá thời gian khi AI soạn nháp kịch bản (BE#204) |
 | AI | `47efb6d` | 15/11/2026 19:20 | Không đổi so với danh mục 15/11/2026 |
-| Docs | `a3abe37` | 16/11/2026 10:03 | Gộp PR #110: quyết định của trưởng nhóm ngày 16/11/2026 (#107–#110). Bộ hồ sơ nghiệm thu này vào `main` sau commit đó, nên `main` của Docs sẽ mới hơn |
+| Docs | `ad49be8` | 16/11/2026 11:25 | Gộp PR #112: bộ hồ sơ nghiệm thu (#111). Bản cập nhật danh mục này vào `main` sau commit đó, nên `main` của Docs sẽ mới hơn |
 
 Ngày giờ là giờ Việt Nam (UTC+7), đổi từ giờ ghi trong commit. Commit `main` của một repo không tự chứng minh máy chủ đang chạy đúng commit đó: commit đang chạy trên máy chủ BE, máy chủ AI và bản web trên Vercel chưa được kiểm trong lần rà này (mục 6).
 
@@ -38,9 +38,9 @@ Runtime 2.5.0 giữ nguyên giao thức, định dạng gói và danh sách thi�
 | :--- | :--- | :--- |
 | Tên gói | `com.fet3d.app` | `Mobile/app.json` |
 | Phiên bản ứng dụng | 1.0.0 | `Mobile/app.json` |
-| Gói bàn giao (AAB) | versionCode 1002250, dựng từ Mobile `main` `533b6ee` | Ghi chú bàn giao |
+| Gói bàn giao (AAB) | versionCode 1002350, dựng từ Mobile `main` `7807eee` | Ghi chú bàn giao |
 | Cách dựng | Dựng trên máy trưởng nhóm ngày 16/11/2026 bằng script dựng gói đã ký của nhóm, ký bằng khóa tải lên (upload key) của Google Play; script kiểm chữ ký trùng khóa tải lên. Mật khẩu khóa do trưởng nhóm nhập, không lưu trong repo | Ghi chú bàn giao |
-| Tệp và mã băm | `artifacts/apk/play-1002250/app-release.aab` trên máy trưởng nhóm (189.778.643 byte), sha256 `eb81f9ad10ec5b893f037dedf4cf1b85421fa211b6e3227628435272d320cd20` | Tính lại bằng `sha256sum` ngày 16/11/2026. Tệp không nằm trong repo nào |
+| Tệp và mã băm | `artifacts/apk/play-1002350/app-release.aab` trên máy trưởng nhóm (189.778.779 byte), sha256 `136146bbf85d361b0d93fd05c17ca88e1f2456365100242a5b51c6f45d712237` | Tính lại bằng `sha256sum` ngày 16/11/2026. Tệp không nằm trong repo nào |
 | Vì sao dựng trên máy | Lượt dựng Android miễn phí của Expo đã hết tới 01/12/2026, nên workflow Google Play trên Mobile `main` sẽ hỏng ở bước dựng tới ngày đó. Lượt dựng CI gần nhất thành công là versionCode 1001901 (Mobile `3ada34b`, 15/11/2026). Mã kết thúc bằng 50 để không trùng mã do CI cấp | Ghi chú bàn giao; [Mobile/docs/google-play-release.md](../Mobile/docs/google-play-release.md) |
 | Google Play, kênh chính thức | Chưa có. Lượt nộp ngày 15/11/2026 dựng và ký đạt nhưng Google từ chối vì chưa đủ 12 người thử trong 14 ngày | Ghi chú bàn giao |
 | Cách phát hành hiện tại | Trưởng nhóm tự tải gói lên kênh thử nghiệm của Google Play, hoặc nhóm gửi tệp cài `.apk` | Ghi chú bàn giao |
@@ -69,9 +69,9 @@ Chi tiết hạ tầng ở [README, bảng Tổng quan công nghệ](README.md#t
 
 ## 6. Chưa xác nhận trong lần rà này
 
-- Commit đang chạy thật trên máy chủ BE (`528f9c4` hay commit cũ hơn), máy chủ AI (`47efb6d` hay commit cũ hơn) và bản web trên Vercel (`f1a7a22` hay cũ hơn). Lần rà này chỉ đọc `origin/main`, không đăng nhập máy chủ hay trang Vercel.
+- Commit đang chạy thật trên máy chủ BE (`528f9c4` hay commit cũ hơn), máy chủ AI (`47efb6d` hay commit cũ hơn) và bản web trên Vercel (`51f705b` hay cũ hơn; trang `/credits` của commit này đã thấy trên fet3d.io.vn ngày 16/11/2026). Lần rà này chỉ đọc `origin/main`, không đăng nhập máy chủ hay trang Vercel.
 - AI chạy cùng máy EC2 với BE hay trên máy riêng: hai nguồn ghi khác nhau, chưa đăng nhập AWS để kiểm.
 - Phiên bản runtime đang bật trên trang quản trị production (lấy theo ghi chú bàn giao).
 - Mã băm của các gói bài Android đang phát hành trên production.
-- AAB versionCode 1002250 đã được tải lên kênh thử nghiệm nào của Google Play chưa, và bản cài từ Google Play đăng nhập Google được chưa (Mobile#9).
-- Bản AAB 1002250 chưa được cài và chơi thử trên điện thoại; lần chơi thử gần nhất là bản 2.5.0 ngày 15/11/2026.
+- AAB versionCode 1002350 đã được tải lên kênh thử nghiệm nào của Google Play chưa, và bản cài từ Google Play đăng nhập Google được chưa (Mobile#9).
+- Bản AAB 1002350 chưa được cài và chơi thử trên điện thoại; lần chơi thử gần nhất là bản 2.5.0 ngày 15/11/2026.
