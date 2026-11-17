@@ -2,18 +2,18 @@
 
 Tài liệu này ghi lại đúng những gì tạo nên bản phát hành hiện hành của FET3D tính tới ngày 17/11/2026: commit của từng repo, phiên bản runtime, bản Unity được ghim trong ứng dụng, phiên bản ứng dụng, gói Android đã ký và nơi chạy production. Dùng nó để biết "bản đang chạy là bản nào" khi nghiệm thu, báo lỗi hoặc dựng lại. Bản này thay cho danh mục ngày 16/11/2026; runtime vẫn là 2.5.0. Thay đổi sau 16/11 nằm ở web, ứng dụng Android và bản Unity ghim trong ứng dụng (sửa lỗi sau buổi UAT 16/11), không đổi giao thức hay định dạng gói.
 
-Cách lấy số liệu: commit đọc bằng `git rev-parse --short origin/main` và `git log -1 --format=%ci origin/main` sau `git fetch origin` tối 17/11/2026; các mục còn lại đọc từ tệp trong repo ở đúng commit đó hoặc từ ghi chú bàn giao của nhóm. Mục nào không kiểm được trực tiếp được ghi rõ. Cấu hình (tên biến) và danh mục thư viện, giấy phép ở [cau-hinh-va-thu-vien.md](cau-hinh-va-thu-vien.md); biên bản bàn giao ở [bien-ban-ban-giao.md](bien-ban-ban-giao.md).
+Cách lấy số liệu: commit đọc bằng `git rev-parse --short origin/main` và `git log -1 --format=%ci origin/main` sau `git fetch origin` tối 17/11/2026 (giờ đổi sang UTC+7 bằng `--date=format-local` với `TZ=UTC-7`, vì commit gộp trên GitHub ghi giờ UTC); các mục còn lại đọc từ tệp trong repo ở đúng commit đó hoặc từ ghi chú bàn giao của nhóm. Mục nào không kiểm được trực tiếp được ghi rõ. Cấu hình (tên biến) và danh mục thư viện, giấy phép ở [cau-hinh-va-thu-vien.md](cau-hinh-va-thu-vien.md); biên bản bàn giao ở [bien-ban-ban-giao.md](bien-ban-ban-giao.md).
 
 ## 1. Commit `main` của từng repo
 
 | Repo | Commit `main` | Ngày giờ commit (giờ Việt Nam) | Thay đổi so với danh mục 16/11/2026 |
 | :--- | :--- | :--- | :--- |
-| Unity | `88379f8` | 17/11/2026 08:42 | Gộp PR #146, #148, #150: cửa chỉ mở hết góc phòng cho phép, cửa chật thì kéo; cửa hai cánh không còn bị quay ngược khi dựng gói; ô kỹ thuật thấp không tính là cửa (#145); cánh thứ hai của cửa hai cánh không còn bị gộp tĩnh khi bake ánh sáng (#147); bồn rửa, vòi sen, giường từ IFC được nhắm đúng chỗ đặt (`PivotOnMesh`). Runtime vẫn 2.5.0 |
-| Mobile | `2f21a37` | 17/11/2026 23:30 | Gộp PR #116 (từ PR #115): ảnh đại diện gửi byte ảnh, vì `fetch` của Expo 57 từ chối phần `{uri}` và app báo nhầm là mất kết nối. Trước đó PR #110, #112, #114: mất mạng hiện một câu tiếng Việt dễ hiểu ở mọi màn hình (lỗi L7 UAT); ảnh đại diện tải lên qua API thay vì PUT thẳng S3 (L10); lượt chơi mà Unity tắt giữa chừng được kết thúc là "Chưa kết thúc" (L11); nút nổi không còn làm văng ứng dụng khi chơi lại (L9); ghim lại bản Unity ba lần theo các bản sửa cửa và thiết bị IFC |
-| FE | `c2a340d` | 16/11/2026 15:49 | Gộp PR #241: sửa lỗi buổi UAT 16/11 (nhãn dễ hiểu, trang hiện trạng thái mới ngay sau thao tác, mỗi thao tác một nút); bộ test e2e chạy đủ |
+| Unity | `88379f8` | 17/11/2026 15:42 | Gộp PR #146, #148, #150: cửa chỉ mở hết góc phòng cho phép, cửa chật thì kéo; cửa hai cánh không còn bị quay ngược khi dựng gói; ô kỹ thuật thấp không tính là cửa (#145); cánh thứ hai của cửa hai cánh không còn bị gộp tĩnh khi bake ánh sáng (#147); bồn rửa, vòi sen, giường từ IFC được nhắm đúng chỗ đặt (`PivotOnMesh`). Runtime vẫn 2.5.0 |
+| Mobile | `2f21a37` | 17/11/2026 23:32 | Gộp PR #116 (từ PR #115): ảnh đại diện gửi byte ảnh, vì `fetch` của Expo 57 từ chối phần `{uri}` và app báo nhầm là mất kết nối. Trước đó PR #110, #112, #114: mất mạng hiện một câu tiếng Việt dễ hiểu ở mọi màn hình (lỗi L7 UAT); ảnh đại diện tải lên qua API thay vì PUT thẳng S3 (L10); lượt chơi mà Unity tắt giữa chừng được kết thúc là "Chưa kết thúc" (L11); nút nổi không còn làm văng ứng dụng khi chơi lại (L9); ghim lại bản Unity ba lần theo các bản sửa cửa và thiết bị IFC |
+| FE | `c2a340d` | 16/11/2026 22:49 | Gộp PR #241: sửa lỗi buổi UAT 16/11 (nhãn dễ hiểu, trang hiện trạng thái mới ngay sau thao tác, mỗi thao tác một nút); bộ test e2e chạy đủ |
 | BE | `528f9c4` | 15/11/2026 23:05 | Không đổi so với danh mục 16/11/2026 |
 | AI | `47efb6d` | 15/11/2026 19:20 | Không đổi so với danh mục 16/11/2026 |
-| Docs | `af7d165` | 16/11/2026 06:12 | Gộp PR #114 (danh mục 16/11). Bản cập nhật danh mục này vào `main` sau commit đó, nên `main` của Docs sẽ mới hơn |
+| Docs | `af7d165` | 16/11/2026 13:12 | Gộp PR #114 (danh mục 16/11). Bản cập nhật danh mục này vào `main` sau commit đó, nên `main` của Docs sẽ mới hơn |
 
 Ngày giờ là giờ Việt Nam (UTC+7), đổi từ giờ ghi trong commit. Commit `main` của một repo không tự chứng minh máy chủ đang chạy đúng commit đó: commit đang chạy trên máy chủ BE, máy chủ AI và bản web trên Vercel chưa được kiểm trong lần rà này (mục 6).
 
