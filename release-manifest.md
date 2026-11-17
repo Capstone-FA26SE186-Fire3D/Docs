@@ -9,7 +9,7 @@ Cách lấy số liệu: commit đọc bằng `git rev-parse --short origin/main
 | Repo | Commit `main` | Ngày giờ commit (giờ Việt Nam) | Thay đổi so với danh mục 16/11/2026 |
 | :--- | :--- | :--- | :--- |
 | Unity | `88379f8` | 17/11/2026 08:42 | Gộp PR #146, #148, #150: cửa chỉ mở hết góc phòng cho phép, cửa chật thì kéo; cửa hai cánh không còn bị quay ngược khi dựng gói; ô kỹ thuật thấp không tính là cửa (#145); cánh thứ hai của cửa hai cánh không còn bị gộp tĩnh khi bake ánh sáng (#147); bồn rửa, vòi sen, giường từ IFC được nhắm đúng chỗ đặt (`PivotOnMesh`). Runtime vẫn 2.5.0 |
-| Mobile | `f984c67` | 17/11/2026 09:05 | Gộp PR #110, #112, #114: mất mạng hiện một câu tiếng Việt dễ hiểu ở mọi màn hình (lỗi L7 UAT); ảnh đại diện tải lên qua API thay vì PUT thẳng S3 (L10); lượt chơi mà Unity tắt giữa chừng được kết thúc là "Chưa kết thúc" (L11); nút nổi không còn làm văng ứng dụng khi chơi lại (L9); ghim lại bản Unity ba lần theo các bản sửa cửa và thiết bị IFC |
+| Mobile | `2f21a37` | 17/11/2026 23:30 | Gộp PR #116 (từ PR #115): ảnh đại diện gửi byte ảnh, vì `fetch` của Expo 57 từ chối phần `{uri}` và app báo nhầm là mất kết nối. Trước đó PR #110, #112, #114: mất mạng hiện một câu tiếng Việt dễ hiểu ở mọi màn hình (lỗi L7 UAT); ảnh đại diện tải lên qua API thay vì PUT thẳng S3 (L10); lượt chơi mà Unity tắt giữa chừng được kết thúc là "Chưa kết thúc" (L11); nút nổi không còn làm văng ứng dụng khi chơi lại (L9); ghim lại bản Unity ba lần theo các bản sửa cửa và thiết bị IFC |
 | FE | `c2a340d` | 16/11/2026 15:49 | Gộp PR #241: sửa lỗi buổi UAT 16/11 (nhãn dễ hiểu, trang hiện trạng thái mới ngay sau thao tác, mỗi thao tác một nút); bộ test e2e chạy đủ |
 | BE | `528f9c4` | 15/11/2026 23:05 | Không đổi so với danh mục 16/11/2026 |
 | AI | `47efb6d` | 15/11/2026 19:20 | Không đổi so với danh mục 16/11/2026 |
@@ -38,13 +38,13 @@ Runtime 2.5.0 giữ nguyên giao thức, định dạng gói và danh sách thi�
 | :--- | :--- | :--- |
 | Tên gói | `com.fet3d.app` | `Mobile/app.json` |
 | Phiên bản ứng dụng | 1.0.0 | `Mobile/app.json` |
-| Gói bàn giao (AAB) | versionCode 1002850, dựng từ Mobile `main` `f984c67` | Ghi chú bàn giao |
+| Gói bàn giao (AAB) | versionCode 1002950, dựng từ Mobile `develop` `d1bbf46` (nội dung trùng `main` `2f21a37`) | Ghi chú bàn giao |
 | Cách dựng | Dựng trên máy trưởng nhóm ngày 17/11/2026 bằng script dựng gói đã ký của nhóm, ký bằng khóa tải lên (upload key) của Google Play; script kiểm chữ ký trùng khóa tải lên. Mật khẩu khóa do trưởng nhóm nhập, không lưu trong repo | Ghi chú bàn giao |
-| Tệp và mã băm | `artifacts/apk/play-1002850/app-release.aab` trên máy trưởng nhóm (189.793.852 byte), sha256 `64c7a3a2097047b21675b210c31ffc33baf85baff4ffed5c51f3674a72ecd7ca` | Tính lại bằng `sha256sum` ngày 17/11/2026. Tệp không nằm trong repo nào |
+| Tệp và mã băm | `artifacts/apk/play-1002950/app-release.aab` trên máy trưởng nhóm (189.794.448 byte), sha256 `7fb25b42de7fca286855d4977760052a145a254eaafacc1e303d03f234a7b604`; ký bằng khóa tải lên (SHA-256 `77:B5:D3:…:3B:28`), gói JS gọi `https://api.fet3d.io.vn/` | Tính lại bằng `sha256sum` ngày 17/11/2026. Tệp không nằm trong repo nào |
 | Vì sao dựng trên máy | Lượt dựng Android miễn phí của Expo đã hết tới 01/12/2026, nên workflow Google Play trên Mobile `main` sẽ hỏng ở bước dựng tới ngày đó. Lượt dựng CI gần nhất thành công là versionCode 1001901 (Mobile `3ada34b`, 15/11/2026). Mã kết thúc bằng 50 để không trùng mã do CI cấp | Ghi chú bàn giao; [Mobile/docs/google-play-release.md](../Mobile/docs/google-play-release.md) |
 | Google Play, kênh chính thức | Chưa có. Lượt nộp ngày 15/11/2026 dựng và ký đạt nhưng Google từ chối vì chưa đủ 12 người thử trong 14 ngày | Ghi chú bàn giao |
-| Cách phát hành hiện tại | Trưởng nhóm tự tải gói lên kênh thử nghiệm của Google Play (bản 1002850 đã tải lên ngày 17/11/2026), hoặc nhóm gửi tệp cài `.apk`. Các bản 1002450 trở về trước không dùng nữa; 1002450 gọi nhầm máy chủ cũ | Ghi chú bàn giao |
-| Thiết bị đã cài và chơi | Redmi Note 10S: bản 1002850 (APK dựng từ cùng AAB, cài qua cáp) ngày 17/11/2026, chơi thử cửa trường học và bồn rửa, vòi sen IFC | [IFC mục 10.2](ifc_ingestion_visual_interaction.md#102-thiết-bị-nghiệm-thu-và-số-đo-trên-máy) |
+| Cách phát hành hiện tại | Trưởng nhóm tự tải gói lên kênh thử nghiệm của Google Play (1002850 tải lên ngày 17/11/2026; 1002950 thay thế, sửa lỗi ảnh đại diện), hoặc nhóm gửi tệp cài `.apk`. Các bản 1002450 trở về trước không dùng nữa; 1002450 gọi nhầm máy chủ cũ | Ghi chú bàn giao |
+| Thiết bị đã cài và chơi | Redmi Note 10S ngày 17/11/2026: bản 1002850 (chơi thử cửa trường học, bồn rửa, vòi sen IFC) rồi APK thử 1002900 cùng mã nguồn với 1002950 (chơi liền 15 phút, chơi lại từ 3 lượt, đổi ảnh đại diện: trưởng nhóm báo đạt) | [IFC mục 10.2](ifc_ingestion_visual_interaction.md#102-thiết-bị-nghiệm-thu-và-số-đo-trên-máy) |
 
 ## 4. Máy chủ production
 
@@ -73,5 +73,5 @@ Chi tiết hạ tầng ở [README, bảng Tổng quan công nghệ](README.md#t
 - AI chạy cùng máy EC2 với BE hay trên máy riêng: hai nguồn ghi khác nhau, chưa đăng nhập AWS để kiểm.
 - Phiên bản runtime đang bật trên trang quản trị production (lấy theo ghi chú bàn giao).
 - Mã băm của các gói bài Android đang phát hành trên production.
-- Bản cài từ Google Play (1002850) đăng nhập Google được chưa (Mobile#9); bản thử trên điện thoại ngày 17/11 là APK ký debug cài qua cáp.
-- Phiên chơi liên tục 15 phút và chơi lại từ 3 lượt liền trên bản 1002850 chưa đo.
+- Bản cài từ Google Play (1002950) đăng nhập Google được chưa (Mobile#9); bản thử trên điện thoại ngày 17/11 là APK ký debug cài qua cáp.
+- Lần chơi 15 phút ngày 17/11 chỉ có xác nhận của trưởng nhóm, chưa có tệp số đo khung hình, nhiệt.
