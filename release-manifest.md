@@ -1,6 +1,6 @@
-# Bản phát hành 17/11/2026 — danh mục phiên bản
+# Bản phát hành 18/11/2026 — danh mục phiên bản
 
-Tài liệu này ghi lại đúng những gì tạo nên bản phát hành hiện hành của FET3D tính tới ngày 17/11/2026: commit của từng repo, phiên bản runtime, bản Unity được ghim trong ứng dụng, phiên bản ứng dụng, gói Android đã ký và nơi chạy production. Dùng nó để biết "bản đang chạy là bản nào" khi nghiệm thu, báo lỗi hoặc dựng lại. Bản này thay cho danh mục ngày 16/11/2026; runtime vẫn là 2.5.0. Thay đổi sau 16/11 nằm ở web, ứng dụng Android và bản Unity ghim trong ứng dụng (sửa lỗi sau buổi UAT 16/11), không đổi giao thức hay định dạng gói.
+Tài liệu này ghi lại đúng những gì tạo nên bản phát hành hiện hành của FET3D tính tới ngày 18/11/2026: commit của từng repo, phiên bản runtime, bản Unity được ghim trong ứng dụng, phiên bản ứng dụng, gói Android đã ký và nơi chạy production. Dùng nó để biết "bản đang chạy là bản nào" khi nghiệm thu, báo lỗi hoặc dựng lại. Bản này thay cho danh mục ngày 17/11/2026 (sửa thêm 18/11: chỉ đường, mũi tên cầu thang, tay che mũi; danh mục 17/11 thay cho 16/11); runtime vẫn là 2.5.0. Thay đổi sau 16/11 nằm ở web, ứng dụng Android và bản Unity ghim trong ứng dụng (sửa lỗi sau buổi UAT 16/11), không đổi giao thức hay định dạng gói.
 
 Cách lấy số liệu: commit đọc bằng `git rev-parse --short origin/main` và `git log -1 --format=%ci origin/main` sau `git fetch origin` tối 17/11/2026 (giờ đổi sang UTC+7 bằng `--date=format-local` với `TZ=UTC-7`, vì commit gộp trên GitHub ghi giờ UTC); các mục còn lại đọc từ tệp trong repo ở đúng commit đó hoặc từ ghi chú bàn giao của nhóm. Mục nào không kiểm được trực tiếp được ghi rõ. Cấu hình (tên biến) và danh mục thư viện, giấy phép ở [cau-hinh-va-thu-vien.md](cau-hinh-va-thu-vien.md); biên bản bàn giao ở [bien-ban-ban-giao.md](bien-ban-ban-giao.md).
 
@@ -8,8 +8,8 @@ Cách lấy số liệu: commit đọc bằng `git rev-parse --short origin/main
 
 | Repo | Commit `main` | Ngày giờ commit (giờ Việt Nam) | Thay đổi so với danh mục 16/11/2026 |
 | :--- | :--- | :--- | :--- |
-| Unity | `88379f8` | 17/11/2026 15:42 | Gộp PR #146, #148, #150: cửa chỉ mở hết góc phòng cho phép, cửa chật thì kéo; cửa hai cánh không còn bị quay ngược khi dựng gói; ô kỹ thuật thấp không tính là cửa (#145); cánh thứ hai của cửa hai cánh không còn bị gộp tĩnh khi bake ánh sáng (#147); bồn rửa, vòi sen, giường từ IFC được nhắm đúng chỗ đặt (`PivotOnMesh`). Runtime vẫn 2.5.0 |
-| Mobile | `2f21a37` | 17/11/2026 23:32 | Gộp PR #116 (từ PR #115): ảnh đại diện gửi byte ảnh, vì `fetch` của Expo 57 từ chối phần `{uri}` và app báo nhầm là mất kết nối. Trước đó PR #110, #112, #114: mất mạng hiện một câu tiếng Việt dễ hiểu ở mọi màn hình (lỗi L7 UAT); ảnh đại diện tải lên qua API thay vì PUT thẳng S3 (L10); lượt chơi mà Unity tắt giữa chừng được kết thúc là "Chưa kết thúc" (L11); nút nổi không còn làm văng ứng dụng khi chơi lại (L9); ghim lại bản Unity ba lần theo các bản sửa cửa và thiết bị IFC |
+| Unity | `a9f854b` | 18/11/2026 15:00 | Gộp PR #151/#152: chỉ đường dò lại từ vị trí người chơi mỗi 0,25 giây, không xuyên tường; mũi tên nằm trên bậc cầu thang; che mũi bằng khăn ướt: tay cầm khăn đưa lên mặt (động tác TowelCover). Trước đó 17/11: Gộp PR #146, #148, #150: cửa chỉ mở hết góc phòng cho phép, cửa chật thì kéo; cửa hai cánh không còn bị quay ngược khi dựng gói; ô kỹ thuật thấp không tính là cửa (#145); cánh thứ hai của cửa hai cánh không còn bị gộp tĩnh khi bake ánh sáng (#147); bồn rửa, vòi sen, giường từ IFC được nhắm đúng chỗ đặt (`PivotOnMesh`). Runtime vẫn 2.5.0 |
+| Mobile | `8d7afbe` | 18/11/2026 16:06 | Gộp PR #117/#118: ghim bản Unity `2.5.0-202611180802-portable.1`. Trước đó PR #116: Gộp PR #116 (từ PR #115): ảnh đại diện gửi byte ảnh, vì `fetch` của Expo 57 từ chối phần `{uri}` và app báo nhầm là mất kết nối. Trước đó PR #110, #112, #114: mất mạng hiện một câu tiếng Việt dễ hiểu ở mọi màn hình (lỗi L7 UAT); ảnh đại diện tải lên qua API thay vì PUT thẳng S3 (L10); lượt chơi mà Unity tắt giữa chừng được kết thúc là "Chưa kết thúc" (L11); nút nổi không còn làm văng ứng dụng khi chơi lại (L9); ghim lại bản Unity ba lần theo các bản sửa cửa và thiết bị IFC |
 | FE | `c2a340d` | 16/11/2026 22:49 | Gộp PR #241: sửa lỗi buổi UAT 16/11 (nhãn dễ hiểu, trang hiện trạng thái mới ngay sau thao tác, mỗi thao tác một nút); bộ test e2e chạy đủ |
 | BE | `528f9c4` | 15/11/2026 23:05 | Không đổi so với danh mục 16/11/2026 |
 | AI | `47efb6d` | 15/11/2026 19:20 | Không đổi so với danh mục 16/11/2026 |
@@ -26,9 +26,9 @@ Ngày giờ là giờ Việt Nam (UTC+7), đổi từ giờ ghi trong commit. Co
 | Tệp danh mục năng lực để đăng ký trên trang quản trị | `Unity/Tools/RuntimeCatalog/runtime-2.5.0.json` | Repo Unity |
 | Trạng thái trên production | Phiên bản 2.5.0 đã đăng ký và bật ngày 15/11/2026 | Ghi chú bàn giao của nhóm; chưa mở lại trang quản trị để kiểm trong lần rà này |
 | Unity Editor | 6000.6.6f1 | [technology mục 4](fire-evacuation-training-technology.md#4-thành-phần-và-stack) |
-| Bản Unity ghim trong Mobile (thẻ phát hành) | `unity-runtime-2.5.0-202611170845-portable.1` (repo `Capstone-FA26SE186-Fire3D/Mobile`, tệp `fet3d-unityLibrary-2.5.0-202611170845-portable.1.zip`) | `Mobile/unity-artifact.lock.json`, đổi lần cuối ở commit `33af278` ngày 17/11/2026 |
-| sha256 của bản ghim | `58a8c738bece96d276f3f6328b466a5afd35ade42e6fe61995f06ee0a907f758` | `Mobile/unity-artifact.lock.json` |
-| Bản xuất Unity gốc | `2.5.0-202611170845`, sha256 `a0cea0e58ddc481ffd9784318659a4635c018a71abb6dd235c74eb3a7cbcffea` | `Mobile/unity-artifact.lock.json` (`sourceExport`) |
+| Bản Unity ghim trong Mobile (thẻ phát hành) | `unity-runtime-2.5.0-202611180802-portable.1` (repo `Capstone-FA26SE186-Fire3D/Mobile`, tệp `fet3d-unityLibrary-2.5.0-202611180802-portable.1.zip`) | `Mobile/unity-artifact.lock.json`, đổi lần cuối ngày 18/11/2026 (Mobile PR #117) |
+| sha256 của bản ghim | `669249b3328b1391b9ab2d9f8eaba288886f4e91e76d5f7a8675b16bfbc9cbc2` | `Mobile/unity-artifact.lock.json` |
+| Bản xuất Unity gốc | `2.5.0-202611180802`, sha256 `813861bd0cfe68e8271d034dec21c565ab8b2a31a4e9ec024768b0d23a0175be` | `Mobile/unity-artifact.lock.json` (`sourceExport`) |
 
 Runtime 2.5.0 giữ nguyên giao thức, định dạng gói và danh sách thiết bị của 2.4.0; gói bài đã dựng cho 2.0.0 đến 2.4.0 vẫn chơi được ([IFC mục 6.2, Runtime 2.5.0](ifc_ingestion_visual_interaction.md#runtime-250-15112026)). Bản xuất ghim ngày 17/11 đã gồm các sửa cửa và thiết bị IFC ở mục 1. Gói bài trường học được dựng lại thành bản v5 ngày 17/11/2026 để có cánh cửa thứ hai đúng; các bản v3, v4 đã thu hồi.
 
@@ -38,9 +38,9 @@ Runtime 2.5.0 giữ nguyên giao thức, định dạng gói và danh sách thi�
 | :--- | :--- | :--- |
 | Tên gói | `com.fet3d.app` | `Mobile/app.json` |
 | Phiên bản ứng dụng | 1.0.0 | `Mobile/app.json` |
-| Gói bàn giao (AAB) | versionCode 1002950, dựng từ Mobile `develop` `d1bbf46` (nội dung trùng `main` `2f21a37`) | Ghi chú bàn giao |
+| Gói bàn giao (AAB) | versionCode 1003050, dựng từ Mobile nhánh ghim `b3d614b` (nội dung trùng `main` `8d7afbe`) | Ghi chú bàn giao |
 | Cách dựng | Dựng trên máy trưởng nhóm ngày 17/11/2026 bằng script dựng gói đã ký của nhóm, ký bằng khóa tải lên (upload key) của Google Play; script kiểm chữ ký trùng khóa tải lên. Mật khẩu khóa do trưởng nhóm nhập, không lưu trong repo | Ghi chú bàn giao |
-| Tệp và mã băm | `artifacts/apk/play-1002950/app-release.aab` trên máy trưởng nhóm (189.794.448 byte), sha256 `7fb25b42de7fca286855d4977760052a145a254eaafacc1e303d03f234a7b604`; ký bằng khóa tải lên (SHA-256 `77:B5:D3:…:3B:28`), gói JS gọi `https://api.fet3d.io.vn/` | Tính lại bằng `sha256sum` ngày 17/11/2026. Tệp không nằm trong repo nào |
+| Tệp và mã băm | `artifacts/apk/play-1003050/app-release.aab` trên máy trưởng nhóm (189.805.724 byte), sha256 `b0090787d1ab59bc6846cad6fe3467cc889f53f0395bf037f9479cfdd75d9c71`; ký bằng khóa tải lên (SHA-256 `77:B5:D3:…:3B:28`), gói JS gọi `https://api.fet3d.io.vn/` | Tính lại bằng `sha256sum` ngày 18/11/2026. Tệp không nằm trong repo nào |
 | Vì sao dựng trên máy | Lượt dựng Android miễn phí của Expo đã hết tới 01/12/2026, nên workflow Google Play trên Mobile `main` sẽ hỏng ở bước dựng tới ngày đó. Lượt dựng CI gần nhất thành công là versionCode 1001901 (Mobile `3ada34b`, 15/11/2026). Mã kết thúc bằng 50 để không trùng mã do CI cấp | Ghi chú bàn giao; [Mobile/docs/google-play-release.md](../Mobile/docs/google-play-release.md) |
 | Google Play, kênh chính thức | Chưa có. Lượt nộp ngày 15/11/2026 dựng và ký đạt nhưng Google từ chối vì chưa đủ 12 người thử trong 14 ngày | Ghi chú bàn giao |
 | Cách phát hành hiện tại | Trưởng nhóm tự tải gói lên kênh thử nghiệm của Google Play (1002850 tải lên ngày 17/11/2026; 1002950 thay thế, sửa lỗi ảnh đại diện), hoặc nhóm gửi tệp cài `.apk`. Các bản 1002450 trở về trước không dùng nữa; 1002450 gọi nhầm máy chủ cũ | Ghi chú bàn giao |
