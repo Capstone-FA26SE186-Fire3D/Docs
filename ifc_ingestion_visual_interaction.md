@@ -555,7 +555,7 @@ Editor chỉ thêm vật lên artifact; không sửa tường, cửa, sàn hay k
 
 ### 10.1. Hai công trình nghiệm thu
 
-Hai tệp IFC dưới đây là bộ nghiệm thu của nhóm. Cả hai lấy từ kho tệp thử công khai của ThatOpen (`engine_web-ifc/tests/ifcfiles/public`, xem mục 12). Kho nguồn không ghi giấy phép cho từng tệp; trưởng nhóm quyết định ngày 16/11/2026 không rà thêm vì đây là tệp thử nội bộ, dùng cho học tập, phi thương mại, không phát hành kèm sản phẩm (công trình thật do tổ chức tự tải tệp IFC của mình lên). Tệp IFC vẫn không nằm trong repo nào của nhóm; chúng chỉ ở máy của nhóm (`artifacts/FET3D_Demo/ifc/`, ngoài Git) và trong kho lưu trữ riêng của hệ thống sau khi tải lên.
+Hai tệp IFC dưới đây là bộ nghiệm thu ban đầu của nhóm. **Từ 18/11/2026 bộ nghiệm thu chỉ còn trường học:** trưởng nhóm loại tòa tháp vì tệp IFC lỗi, không dùng được (bản gốc không có phòng, bản sửa chỉ là phòng suy đoán; xem ghi chú dưới bảng). Cột tòa tháp giữ lại làm tư liệu. Cả hai lấy từ kho tệp thử công khai của ThatOpen (`engine_web-ifc/tests/ifcfiles/public`, xem mục 12). Kho nguồn không ghi giấy phép cho từng tệp; trưởng nhóm quyết định ngày 16/11/2026 không rà thêm vì đây là tệp thử nội bộ, dùng cho học tập, phi thương mại, không phát hành kèm sản phẩm (công trình thật do tổ chức tự tải tệp IFC của mình lên). Tệp IFC vẫn không nằm trong repo nào của nhóm; chúng chỉ ở máy của nhóm (`artifacts/FET3D_Demo/ifc/`, ngoài Git) và trong kho lưu trữ riêng của hệ thống sau khi tải lên.
 
 Các con số bên dưới đọc từ `result.json` và `building_metadata.json` do IFC geometry worker sinh ra, lưu ở `Unity/Builds/SchoolInput` và `Unity/Builds/TowerInput` (thư mục dựng tại máy, không commit).
 
@@ -629,24 +629,24 @@ Số đo tòa tháp 28 tầng, ghi trong ghi chú bàn giao Unity đêm 10–11/
 
 Tòa tháp chưa đo lại trên runtime 2.4.0/2.5.0; ngày 13/11/2026 chỉ ghi nhận là chạy bình thường.
 
-#### Ngưỡng nghiệm thu đề xuất (16/11/2026)
+#### Ngưỡng nghiệm thu (đề xuất 16/11/2026, trưởng nhóm duyệt 18/11/2026)
 
-Mọi ngưỡng dưới đây là **đề xuất, chờ trưởng nhóm duyệt**. Ngưỡng nào có số đo làm cơ sở thì ghi rõ lần đo; ngưỡng nào chưa có số đo thì chỉ ghi cách chốt, không đặt con số.
+Trưởng nhóm duyệt bảng dưới ngày 18/11/2026 và cho đo ngay trên điện thoại; số đo ở "Biên bản phiên đo 15 phút". Cùng ngày, **tòa tháp bị loại khỏi bộ nghiệm thu** vì tệp IFC lỗi (mục 10.1), nên các ngưỡng chỉ dựa trên trường học; số đo cũ của tòa tháp giữ lại làm tư liệu.
 
-| Mục | Ngưỡng đề xuất | Cơ sở |
+| Mục | Ngưỡng | Cơ sở và kết quả 18/11/2026 |
 | :--- | :--- | :--- |
-| Khung hình/giây | Trung bình ≥ 29 trong cả phiên (game khóa 30); khung chậm hơn 50 ms ≤ 5 % số khung; không có giây nào dưới 20 khung hình/giây, trừ lúc đang tải | Trường học 15/11/2026: 30 đều, khoảng 4 % khung 50–66 ms. Mức 30 lấy theo yêu cầu (`fire_evacuation_requirements.md`, mục Performance). Mức sàn 20 lấy từ cận dưới tòa tháp 10–11/11 |
-| Nhiệt độ sau 15 phút | Trạng thái nhiệt của máy (`dumpsys thermalservice`) chưa tới mức nặng (SEVERE); khung hình/giây vẫn đạt dòng trên ở phút thứ 15; vỏ máy không quá 57 °C | 57 °C là mức cao nhất đã ghi (tòa tháp 10–11/11). Trưởng nhóm đã chấp nhận máy ấm khi chơi lâu (15/11) |
-| Thời gian vào bài (gói đã tải sẵn, từ lúc bấm bắt đầu tới lúc điều khiển được nhân vật) | Tòa tháp ≤ 65 giây (không chậm hơn lần đo 10–11/11); trường học: đo lần đầu, ngưỡng = số đo được làm tròn lên 5 giây | Chỉ có số đo tòa tháp |
+| Khung hình/giây | Trung bình ≥ 29 trong cả phiên (game khóa 30); khung chậm hơn 50 ms ≤ 5 % số khung; không có giây nào dưới 20 khung hình/giây, trừ lúc đang tải | Mức 30 lấy theo yêu cầu (`fire_evacuation_requirements.md`, mục Performance). **18/11: đạt** — trung bình 29,1; khung chậm 2,7 % (781/29 151); phút thấp nhất 25,0 (trung bình từng phút, chưa đo từng giây) |
+| Nhiệt độ sau 15 phút | Trạng thái nhiệt của máy (`dumpsys thermalservice`) chưa tới mức nặng (SEVERE); khung hình/giây vẫn đạt dòng trên ở phút thứ 15; vỏ máy không quá 57 °C | 57 °C là mức cao nhất đã ghi (tòa tháp 10–11/11). **18/11: đạt** — trạng thái nhiệt 0 suốt 17 phút, CPU tối đa 70 °C, vỏ máy tối đa 52 °C, phút 15 đạt 30,3 khung hình/giây |
+| Thời gian vào bài (gói đã tải sẵn, từ lúc bấm bắt đầu tới lúc điều khiển được nhân vật) | Trường học: đo lần đầu, ngưỡng = số đo được làm tròn lên 5 giây | Chưa đo: phiên 18/11 không bấm giờ lúc vào bài. Mức tòa tháp ≤ 65 giây bỏ theo tòa tháp |
 | Tam giác mỗi gói | Tổng ≤ 1,6 triệu tam giác (đã chơi được với trường học 1,42 triệu và tòa tháp 1,59 triệu); vượt mức này phải đo lại trên máy trước khi phát hành. Cảnh báo 150 000 tam giác mỗi tầng của IFC worker giữ nguyên (cảnh báo, không chặn) | Mục 10.1 và các lần đo 13/11, 15/11 |
 | Draw call | Không đặt ngưỡng chặn; ghi số draw call trong mỗi phiên đo để so giữa các bản. Tiêu chí chặn là khung hình/giây | Chưa từng đo trên điện thoại. Trong Unity Editor, trường học vẽ khoảng 2 580–2 893 vật sau Unity PR #114 |
-| RAM | App không bị hệ thống đóng trong 15 phút; ngưỡng = mức cao nhất đo được ở lần đo đầu cộng 20 % | Chưa đo |
-| Dung lượng gói bài Android | Ngưỡng = gói lớn nhất đã chơi đạt các dòng trên (trường học hoặc tòa tháp); gói lớn hơn phải đo lại trên máy | Chưa ghi dung lượng gói Android. Tệp `building.glb` đầu vào tại máy khoảng 124 MB (trường học) và 122 MB (tòa tháp), không phải dung lượng gói |
-| Số người trong tòa nhà (NPC) | Không phải giới hạn của hệ thống: tác giả bài tự đặt số NPC, không có mức trần (quyết định 16/11/2026). Mức thử đề xuất: đo bài có nhiều NPC nhất đang phát hành và bản gấp đôi số đó trên trường học; bài vượt mức đã đo thì không bảo đảm đạt dòng khung hình/giây | Chưa đo |
+| RAM | App không bị hệ thống đóng trong 15 phút; ngưỡng **1 944 MB PSS** (lần đo đầu 1 620 MB cộng 20 %) | **18/11: đạt** — cao nhất 1 620 MB PSS, app không bị đóng |
+| Dung lượng gói bài Android | Ngưỡng = gói trường học v5 (gói lớn nhất đã chơi đạt các dòng trên); gói lớn hơn phải đo lại trên máy | Chưa có con số: bản phát hành chỉ lưu đường dẫn tệp (`packageSizeBytes` là dung lượng tệp mô tả gói, 3 895 byte). Đo khi chạy thử (B9), tệp gói có ghi dung lượng từng phần. Tệp `building.glb` đầu vào khoảng 124 MB, không phải dung lượng gói |
+| Số người trong tòa nhà (NPC) | Không phải giới hạn của hệ thống: tác giả bài tự đặt số NPC, không có mức trần (quyết định 16/11/2026). Mức đã đo: **5 NPC** trên trường học (bài v5); bài vượt mức đã đo thì không bảo đảm đạt dòng khung hình/giây | **18/11: đạt** với bài trường học v5 (5 NPC). Bản gấp đôi số NPC chưa đo |
 | Kết quả gửi lại (cùng một lượt chơi) | Giống hệt, dung sai 0: gửi lại cùng dữ liệu không đổi kết quả, dữ liệu khác bị từ chối | Backend đã làm theo cách này (FR-TRAINING-RECOVERY-01) |
-| Mức phơi nhiễm khi chơi lại cùng bài, cùng đường đi | Chốt sau khi đo 3 lượt người chơi tự động (AutoPilot) cùng điểm xuất phát; ngưỡng = chênh lệch lớn nhất giữa 3 lượt | Chưa đo. Mô phỏng nguy hiểm xác định theo kịch bản, nhưng đường đi và thời điểm của người chơi khác nhau giữa các lượt |
+| Mức phơi nhiễm khi chơi lại cùng bài, cùng đường đi | Không đặt ngưỡng (quyết định 18/11/2026); ghi vào giới hạn đã biết | Mô phỏng nguy hiểm xác định theo kịch bản, nhưng đường đi và thời điểm của người chơi khác nhau giữa các lượt nên hai lượt không so được từng số. Đo cần bản APK phát triển và người chơi tự động |
 
-Còn phải đo trước khi chốt: RAM, thời gian vào bài trường học, dung lượng gói Android, số NPC, draw call trên điện thoại, mức phơi nhiễm khi chơi lại, phiên 15 phút liên tục (lần dài nhất có ghi là 10 phút, ngày 13/11/2026), tòa tháp trên runtime 2.5.0. Máy Android khác ngoài Redmi Note 10S chưa thử.
+Còn phải đo: thời gian vào bài trường học, dung lượng gói Android (khi chạy thử B9), draw call trên điện thoại (cần bản APK phát triển), bản gấp đôi số NPC. Máy Android khác ngoài Redmi Note 10S chưa thử. Phiên 15 phút liên tục đã đo ngày 18/11/2026 (biên bản dưới).
 
 #### Cách đo một phiên 15 phút
 
@@ -666,7 +666,7 @@ Máy nối USB, bật gỡ lỗi USB; trong Git Bash chạy lệnh `adb shell` c
 
 | Ngày | Bản (runtime, mã bản xuất) | Bài | Khung hình/giây thấp nhất / trung bình | Nhiệt CPU / vỏ máy cao nhất | RAM cao nhất (PSS) | Thời gian vào bài | Ghi chú |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| | | | | | | | |
+| 18/11/2026 | Runtime 2.5.0, bản xuất `2.5.0-202611170845`, app 1002900 (APK ký debug, cùng mã nguồn với AAB 1002950), Redmi Note 10S | Trường học v5 "Cháy bếp căng tin trường học — sơ tán từ lớp học tầng 1" (5 NPC), 17 phút liên tục | 25,0 (trung bình phút thấp nhất) / 29,1; khung chậm > 50 ms 2,7 % | 70 °C / 52 °C, trạng thái nhiệt 0 | 1 620 MB | Chưa bấm giờ | Trưởng nhóm chơi; số liệu thô ở ghi chú bàn giao (`perf-1002900-school/samples.csv`). Phút 4–5 và 16 xuống 25–26 khung hình/giây, người chơi thấy giật nhẹ, chấp nhận được |
 | | | | | | | | |
 | | | | | | | | |
 
