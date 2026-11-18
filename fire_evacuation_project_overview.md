@@ -142,6 +142,14 @@ Cập nhật 15/11/2026: cột Trạng thái ghi mục nào đã có câu trả 
 - **Giấy phép tài sản 3D và động tác:** không rà thêm điều khoản thương mại; dự án dùng cho mục đích học tập, phi thương mại. Nguồn từng tài sản ghi ở `Unity/Assets/_Fire3D/Art/Characters/CREDITS.md` (Unity#56).
 - **Hai tệp IFC nghiệm thu:** không rà thêm giấy phép (quyết định 16/11/2026). Đây là tệp thử nội bộ của nhóm, dùng cho học tập, phi thương mại, không phát hành kèm sản phẩm; công trình thật do tổ chức tự tải tệp IFC của mình lên. Tệp vẫn không commit vào repo (Docs#40).
 
+### Quyết định của trưởng nhóm ngày 18/11/2026
+
+- **Ngưỡng nghiệm thu trên máy:** duyệt bảng ngưỡng ở [IFC mục 10.2](ifc_ingestion_visual_interaction.md#102-thiết-bị-nghiệm-thu-và-số-đo-trên-máy) và đo ngay; phiên 17 phút trên trường học đạt khung hình, nhiệt, RAM. Mức phơi nhiễm khi chơi lại không đặt ngưỡng, ghi là giới hạn đã biết.
+- **Bộ công trình nghiệm thu:** chỉ còn trường học. Tòa tháp bị loại vì tệp IFC lỗi; các kỳ vọng fixture cũ (KIT 119 tường, Revit MEP, 100 % UV0, ≥ 90 % vật liệu) thay bằng: trường học chuyển đổi, đóng gói và chơi được trên điện thoại, đạt ngưỡng mục 10.2.
+- **Tìm đường trong game:** chốt dùng lưới trong app (`GridRasterizer` và trường thoát hiểm), không dùng NavMesh. Lưới đã chạy với hai công trình IFC và người chơi tự động đi qua cửa, cầu thang; NavMesh phải dựng lại cho từng IFC trên điện thoại mà không thêm được gì cho bài tập huấn.
+- **Chi phí vận hành:** máy chủ, cơ sở dữ liệu, lưu trữ và máy dựng gói dùng tài khoản miễn phí dành cho sinh viên. Khoản phải trả tiền chỉ có Tripo (tạo mô hình 3D) 125.000 đ và khóa API cho AI 100.000 đ.
+- **Rubric mẫu khuyến nghị, Redis, OneShield:** không chốt thêm cho bản bàn giao; ghi vào giới hạn đã biết, không chặn nghiệm thu.
+
 ## Ranh giới service và nhất quán dữ liệu
 
 `.NET core` là API nghiệp vụ duy nhất cho client và sở hữu identity, tenant, payment, Building entitlement, quota/usage, scenario, session và dashboard. AI/RAG FastAPI chạy riêng trên AWS EC2. IFC/Blender và Unity Editor là worker riêng nhận job. Notification và reconcile vẫn là background task của BE cho tới khi có nhu cầu scale độc lập được đo bằng benchmark.

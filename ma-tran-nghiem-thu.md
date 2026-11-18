@@ -1,4 +1,4 @@
-# Ma trận nghiệm thu FET3D (đối chiếu ngày 16/11/2026)
+# Ma trận nghiệm thu FET3D (đối chiếu ngày 16/11/2026, cập nhật 18/11/2026)
 
 Tài liệu này điền cột "Trạng thái và bằng chứng" cho ma trận của [Docs#37](https://github.com/Capstone-FA26SE186-Fire3D/Docs/issues/37): 89 mã yêu cầu, 9 nhóm NFR và 8 dòng checklist, giữ đúng thứ tự và issue sở hữu như trong issue. Mỗi dòng ghi mức bằng chứng cao nhất tìm được và nơi mở lại bằng chứng đó.
 
@@ -142,11 +142,11 @@ Viết tắt bằng chứng production dùng nhiều lần:
 | Nghĩa vụ | Sở hữu | Trạng thái | Bằng chứng | Còn thiếu |
 | :--- | :--- | :--- | :--- | :--- |
 | Redis/event/cache | BE#132 (đóng 23/10) | Có test tự động | BE#132 (test Postgres + Redis thật trong CI) | Redis Streams đang tắt trên production (`PROCESSING_DISABLED`); TTL/retention/recovery window chưa chốt (overview, "Còn mở") |
-| IFC fixtures và chất lượng chuyển đổi | AI#23 (đóng 15/11) | Chờ trưởng nhóm | Hai công trình nghiệm thu chuyển và chơi được (AI#23, IFC mục 10.1) | Bộ fixture đã đổi sang hai công trình; các kỳ vọng cũ (KIT 119 tường, Revit MEP, 100% UV0, ≥90% material mapping) chưa đo lại hoặc chưa được thay bằng ngưỡng mới (Docs#40 mở) |
-| NavMesh/connectivity và preservation BIM | Unity#6 (đóng 16/11) | Chờ trưởng nhóm | README "Giới hạn đã biết": dùng lưới trong app (`GridRasterizer`), không NavMesh | Tiêu chí của dòng này đòi "quyết định có xác nhận"; hiện mới là kết quả rà Unity#6, chưa thấy trưởng nhóm chốt |
+| IFC fixtures và chất lượng chuyển đổi | AI#23 (đóng 15/11) | Đã thử trên production / máy thật | Quyết định 18/11: bộ nghiệm thu chỉ còn trường học, kỳ vọng cũ thay bằng ngưỡng IFC mục 10.2; trường học chơi 17 phút trên Redmi đạt khung hình, nhiệt, RAM (18/11) | Thời gian vào bài và dung lượng gói chưa đo (Docs#40) |
+| NavMesh/connectivity và preservation BIM | Unity#6 (đóng 16/11) | Bỏ / đổi theo quyết định | Quyết định 18/11: dùng lưới trong app (`GridRasterizer`), không NavMesh (overview, Quyết định ngày 18/11/2026) | FR-IFC-02/05 còn nhắc NavMesh, cần sửa lời |
 | Catalog runtime, context interaction và HUD | Unity#8 (đóng 15/11) | Đã thử trên production / máy thật | Runtime 2.1.0–2.5.0, `RescueActionsTests`, `Batch3RulesTests`, `TapInteractionTests`; chơi trên Redmi (Unity#8) | Ca "bẫy vẫn hiện nút" và chính sách Guided/Assessment chưa có test riêng |
 | Bake/lighting và material library | Unity#6 (đóng 16/11) | Đã thử trên production / máy thật | Gói theo tầng dựng trên máy ảo, chơi trên Redmi; Unity#114 lọc vật nhỏ ở xa sau lỗi GPU 13/11 | |
-| Quyết định thương mại/quota/rubric | Docs#10 (mở) | Chờ trưởng nhóm | Quyết định 16/11: giá/quota/Trial do PlatformAdmin đặt, không hoàn tiền, một IFC mỗi công trình (Docs#38, BE#103) | Còn mở: rubric mẫu khuyến nghị, Redis, OneShield, chi phí AWS/Azure |
+| Quyết định thương mại/quota/rubric | Docs#10 (mở) | Bỏ / đổi theo quyết định | Quyết định 16/11: giá/quota/Trial do PlatformAdmin đặt, không hoàn tiền, một IFC mỗi công trình (Docs#38, BE#103). Quyết định 18/11: hạ tầng dùng tài khoản miễn phí cho sinh viên, chỉ trả Tripo 125.000 đ và khóa API AI 100.000 đ; rubric mẫu, Redis, OneShield ghi vào giới hạn đã biết | |
 | Asset và dataset licensing | Unity#56 (đóng 16/11 theo quyết định) | Bỏ / đổi theo quyết định | Quyết định 16/11: dự án học tập phi thương mại, không rà thêm; nguồn ghi ở `Unity/Assets/_Fire3D/Art/Characters/CREDITS.md`; hai tệp IFC là tệp thử nội bộ, không commit (Docs#40) | |
 | UAT/user-study và hồ sơ bàn giao | Docs#41 (mở) | Chờ trưởng nhóm | `kich-ban-uat.md`, `huong-dan-hoc-vien.md`, `huong-dan-quan-tri.md`, `release-manifest.md` (Docs PR #103/#104) | Chưa có buổi UAT, phản hồi người dùng, biên bản ký; Docs#42 còn thiếu mục lục vận hành, danh sách biến cấu hình, người xác nhận bàn giao |
 
@@ -154,12 +154,12 @@ Viết tắt bằng chứng production dùng nhiều lần:
 
 | Trạng thái | 89 mã | 9 NFR | 8 checklist | Tổng (106) |
 | :--- | ---: | ---: | ---: | ---: |
-| Đã thử trên production / máy thật | 47 | 6 | 2 | 55 |
+| Đã thử trên production / máy thật | 47 | 6 | 3 | 56 |
 | Có test tự động | 26 | 1 | 1 | 28 |
 | Đã có trên main | 2 | 0 | 0 | 2 |
 | Chờ người khác | 12 | 2 | 0 | 14 |
-| Bỏ / đổi theo quyết định | 2 | 0 | 1 | 3 |
-| Chờ trưởng nhóm | 0 | 0 | 4 | 4 |
+| Bỏ / đổi theo quyết định | 2 | 0 | 3 | 5 |
+| Chờ trưởng nhóm | 0 | 0 | 1 | 1 |
 | Chưa có | 0 | 0 | 0 | 0 |
 
 Không có dòng nào ở trạng thái "Chưa có": với mọi yêu cầu còn hiệu lực đều tìm thấy mã trên `main` (đã grep các mục nghi thiếu: lọc nhiều tình huống, giảm giá, danh sách nhà cung cấp video, màn hỗ trợ trên app). Phần thiếu nằm ở mức bằng chứng, không nằm ở mã. Hai chỗ mã khác đặc tả (NavMesh, Blender) ghi ở mục dưới.
@@ -199,15 +199,14 @@ Không tìm thấy chu kỳ phụ thuộc: Docs#42 phụ thuộc #37–#41, còn
 Theo Docs#37, chỉ đánh dấu 100% khi toàn bộ baseline được nghiệm thu và tài liệu nhất quán. Những việc sau đang chặn:
 
 1. **UAT ba vai trò và biên bản ký** (Docs#41): cần trưởng nhóm tổ chức; kịch bản đã có ở `kich-ban-uat.md`.
-2. **Ngưỡng đo trên máy** (Docs#40): RAM, thời gian tải, kích thước gói, số NPC, dung sai exposure/replay, biên bản chơi đủ 15 phút.
-3. **Bộ rubric mẫu khuyến nghị** (ngưỡng/trọng số theo loại bài): "Còn mở" trong overview.
-4. **Redis** (nhà cung cấp, TTL, retention, recovery window), **OneShield** (gói, WAF, SLA) và **chi phí AWS/Azure**: "Còn mở" trong overview.
-5. **Xác nhận dùng lưới trong app thay NavMesh** để đóng dòng checklist NavMesh và sửa FR-IFC-02/05.
-6. **Sửa tài liệu cho nhất quán:** thêm FR-WEB-07 vào ma trận, sửa FR-TRAINING-05 theo quyết định NPC, gỡ hoặc ghi rõ phần gió còn trong mã, cập nhật `implementation-status.md` và `release-manifest.md`.
-7. **Việc của BE/AI còn mở:** BE#139 (B4), BE#140 (B5), BE#188, BE#194 (cần migration xóa dữ liệu trên production, chờ người phụ trách BE), BE#206; AI#20, AI#21, AI#22, AI#33, AI#34, AI#35.
-8. **Việc cần chủ tài khoản nhà cung cấp hoặc điện thoại:** đăng nhập Google trên bản cài từ Google Play (Mobile#9); email nhắc hạn qua Mailgun và push thật (BE#140).
-9. **Google Play kênh chính thức:** bị từ chối tới khi đủ 12 người thử trong 14 ngày (yêu cầu của Google, ngoài phạm vi nhóm).
-10. **Gói bằng chứng chung:** gần như mọi issue FE/Mobile/Unity đã đóng còn thiếu mục "Bằng chứng và điều kiện đóng" (bước thử, phiên bản sáu repo, log/ảnh môi trường thật). Các mục này dồn về UAT (Docs#41) và hồ sơ bàn giao (Docs#42).
+2. **Ngưỡng đo trên máy** (Docs#40): đã duyệt và đo 18/11 (khung hình, nhiệt, RAM, 5 NPC đạt); còn thời gian vào bài trường học và dung lượng gói Android.
+3. **Rubric mẫu, Redis, OneShield, chi phí:** quyết định 18/11 ghi vào giới hạn đã biết; chi phí đã ghi ở overview.
+4. **Sửa lời FR-IFC-02/05** theo quyết định 18/11 dùng lưới trong app thay NavMesh.
+5. **Sửa tài liệu cho nhất quán:** thêm FR-WEB-07 vào ma trận, sửa FR-TRAINING-05 theo quyết định NPC, gỡ hoặc ghi rõ phần gió còn trong mã, cập nhật `implementation-status.md` và `release-manifest.md`.
+6. **Việc của BE/AI còn mở:** BE#139 (B4), BE#140 (B5), BE#188, BE#194 (cần migration xóa dữ liệu trên production, chờ người phụ trách BE), BE#206; AI#20, AI#21, AI#22, AI#33, AI#34, AI#35.
+7. **Việc cần chủ tài khoản nhà cung cấp hoặc điện thoại:** đăng nhập Google trên bản cài từ Google Play (Mobile#9); email nhắc hạn qua Mailgun và push thật (BE#140).
+8. **Google Play kênh chính thức:** bị từ chối tới khi đủ 12 người thử trong 14 ngày (yêu cầu của Google, ngoài phạm vi nhóm).
+9. **Gói bằng chứng chung:** gần như mọi issue FE/Mobile/Unity đã đóng còn thiếu mục "Bằng chứng và điều kiện đóng" (bước thử, phiên bản sáu repo, log/ảnh môi trường thật). Các mục này dồn về UAT (Docs#41) và hồ sơ bàn giao (Docs#42).
 
 ## Những gì chưa kiểm được trong lần rà này
 
