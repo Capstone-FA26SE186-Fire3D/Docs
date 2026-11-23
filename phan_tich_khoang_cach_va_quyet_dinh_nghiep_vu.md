@@ -50,18 +50,49 @@ Ba danh mục dành cho Organization không nằm trong Learn. Hai nhóm có quy
 
 ## Bốn flow nghiệp vụ
 
-### Flow 1 - Organization đưa IFC và phát hành nội dung
+### Flow 1 - Organization dựng hạ tầng và tình huống theo phương án PC06
 
-1. Tạo Building và chọn quyền chơi public/private.
-2. Upload IFC; hệ thống kiểm tra chất lượng, tạo 3D và báo lỗi cần sửa.
-3. Tự soạn hoặc chỉnh template; chọn mục tiêu, thiết bị và điều chỉnh tiêu chí chấm mẫu.
-4. Kiểm tra kỹ thuật, chạy thử và gửi kịch bản cùng tiêu chí cho PlatformAdmin duyệt.
-5. Admin duyệt hoặc từ chối kèm lý do; nếu bị từ chối, Organization chỉnh và gửi lại.
-6. Khi được duyệt, package hợp lệ và gói dịch vụ còn hiệu lực: phát hành Training, cho tham gia qua QR Building.
+> Thiết kế đích theo góp ý của giảng viên hướng dẫn ngày 23/11/2026. Căn cứ: [pháp lý PCCC](phap-ly-pccc.md). Bản đang chạy còn theo luồng cũ, tóm tắt ở cuối mục này.
 
-Sửa nội dung đã duyệt phải tạo phiên bản mới và gửi duyệt lại trước khi phát hành phiên bản đó. Kết quả cũ giữ đúng phiên bản bài học viên đã chơi.
+1. **Tạo Building.** Loại công trình chỉ có Chung cư hoặc Trường học. Organization điền phiếu thông tin cơ sở theo Mẫu PC06 phần II (tên, địa chỉ, người đứng đầu, lực lượng tại chỗ, danh bạ khẩn cấp), số tầng, tổng diện tích sàn, và đính kèm bản PC06 đã ký nếu có. Hệ thống xác định nhóm nguy cơ theo Phụ lục II.
+2. **Upload IFC.** Tệp phải đạt tiêu chí đầu vào (bảng dưới). Tệp sai bị chặn ngay trên máy người dùng kèm lý do cụ thể.
+3. **Dựng hạ tầng.** Đặt bình chữa cháy, nút ấn và đầu báo cháy, tủ họng nước; xác nhận lối thoát nạn, điểm tập kết, nguồn nước (PC06 phần I, II.5, II.6).
+4. **Chuyên viên PCCC thẩm định hạ tầng.** Đạt hoặc từ chối kèm lý do, trả về Organization. Đạt thì hạ tầng được **khóa** thành một phiên bản; muốn sửa phải mở phiên bản mới và thẩm định lại.
+5. **Tạo tình huống** trên hạ tầng đã khóa. Một hạ tầng có nhiều tình huống. Mỗi tình huống chọn một đối tượng, khai giả định (giờ, vị trí cháy, nguyên nhân, số người có mặt, trong giờ hay ngoài giờ) và nhiệm vụ theo PC06 mục IV.1; nhiệm vụ trở thành mục tiêu trong game và tiêu chí chấm.
+6. **Chuyên viên PCCC thẩm định tình huống.** Đạt hoặc từ chối kèm lý do, trả về Organization.
+7. **Organization gửi PlatformAdmin báo giá**, thanh toán, phát hành Training và QR Building.
+8. **Trainee luyện tập.** Hệ thống ghi nhật ký theo từng tình huống; Organization xem và xuất số liệu để tham khảo khi viết báo cáo Mẫu PC04.
 
-IFC QA (Quality Assurance) là kiểm tra dữ liệu/mô hình đủ điều kiện kỹ thuật để tạo game: đọc được file, đơn vị và tầng hợp lệ, cửa/cầu thang/lối thoát được mapping, kết nối sử dụng được. Bước này khác với Admin đánh giá nội dung và tiêu chí có phù hợp để tập huấn hay không.
+Sửa tình huống đã thẩm định phải tạo phiên bản mới và thẩm định lại. Kết quả cũ giữ đúng phiên bản bài học viên đã chơi. Mỗi hạ tầng cần ít nhất một tình huống trong giờ và một tình huống ngoài giờ trước khi phát hành.
+
+**Ai chịu trách nhiệm gì:** người đứng đầu cơ sở phê duyệt phương án PC06 (Điều 15 Nghị định 105/2025/NĐ-CP), việc này diễn ra ngoài hệ thống. Chuyên viên PCCC thẩm định nội dung huấn luyện trên FET3D. PlatformAdmin báo giá và phát hành; không thẩm định chuyên môn hạ tầng và tình huống.
+
+**Tiêu chí tệp IFC hợp lệ** (hiển thị công khai dạng đạt/không đạt):
+
+| Thời điểm | Tiêu chí | Khi không đạt |
+| --- | --- | --- |
+| Trước khi tải lên, kiểm tra trên máy | Đuôi `.ifc`, không rỗng, không vượt dung lượng tối đa | Chặn, báo lý do |
+| Trước khi tải lên | Phần đầu tệp có `ISO-10303-21;` và `FILE_SCHEMA` là IFC2X3, IFC4 hoặc IFC4X3 | Chặn; nếu là Word, PDF, ZIP, ảnh thì nói rõ loại tệp và rằng đó không phải mô hình IFC |
+| Trong lúc tải | Mất mạng, liên kết hết hạn, chọn nhiều tệp, trùng tệp đã tải | Báo lỗi riêng từng trường hợp, cho thử lại, không để lại bản IFC dở |
+| Sau khi xử lý | Có tầng (`IfcBuildingStorey`), có phòng (`IfcSpace`), có cửa | `NeedsFix`, yêu cầu sửa IFC |
+| Sau khi xử lý | Công trình nhiều tầng có cầu thang; đơn vị đo là mét | `NeedsFix` |
+| Sau khi xử lý | Có ít nhất một lối ra; số tam giác trong ngân sách | Xác nhận cửa thoát có sẵn, hoặc sửa IFC |
+
+**Đối tượng của tình huống** lấy theo nhóm nhiệm vụ của PC06 mục IV.1:
+
+| Loại công trình | Đối tượng | Nhiệm vụ luyện |
+| --- | --- | --- |
+| Chung cư | Cư dân | Thoát nạn tới điểm tập kết |
+| Chung cư | Bảo vệ, ban quản lý | Báo động, gọi 114, hướng dẫn thoát nạn, chữa cháy ban đầu |
+| Trường học | Học sinh | Thoát nạn theo hướng dẫn |
+| Trường học | Giáo viên | Hướng dẫn thoát nạn, kiểm đếm |
+| Trường học | Bảo vệ, nhân viên | Báo động, gọi 114, chữa cháy ban đầu |
+
+**Nhật ký luyện tập** cho mỗi tình huống: số lượt luyện, số người tham gia, tỷ lệ đạt, thời gian thoát nạn trung bình, ngày luyện gần nhất; cảnh báo tình huống chưa được luyện trong năm. Bản xuất luôn có dòng: "Số liệu luyện tập trên mô phỏng, mang tính hỗ trợ, không thay buổi thực tập phương án."
+
+**Bản đang chạy (trước định hướng 23/11/2026):** Organization tạo Building với loại công trình là văn bản tự do; upload IFC chỉ kiểm tra đuôi tệp ở web và phần đầu `ISO-10303-21;` ở máy chủ; thiết bị PCCC và lối thoát nằm trong từng kịch bản, chưa có lớp hạ tầng khóa; kịch bản chưa có trường đối tượng; PlatformAdmin duyệt kịch bản cùng tiêu chí, chưa có vai trò Chuyên viên PCCC; chưa có bước báo giá riêng và chưa có nhật ký theo tình huống.
+
+IFC QA (Quality Assurance) là kiểm tra dữ liệu/mô hình đủ điều kiện kỹ thuật để tạo game: đọc được file, đơn vị và tầng hợp lệ, cửa/cầu thang/lối thoát được mapping, kết nối sử dụng được. Bước này khác với việc Chuyên viên PCCC thẩm định hạ tầng và tình huống có phù hợp để tập huấn hay không.
 
 ### Flow 2 - Trainee học, chơi và được đánh giá
 
