@@ -43,14 +43,13 @@ Quy tắc viết báo cáo: mỗi trích dẫn pháp lý ghi số điều, kho�
 
 ### Phụ lục I và II
 
-- Phụ lục I (cơ sở thuộc diện quản lý về PCCC): mục 1 "Nhà chung cư; nhà ở tập thể"; mục 2 nhà trẻ, mẫu giáo, mầm non, tiểu học, trung học cơ sở, trung học phổ thông, đại học, cao đẳng và cơ sở giáo dục khác. Hai mục này không kèm ngưỡng quy mô.
+- Phụ lục I (cơ sở thuộc diện quản lý về PCCC): mục 1 "Nhà chung cư; nhà ở tập thể"; mục 2 các loại trường học và cơ sở giáo dục. Hai mục này không kèm ngưỡng quy mô. FET3D chỉ dùng phần trường tiểu học, trung học cơ sở, trung học phổ thông, đại học, cao đẳng, dạy nghề.
 - Phụ lục II (cơ sở có nguy hiểm về cháy, nổ):
 
 | Loại hình | Nhóm 1 | Nhóm 2 |
 | --- | --- | --- |
 | Nhà chung cư, nhà ở tập thể | Cao từ 7 tầng hoặc tổng diện tích sàn từ 3.000 m² | Cao từ 5 đến dưới 7 tầng hoặc tổng diện tích sàn từ 1.000 đến dưới 3.000 m² |
 | Trường tiểu học, trung học, đại học, cao đẳng, dạy nghề và cơ sở giáo dục khác | Cao từ 5 tầng hoặc tổng diện tích sàn từ 3.000 m² | Cao từ 3 đến dưới 5 tầng hoặc tổng diện tích sàn từ 1.500 đến dưới 3.000 m² |
-| Nhà trẻ, mẫu giáo, mầm non | Từ 150 cháu hoặc tổng diện tích sàn từ 2.000 m² | Từ 50 đến dưới 150 cháu hoặc tổng diện tích sàn từ 500 đến dưới 2.000 m² |
 
 ### Mẫu số PC06 (Phụ lục VIII)
 
@@ -84,7 +83,7 @@ Báo cáo kết quả thực hiện công tác PCCC, gửi cơ quan quản lý t
 4. **PC06 đi theo luồng dữ liệu, không phải bước in ấn.** Phương án do cơ sở tự giữ, không nộp cơ quan nhà nước và được lưu điện tử (Điều 4 khoản 3, 4). Trong FET3D, các mục của mẫu là khung nhập liệu của Flow 1.
 5. **Đầu ra có giá trị là nhật ký luyện tập.** Cơ sở phải thể hiện kết quả thực tập trong báo cáo PC04. FET3D xuất số liệu luyện tập theo từng tình huống để cơ sở tham khảo khi viết mục 1 của báo cáo, luôn kèm dòng: "Số liệu luyện tập trên mô phỏng, mang tính hỗ trợ, không thay buổi thực tập phương án."
 6. **Phạm vi:** chỉ tình huống cháy (mục IV.1). Tình huống tai nạn, sự cố (IV.2) và phương án của cơ quan Công an (PC08) nằm ngoài phạm vi.
-7. **Loại công trình trong phạm vi:** nhà chung cư và trường học từ tiểu học trở lên. Nhà trẻ, mầm non nằm ngoài phạm vi vì trẻ không tự thoát nạn.
+7. **Loại công trình trong phạm vi:** nhà chung cư và trường học từ tiểu học trở lên. Nhà trẻ, mẫu giáo, mầm non nằm ngoài phạm vi: trẻ nhỏ không tự thao tác trong game và không tự thoát nạn, nên hệ thống không nhận loại công trình này.
 
 ## 4. Ánh xạ Mẫu PC06 vào FET3D
 

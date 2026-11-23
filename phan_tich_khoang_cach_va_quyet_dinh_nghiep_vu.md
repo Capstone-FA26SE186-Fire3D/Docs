@@ -54,7 +54,7 @@ Ba danh mục dành cho Organization không nằm trong Learn. Hai nhóm có quy
 
 > Thiết kế đích theo góp ý của giảng viên hướng dẫn ngày 23/11/2026. Căn cứ: [pháp lý PCCC](phap-ly-pccc.md). Bản đang chạy còn theo luồng cũ, tóm tắt ở cuối mục này.
 
-1. **Tạo Building.** Loại công trình chỉ có Chung cư hoặc Trường học. Organization điền phiếu thông tin cơ sở theo Mẫu PC06 phần II (tên, địa chỉ, người đứng đầu, lực lượng tại chỗ, danh bạ khẩn cấp), số tầng, tổng diện tích sàn, và đính kèm bản PC06 đã ký nếu có. Hệ thống xác định nhóm nguy cơ theo Phụ lục II.
+1. **Tạo Building.** Loại công trình chỉ có Chung cư hoặc Trường học (từ tiểu học trở lên; không nhận nhà trẻ, mẫu giáo, mầm non). Organization điền phiếu thông tin cơ sở theo Mẫu PC06 phần II (tên, địa chỉ, người đứng đầu, lực lượng tại chỗ, danh bạ khẩn cấp), số tầng, tổng diện tích sàn, và đính kèm bản PC06 đã ký nếu có. Hệ thống xác định nhóm nguy cơ theo Phụ lục II.
 2. **Upload IFC.** Tệp phải đạt tiêu chí đầu vào (bảng dưới). Tệp sai bị chặn ngay trên máy người dùng kèm lý do cụ thể.
 3. **Dựng hạ tầng.** Đặt bình chữa cháy, nút ấn và đầu báo cháy, tủ họng nước; xác nhận lối thoát nạn, điểm tập kết, nguồn nước (PC06 phần I, II.5, II.6).
 4. **Chuyên viên PCCC thẩm định hạ tầng.** Đạt hoặc từ chối kèm lý do, trả về Organization. Đạt thì hạ tầng được **khóa** thành một phiên bản; muốn sửa phải mở phiên bản mới và thẩm định lại.
@@ -78,6 +78,17 @@ Sửa tình huống đã thẩm định phải tạo phiên bản mới và th�
 | Sau khi xử lý | Công trình nhiều tầng có cầu thang; đơn vị đo là mét | `NeedsFix` |
 | Sau khi xử lý | Có ít nhất một lối ra; số tam giác trong ngân sách | Xác nhận cửa thoát có sẵn, hoặc sửa IFC |
 
+**Bốn lớp chặn tệp IFC không đạt** (để tệp rác không tiêu tốn lượt xử lý của worker; lớp rẻ đứng trước):
+
+| Lớp | Chạy ở đâu | Kiểm tra | Khi không đạt |
+| --- | --- | --- | --- |
+| 1. Phần đầu tệp | Trình duyệt | Đuôi `.ifc`, dung lượng, `ISO-10303-21;`, `FILE_SCHEMA` | Không cho tải lên |
+| 2. Nội dung tệp | Trình duyệt, không dựng hình học | Có tầng, có phòng, có cửa, có tường hoặc sàn; nhiều tầng thì có cầu thang; đơn vị mét | Không cho tải lên, hiện danh sách mục không đạt. Tệp quá lớn so với bộ nhớ trình duyệt thì bỏ qua lớp này và để lớp 3, 4 kiểm tra |
+| 3. Hạn mức và trùng lặp | Máy chủ | Số lượt xử lý mỗi ngày theo Organization, mỗi Organization một lượt xử lý cùng lúc, tệp trùng mã băm đã hỏng QA, quét nhanh nội dung để chặn lời gọi API trực tiếp | Từ chối, không tạo lượt xử lý |
+| 4. Dừng sớm trong worker | Worker hình học | Lỗi chặn (không phải mô hình kiến trúc, không tầng, không phòng, không cửa) | Dừng trước bước dựng lưới, bản IFC về `NeedsFix` |
+
+Web chỉ tự chạy xử lý khi lớp 1 và 2 đều đạt. Lớp 1, 2, 4 thuộc FE và worker trong repo Unity; lớp 3 thuộc BE.
+
 **Đối tượng của tình huống** lấy theo nhóm nhiệm vụ của PC06 mục IV.1:
 
 | Loại công trình | Đối tượng | Nhiệm vụ luyện |
@@ -90,7 +101,7 @@ Sửa tình huống đã thẩm định phải tạo phiên bản mới và th�
 
 **Nhật ký luyện tập** cho mỗi tình huống: số lượt luyện, số người tham gia, tỷ lệ đạt, thời gian thoát nạn trung bình, ngày luyện gần nhất; cảnh báo tình huống chưa được luyện trong năm. Bản xuất luôn có dòng: "Số liệu luyện tập trên mô phỏng, mang tính hỗ trợ, không thay buổi thực tập phương án."
 
-**Bản đang chạy (trước định hướng 23/11/2026):** Organization tạo Building với loại công trình là văn bản tự do; upload IFC chỉ kiểm tra đuôi tệp ở web và phần đầu `ISO-10303-21;` ở máy chủ; thiết bị PCCC và lối thoát nằm trong từng kịch bản, chưa có lớp hạ tầng khóa; kịch bản chưa có trường đối tượng; PlatformAdmin duyệt kịch bản cùng tiêu chí, chưa có vai trò Chuyên viên PCCC; chưa có bước báo giá riêng và chưa có nhật ký theo tình huống.
+**Bản đang chạy (trước định hướng 23/11/2026):** Organization tạo Building với loại công trình là văn bản tự do; upload IFC chỉ kiểm tra đuôi tệp ở web và phần đầu `ISO-10303-21;` ở máy chủ, tải xong là tự chạy xử lý, không có hạn mức theo Organization và worker không dừng sớm khi gặp lỗi chặn; thiết bị PCCC và lối thoát nằm trong từng kịch bản, chưa có lớp hạ tầng khóa; kịch bản chưa có trường đối tượng; PlatformAdmin duyệt kịch bản cùng tiêu chí, chưa có vai trò Chuyên viên PCCC; chưa có bước báo giá riêng và chưa có nhật ký theo tình huống.
 
 IFC QA (Quality Assurance) là kiểm tra dữ liệu/mô hình đủ điều kiện kỹ thuật để tạo game: đọc được file, đơn vị và tầng hợp lệ, cửa/cầu thang/lối thoát được mapping, kết nối sử dụng được. Bước này khác với việc Chuyên viên PCCC thẩm định hạ tầng và tình huống có phù hợp để tập huấn hay không.
 

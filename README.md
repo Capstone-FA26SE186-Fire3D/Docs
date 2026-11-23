@@ -73,7 +73,8 @@ Source AI hiện có **RAG v2** tại `AI/rag-api/app/v2`, request store/recover
 Các điểm dưới đây là **thiết kế đích**, thay cho nội dung cũ ở những chỗ mâu thuẫn; trạng thái triển khai xem [đối chiếu source](implementation-status.md).
 
 - **Bối cảnh:** hồ sơ PCCC của cơ sở nhiều mục, người không chuyên khó đọc hết. FET3D biến phương án chữa cháy của cơ sở (Mẫu PC06, Nghị định 105/2025/NĐ-CP) thành không gian 3D để từng người luyện đúng tình huống và nhiệm vụ của mình. Căn cứ và ánh xạ: [pháp lý PCCC](phap-ly-pccc.md).
-- **Phạm vi công trình:** chỉ nhà chung cư và trường học (tiểu học trở lên).
+- **Phạm vi công trình:** chỉ nhà chung cư và trường học (tiểu học trở lên). Không nhận nhà trẻ, mẫu giáo, mầm non.
+- **Tệp IFC phải đủ chuẩn:** bốn lớp chặn (phần đầu tệp và nội dung tệp ngay trên trình duyệt, hạn mức và trùng lặp ở máy chủ, dừng sớm trong worker) để tệp rác không tiêu tốn lượt xử lý.
 - **Flow 1 làm lại:** tiêu chí tệp IFC rõ ràng và chặn tệp sai từ đầu; tách **Hạ tầng** (thiết bị PCCC, lối thoát, điểm tập kết; thẩm định xong thì khóa) khỏi **Tình huống** (nhiều tình huống trên một hạ tầng, mỗi tình huống cho một đối tượng). Chi tiết: [Flow 1](phan_tich_khoang_cach_va_quyet_dinh_nghiep_vu.md#flow-1---organization-dựng-hạ-tầng-và-tình-huống-theo-phương-án-pc06).
 - **Vai trò mới:** Chuyên viên PCCC thẩm định hạ tầng và tình huống. PlatformAdmin báo giá và phát hành. Chuyên viên không phê duyệt phương án PC06; việc đó thuộc người đứng đầu cơ sở.
 - **Người chơi biết mục tiêu:** mục tiêu luôn hiển thị trong game ở mọi chế độ; đánh giá theo thời gian tới điểm tập kết và hiệu suất quãng đường (hiển thị kèm số bước).
