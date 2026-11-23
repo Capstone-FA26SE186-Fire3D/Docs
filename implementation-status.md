@@ -28,6 +28,10 @@ Source FE đã có Organization/Admin console, Building/IFC, editor `fet3d.edito
 
 BE có source Redis cache/Streams/recovery; không gọi toàn bộ Redis pipeline là chưa viết, cũng không suy nguồn PostgreSQL, migration hoặc deployment production đã đạt. Xem [context BE](../BE/.codex/context.md). Ingress API hiện tại: DNS iNET → Caddy trên EC2 → .NET; OneShield/OnePortal chỉ đứng trước web.
 
+## Định hướng 23/11/2026 chưa triển khai
+
+Các nội dung theo góp ý của giảng viên hướng dẫn ngày 23/11/2026 (nhóm yêu cầu FR-PLAN: hai loại công trình, tiêu chí và chặn tệp IFC sai, lớp hạ tầng khóa, vai trò Chuyên viên PCCC, đối tượng của tình huống, báo giá, mục tiêu luôn hiển thị, số bước và hiệu suất quãng đường, nhật ký luyện tập, hồ sơ phương án trực quan) mới là thiết kế trong Docs. Tại ngày 23/11/2026 chưa có mã nguồn BE, FE, Unity hay Mobile nào cho các nội dung này. Xem [pháp lý PCCC](phap-ly-pccc.md) và [Flow 1](phan_tich_khoang_cach_va_quyet_dinh_nghiep_vu.md#flow-1---organization-dựng-hạ-tầng-và-tình-huống-theo-phương-án-pc06).
+
 ## Cách dùng bằng chứng
 
 - Source/contract: endpoint và DTO tồn tại, chưa chứng minh runtime đúng.

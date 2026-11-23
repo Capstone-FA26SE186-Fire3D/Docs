@@ -16,6 +16,8 @@ Luồng cốt lõi là **IFC → 3D → Unity Android → QR → Training → Re
 
 Sản phẩm là công cụ học tập và đánh giá hoạt động của đồ án. Website landing và Learn cung cấp nội dung công khai; việc đọc/tìm nội dung không cần tài khoản. Mô phỏng hazard, route, điểm số, analytics và `ConfirmForTraining` không phải chứng nhận an toàn, phê duyệt PCCC, thẩm duyệt thiết kế, tư vấn chuyên môn hay hướng dẫn ứng phó sự cố thực tế.
 
+**Định hướng 23/11/2026 (thiết kế đích):** phạm vi công trình là nhà chung cư và trường học từ tiểu học trở lên. Nội dung bám phương án chữa cháy của cơ sở theo Mẫu PC06 (Nghị định 105/2025/NĐ-CP); căn cứ và ánh xạ ở [pháp lý PCCC](phap-ly-pccc.md). Các yêu cầu nhóm FR-PLAN bên dưới thay cho yêu cầu cũ ở những chỗ mâu thuẫn. Người đứng đầu cơ sở là người phê duyệt phương án PC06; hệ thống và Chuyên viên PCCC không phê duyệt phương án, và mô phỏng không thay buổi thực tập phương án.
+
 ## 2. Tài khoản và quyền
 
 | Loại tài khoản | Trách nhiệm |
@@ -23,6 +25,7 @@ Sản phẩm là công cụ học tập và đánh giá hoạt động của đ�
 | `PlatformAdmin` | Quản trị nền tảng, tổ chức, tài khoản, cấu hình vận hành và giám sát tổng quan. |
 | `OrganizationUser` | Sở hữu Building, IFC, editor/scenario, publish, QR, analytics, billing và AI usage của tổ chức. |
 | `Trainee` | Đăng ký/đăng nhập email và mật khẩu hoặc Google với username theo quy trình onboarding, quét QR Building, chọn bài đã publish, tải package, thực hiện buổi tập huấn, hỏi AI ngoài game và xem kết quả của chính mình. Tài khoản cũ thiếu username hoàn thiện qua profile/onboarding; game start không tự tạo username gate. |
+| Chuyên viên PCCC (`FireSafetyExpert`, thiết kế đích) | Thẩm định hạ tầng PCCC và tình huống do Organization gửi: đạt hoặc từ chối kèm lý do. Không sở hữu dữ liệu của Organization và không phê duyệt phương án PC06. |
 | Khách (Visitor) | Không phải tài khoản/role hệ thống: xem landing, Khám phá, phần giới thiệu Dành cho tổ chức, đọc/tìm Learn và tải ứng dụng. Lưu bài, hỏi AI hoặc chơi game cần đăng ký. |
 
 Khách (Visitor) là actor của phần công khai nhưng không có guest account, guest training không định danh hay role Visitor trong hệ thống. Landing/Learn công khai; mọi game session gắn với Trainee đã xác thực. Building public cho mọi Trainee đã đăng nhập tham gia; Building private yêu cầu thêm mã tham gia chung do Organization cung cấp. Mã không tạo role, membership hoặc quyền đọc tài liệu nội bộ. Xác minh mã tạo grant theo tài khoản ở `access_revision` hiện tại; đổi/thu hồi mã hoặc đổi public/private làm grant cũ mất hiệu lực. QR chỉ resolve Building, không thay kiểm tra quyền. Backend kiểm tra quyền trước khi trả bài/package private và kiểm tra lại ở online start.
@@ -108,6 +111,25 @@ Nguồn đồng bộ auth: [BE authentication](../BE/docs/authentication.md) và
 | FR-IFC-04 | Revision phải kiểm tra floor, cửa, cầu thang, lối thoát, kết nối liên tầng và route từ spawn trước khi chuyển `ReadyForScenario`. | 1 |
 | FR-IFC-05 | Pipeline dùng IfcOpenShell/IfcConvert, Blender script và Unity build worker để tự động tạo geometry runtime, GLB/metadata, collider, NavMesh và content package; issue thiếu dữ liệu phải hiển thị để OrganizationUser sửa/xác nhận. | 1 |
 | FR-IFC-06 | Thay IFC tạo revision mới; thay scenario chỉ tạo scenario version mới nếu geometry tương thích. Mã IFC, tọa độ, đơn vị và provenance phải được giữ qua các artifact. | 1 |
+
+### FR-PLAN: phương án PC06, hạ tầng, tình huống và nhật ký luyện tập
+
+Thiết kế đích ngày 23/11/2026. Cột Phase ghi "Đích" cho yêu cầu chưa triển khai.
+
+| ID | Yêu cầu | Phase |
+| :--- | :--- | :--- |
+| FR-PLAN-01 | Loại công trình của Building chỉ nhận Chung cư hoặc Trường học. Building lưu phiếu thông tin cơ sở theo Mẫu PC06 phần II, số tầng, tổng diện tích sàn và cho đính kèm bản PC06 đã ký. Hệ thống xác định nhóm nguy cơ (Nhóm 1, Nhóm 2, dưới ngưỡng) theo Phụ lục II Nghị định 105/2025/NĐ-CP và nhắc rằng nhóm nguy cơ cao còn có phương án PC08 do cơ quan Công an lập. | Đích |
+| FR-PLAN-02 | Trước khi tải lên, web kiểm tra tệp trên máy người dùng: đuôi `.ifc`, không rỗng, không vượt dung lượng tối đa, phần đầu có `ISO-10303-21;` và `FILE_SCHEMA` là IFC2X3, IFC4 hoặc IFC4X3. Tệp không đạt bị chặn trước khi gọi API, với thông báo riêng cho Word, PDF, ZIP, ảnh, tệp rỗng, tệp quá lớn và tệp STEP không phải IFC. | Đích |
+| FR-PLAN-03 | Máy chủ kiểm tra lại `FILE_SCHEMA` và dung lượng, không để lại bản IFC dở khi tệp bị từ chối. Sau xử lý, QA báo thêm: không có tầng, công trình nhiều tầng không có cầu thang, đơn vị đo không phải mét. Tiêu chí được hiển thị cho Organization dạng danh sách đạt/không đạt. | Đích |
+| FR-PLAN-04 | Hạ tầng PCCC (thiết bị, lối thoát nạn, điểm tập kết, nguồn nước) được lưu theo bản IFC, tách khỏi tình huống, với trạng thái Nháp → Đã gửi → Đạt và khóa, hoặc Từ chối. Hạ tầng đã khóa không sửa được; sửa phải tạo phiên bản mới và thẩm định lại. | Đích |
+| FR-PLAN-05 | Chuyên viên PCCC thẩm định hạ tầng và thẩm định từng tình huống: đạt hoặc từ chối kèm lý do; kết quả trả về Organization. PlatformAdmin không thẩm định chuyên môn hai nội dung này. | Đích |
+| FR-PLAN-06 | Tình huống chỉ tạo được trên hạ tầng đã khóa và tham chiếu đúng phiên bản hạ tầng; một hạ tầng có nhiều tình huống. Tình huống không tự chứa thiết bị cố định hay lối thoát. | Đích |
+| FR-PLAN-07 | Mỗi tình huống có một đối tượng theo nhóm nhiệm vụ của PC06 mục IV.1 (người thoát nạn; thông tin liên lạc; hướng dẫn thoát nạn; chữa cháy ban đầu), giả định (giờ, vị trí, nguyên nhân, số người có mặt) và cờ trong giờ hoặc ngoài giờ. Mỗi hạ tầng cần ít nhất một tình huống trong giờ và một ngoài giờ trước khi phát hành. | Đích |
+| FR-PLAN-08 | Sau khi tình huống đạt thẩm định, Organization gửi yêu cầu báo giá; PlatformAdmin trả báo giá; thanh toán xong mới phát hành. | Đích |
+| FR-PLAN-09 | Game hiển thị mục tiêu của người chơi trước khi bắt đầu và trong suốt lượt chơi ở mọi chế độ, kể cả Assessment; Assessment chỉ ẩn gợi ý đường đi. | Đích |
+| FR-PLAN-10 | Đánh giá bổ sung hai chỉ số: số bước (quy đổi từ quãng đường) và hiệu suất quãng đường (quãng đường ngắn nhất an toàn tới điểm tập kết chia cho quãng đường thực tế). Thẻ kết quả hiển thị thời gian, số bước và so sánh với đường tối ưu. Điểm chính thức vẫn do backend chấm theo rubric. | Đích |
+| FR-PLAN-11 | Organization xem nhật ký luyện tập theo Building, tình huống và khoảng thời gian: số lượt, số người, tỷ lệ đạt, thời gian thoát nạn trung bình, ngày luyện gần nhất; tình huống chưa được luyện trong năm được cảnh báo. Xuất được tệp để tham khảo khi viết báo cáo Mẫu PC04, luôn kèm dòng nêu đây là số liệu mô phỏng, không thay buổi thực tập phương án. | Đích |
+| FR-PLAN-12 | Organization xem "Hồ sơ phương án trực quan": các mục theo thứ tự Mẫu PC06, mỗi mục mở tới đúng vị trí trên mô hình 3D; bản in ghi rõ là bản tham khảo, không thay phương án đã ký. Không có bước in bắt buộc. | Đích |
 
 ### FR-SCENARIO: scenario và readiness
 
@@ -224,6 +246,11 @@ Lưu ý lệch với FR-ANALYTICS-01: yêu cầu ghi `Duration` theo `started_at
 ## 6. Ngoài phạm vi
 
 - Cấp chứng nhận hoàn thành; phê duyệt, kiểm định hoặc kết luận tuân thủ PCCC.
+- Phê duyệt phương án Mẫu PC06 thay người đứng đầu cơ sở; thay buổi thực tập phương án theo Điều 16 Nghị định 105/2025/NĐ-CP.
+- Loại công trình ngoài nhà chung cư và trường học; nhà trẻ, mầm non.
+- Tình huống tai nạn, sự cố của PC06 mục IV.2; phương án của cơ quan Công an (Mẫu PC08).
+- AI tự lập kế hoạch PCCC; xuất bản nháp Mẫu PC06 dạng Word (hướng phát triển sau).
+- Kiểm tra tự động theo QCVN 06:2022/BXD và TCVN 3890.
 - Chương trình học module/sprint hoặc prerequisite bắt buộc; tài khoản/role hệ thống cho Visitor và guest gameplay.
 - Chuyển đổi tự động từ định dạng mô hình ngoài IFC.
 - Game không có tài khoản xác thực hoặc đọc dữ liệu Organization vượt quyền; landing/Learn vẫn đọc công khai.

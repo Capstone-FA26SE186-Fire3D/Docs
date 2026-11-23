@@ -13,6 +13,7 @@ Thư mục này chứa tài liệu sản phẩm và kiến trúc cho **Fire Evac
 | `fire_evacuation_requirements.md` | Yêu cầu chức năng/phi chức năng của bản cuối và thứ tự phase triển khai. |
 | `fire-evacuation-training-features.md` | Tổng hợp tính năng, dẫn chiếu requirements là nguồn yêu cầu sản phẩm. |
 | `phan_tich_khoang_cach_va_quyet_dinh_nghiep_vu.md` | Ghi chú các quyết định nghiệp vụ đã chốt và chi tiết còn mở. |
+| `phap-ly-pccc.md` | Căn cứ pháp lý PCCC đã đối chiếu Công báo (Nghị định 105/2025/NĐ-CP, Mẫu PC06, PC04) và ánh xạ Mẫu PC06 vào Flow 1. |
 | `fire-evacuation-training-workflows.md` | Luồng từ mô hình IFC đến package, QR, buổi tập huấn và dữ liệu kết quả. |
 | `fire-evacuation-training-technology.md` | Kiến trúc, pipeline IFC, runtime Android và các quyết định kỹ thuật. |
 | `fire_evacuation_schema.sql` | Thiết kế cơ sở dữ liệu. |
@@ -66,6 +67,18 @@ OneShield thuộc hệ thống OnePortal của iNET là DNS và lớp edge/bảo
 Supabase chỉ cung cấp PostgreSQL/`pgvector` trong kiến trúc này, không thay Firebase Authentication. BE quản lý email/password và FET3D session; Firebase chỉ xác minh Google Sign-In, FCM chỉ gửi push, Mailgun gửi OTP đăng ký và reset password. Redis chỉ phục vụ cache-aside và vận chuyển event/job qua backend; FE/Mobile không kết nối Redis và cache không cấp quyền. PostgreSQL outbox là nguồn event/replay, dispatcher có lease riêng, còn worker claim attempt/lease sau khi nhận message; consumer ACK chỉ sau transaction ghi tác động và receipt thành công. Backend vẫn là nơi ánh xạ Firebase UID sang ba vai trò FET3D, kiểm tra `organizationId` và thực thi authorization. Từ 09–10/11/2026 BE và AI/RAG chạy trên AWS EC2 Singapore; Azure chỉ còn máy ảo chạy IFC geometry worker và Unity build worker. Các thông số production còn mở nằm ở bảng quyết định của tổng quan dự án.
 
 Source AI hiện có **RAG v2** tại `AI/rag-api/app/v2`, request store/recovery, `PgVectorIndex`/`MemoryIndex`, OpenAI/Gemini/fake adapters, safety gate và eval offline. ChromaDB cùng `/chat`, `/documents`, `/pccc/*` thuộc legacy (routes tắt mặc định), không đại diện toàn bộ implementation. FE gọi .NET cho AI nghiệp vụ; backend cấp scope/quota rồi mới gọi FastAPI. Có source không chứng minh dữ liệu đã migrate hoặc provider/pgvector/deployment production đã nghiệm thu.
+
+## Định hướng ngày 23/11/2026 (góp ý của giảng viên hướng dẫn)
+
+Các điểm dưới đây là **thiết kế đích**, thay cho nội dung cũ ở những chỗ mâu thuẫn; trạng thái triển khai xem [đối chiếu source](implementation-status.md).
+
+- **Bối cảnh:** hồ sơ PCCC của cơ sở nhiều mục, người không chuyên khó đọc hết. FET3D biến phương án chữa cháy của cơ sở (Mẫu PC06, Nghị định 105/2025/NĐ-CP) thành không gian 3D để từng người luyện đúng tình huống và nhiệm vụ của mình. Căn cứ và ánh xạ: [pháp lý PCCC](phap-ly-pccc.md).
+- **Phạm vi công trình:** chỉ nhà chung cư và trường học (tiểu học trở lên).
+- **Flow 1 làm lại:** tiêu chí tệp IFC rõ ràng và chặn tệp sai từ đầu; tách **Hạ tầng** (thiết bị PCCC, lối thoát, điểm tập kết; thẩm định xong thì khóa) khỏi **Tình huống** (nhiều tình huống trên một hạ tầng, mỗi tình huống cho một đối tượng). Chi tiết: [Flow 1](phan_tich_khoang_cach_va_quyet_dinh_nghiep_vu.md#flow-1---organization-dựng-hạ-tầng-và-tình-huống-theo-phương-án-pc06).
+- **Vai trò mới:** Chuyên viên PCCC thẩm định hạ tầng và tình huống. PlatformAdmin báo giá và phát hành. Chuyên viên không phê duyệt phương án PC06; việc đó thuộc người đứng đầu cơ sở.
+- **Người chơi biết mục tiêu:** mục tiêu luôn hiển thị trong game ở mọi chế độ; đánh giá theo thời gian tới điểm tập kết và hiệu suất quãng đường (hiển thị kèm số bước).
+- **Nhật ký luyện tập:** thống kê theo từng tình huống, xuất được để cơ sở tham khảo khi viết báo cáo Mẫu PC04. Mô phỏng không thay buổi thực tập phương án.
+- **Ngoài phạm vi đợt này:** AI lập kế hoạch PCCC, xuất bản nháp PC06 dạng Word, tình huống tai nạn sự cố (PC06 mục IV.2), phương án của cơ quan Công an (PC08), nhà trẻ và mầm non.
 
 ## Phạm vi thống nhất
 
@@ -137,7 +150,7 @@ Các giới hạn dưới đây là hiện trạng của bản đang chạy (xem
 | Không có nét mặt hoảng loạn | Nhân vật không đổi nét mặt khi hoảng loạn; trạng thái của người trong tòa nhà chỉ hiện bằng biểu tượng trên đầu. | Quyết định của nhóm 15/11/2026; [IFC mục 8](ifc_ingestion_visual_interaction.md#8-hud-trạng-thái) |
 | Máy ấm lên khi chơi lâu | Trên điện thoại tầm trung dùng để nghiệm thu (Redmi Note 10S), máy ấm lên khi chơi lâu. Trưởng nhóm chấp nhận mức này; nhiệt độ của lần thử 15/11/2026 chưa đo. | [IFC mục 10.2](ifc_ingestion_visual_interaction.md#102-thiết-bị-nghiệm-thu-và-số-đo-trên-máy) |
 | Chưa lên Google Play công khai | Google Play từ chối đưa ứng dụng lên kênh chính thức cho tới khi có đủ 12 người thử trong 14 ngày. Hiện ứng dụng chỉ phát qua kênh thử nghiệm của Google Play hoặc tệp cài do nhóm gửi. | Lần nộp ngày 15/11/2026 (versionCode 1001901) bị từ chối với lý do này |
-| Nội dung PCCC do PlatformAdmin duyệt | Tác dụng của khăn ướt, chăn ướt, che mũi miệng, chèn khe cửa và chỗ trú tạm trong game là mô phỏng để tập huấn. Người duyệt là PlatformAdmin (người có chuyên môn của nhóm), không có chuyên gia PCCC bên ngoài và không phải chứng nhận PCCC. | Quyết định 16/11/2026, [overview](fire_evacuation_project_overview.md#quyết-định-của-trưởng-nhóm-ngày-16112026) |
+| Nội dung PCCC do PlatformAdmin duyệt | Tác dụng của khăn ướt, chăn ướt, che mũi miệng, chèn khe cửa và chỗ trú tạm trong game là mô phỏng để tập huấn. Người duyệt là PlatformAdmin (người có chuyên môn của nhóm), không có chuyên gia PCCC bên ngoài và không phải chứng nhận PCCC. Theo định hướng 23/11/2026, hạ tầng và tình huống sẽ do vai trò Chuyên viên PCCC thẩm định (thiết kế đích, chưa triển khai). | Quyết định 16/11/2026, [overview](fire_evacuation_project_overview.md#quyết-định-của-trưởng-nhóm-ngày-16112026) |
 | Mỗi lần nhập chỉ một tệp IFC | Mỗi phiên bản mô hình của công trình (revision) nhận đúng một tệp IFC. Mô hình tách theo bộ môn phải được gộp khi xuất (ví dụ "Include linked files" trong Revit). | [IFC mục 4](ifc_ingestion_visual_interaction.md#4-nhiều-ifc-cho-một-revision-đề-xuất-chưa-làm) |
 | Lưới đi lại dựng trong ứng dụng, không có NavMesh dựng sẵn | Các tài liệu thiết kế ghi worker tạo "NavMesh". Bản đang chạy không dựng NavMesh: worker đóng gói hình học và collider, còn lưới đi lại (chia ô theo từng tầng, dùng cho NPC, chỉ đường và lan lửa khói) do ứng dụng tự quét từ collider khi tải bài. Tên bước `GenNavMesh` trong cơ sở dữ liệu là tên cũ. | `Unity/Assets/_Fire3D/Runtime` (`GridRasterizer`); kết quả rà Unity#6 ngày 15/11/2026 |
 | Không giới hạn cứng số người trong tòa nhà (NPC) | Số NPC do người soạn kịch bản đặt, không sinh ngẫu nhiên; ứng dụng tạo đúng số đó. Chưa đo số NPC tối đa mà điện thoại nghiệm thu chịu được. | Quyết định 16/11/2026 (Unity#11) |
