@@ -28,9 +28,20 @@ Source FE đã có Organization/Admin console, Building/IFC, editor `fet3d.edito
 
 BE có source Redis cache/Streams/recovery; không gọi toàn bộ Redis pipeline là chưa viết, cũng không suy nguồn PostgreSQL, migration hoặc deployment production đã đạt. Xem [context BE](../BE/.codex/context.md). Ingress API hiện tại: DNS iNET → Caddy trên EC2 → .NET; OneShield/OnePortal chỉ đứng trước web.
 
-## Định hướng 23/11/2026 chưa triển khai
+## Định hướng 23/11/2026: phần đã có mã và phần còn chờ
 
-Các nội dung theo góp ý của giảng viên hướng dẫn ngày 23/11/2026 (nhóm yêu cầu FR-PLAN: hai loại công trình, tiêu chí và chặn tệp IFC sai, lớp hạ tầng khóa, vai trò Chuyên viên PCCC, đối tượng của tình huống, báo giá, mục tiêu luôn hiển thị, số bước và hiệu suất quãng đường, nhật ký luyện tập, hồ sơ phương án trực quan) mới là thiết kế trong Docs. Tại ngày 23/11/2026 chưa có mã nguồn BE, FE, Unity hay Mobile nào cho các nội dung này. Xem [pháp lý PCCC](phap-ly-pccc.md) và [Flow 1](phan_tich_khoang_cach_va_quyet_dinh_nghiep_vu.md#flow-1---organization-dựng-hạ-tầng-và-tình-huống-theo-phương-án-pc06).
+Nhóm yêu cầu FR-PLAN theo góp ý của giảng viên hướng dẫn ngày 23/11/2026 là thiết kế đích. Xem [pháp lý PCCC](phap-ly-pccc.md) và [Flow 1](phan_tich_khoang_cach_va_quyet_dinh_nghiep_vu.md#flow-1---organization-dựng-hạ-tầng-và-tình-huống-theo-phương-án-pc06). Trạng thái mã nguồn tại ngày 23/11/2026 (bằng chứng là test có mock hoặc test trong Editor, chưa nghiệm thu trên máy chủ và thiết bị thật):
+
+| Yêu cầu | Đã có mã | Còn chờ |
+| :--- | :--- | :--- |
+| FR-PLAN-01 | FE: loại công trình chỉ còn Chung cư, Trường học (FE main). | Phiếu thông tin cơ sở PC06, nhóm nguy cơ: BE#212. |
+| FR-PLAN-02 | FE: kiểm tra tệp IFC trên máy trước khi tải, có danh sách đạt/không đạt (FE main). | Giới hạn dung lượng từ máy chủ: BE#214. |
+| FR-PLAN-03 | Worker hình học dừng sớm khi IFC thiếu tầng/phòng (Unity main, chưa chạy job thật trên máy ảo). FE: danh sách tiêu chí sau xử lý từ mã QA (FE PR #257). | Kiểm tra lại ở máy chủ, giới hạn lượt xử lý, mã QA mới: BE#214, BE#219. |
+| FR-PLAN-04 đến 08 | Chưa có. | BE#211, #213, #215, #217; FE và Unity làm sau BE. |
+| FR-PLAN-09 | Unity: khối "Nhiệm vụ của bạn" ở thẻ giới thiệu, ô mục tiêu hiện ở mọi chế độ (Unity develop, PR #157). | Lên main, thử trên điện thoại. |
+| FR-PLAN-10 | Unity: thẻ kết quả có thời gian, số bước ước tính và so với đường ngắn nhất, chỉ hiển thị trên máy (Unity develop, PR #157). | Gửi số bước và đường tối ưu về máy chủ, chấm điểm: BE#216. |
+| FR-PLAN-11 | FE: tab "Nhật ký luyện tập" theo kịch bản, xuất CSV kèm dòng ghi chú mô phỏng, tối đa 90 ngày (FE develop, PR #256). | Ngày luyện gần nhất, kịch bản chưa luyện trong năm, khoảng một năm: BE#218. |
+| FR-PLAN-12 | Chưa có. | Sau FR-PLAN-04 đến 07. |
 
 ## Cách dùng bằng chứng
 
