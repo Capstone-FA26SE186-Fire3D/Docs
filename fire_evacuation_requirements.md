@@ -118,9 +118,9 @@ Thiết kế đích ngày 23/11/2026. Cột Phase ghi "Đích" cho yêu cầu ch
 
 | ID | Yêu cầu | Phase |
 | :--- | :--- | :--- |
-| FR-PLAN-01 | Loại công trình của Building chỉ nhận Chung cư hoặc Trường học. Building lưu phiếu thông tin cơ sở theo Mẫu PC06 phần II, số tầng, tổng diện tích sàn và cho đính kèm bản PC06 đã ký. Hệ thống xác định nhóm nguy cơ (Nhóm 1, Nhóm 2, dưới ngưỡng) theo Phụ lục II Nghị định 105/2025/NĐ-CP và nhắc rằng nhóm nguy cơ cao còn có phương án PC08 do cơ quan Công an lập. | Đích |
-| FR-PLAN-02 | Trước khi tải lên, web kiểm tra tệp trên máy người dùng: đuôi `.ifc`, không rỗng, không vượt dung lượng tối đa, phần đầu có `ISO-10303-21;` và `FILE_SCHEMA` là IFC2X3, IFC4 hoặc IFC4X3. Tệp không đạt bị chặn trước khi gọi API, với thông báo riêng cho Word, PDF, ZIP, ảnh, tệp rỗng, tệp quá lớn và tệp STEP không phải IFC. | Đích |
-| FR-PLAN-03 | Máy chủ kiểm tra lại `FILE_SCHEMA` và dung lượng, không để lại bản IFC dở khi tệp bị từ chối. Sau xử lý, QA báo thêm: không có tầng, công trình nhiều tầng không có cầu thang, đơn vị đo không phải mét. Tiêu chí được hiển thị cho Organization dạng danh sách đạt/không đạt. | Đích |
+| FR-PLAN-01 | Loại công trình của Building chỉ nhận Chung cư hoặc Trường học (từ tiểu học trở lên; không nhận nhà trẻ, mẫu giáo, mầm non). Building lưu phiếu thông tin cơ sở theo Mẫu PC06 phần II, số tầng, tổng diện tích sàn và cho đính kèm bản PC06 đã ký. Hệ thống xác định nhóm nguy cơ (Nhóm 1, Nhóm 2, dưới ngưỡng) theo Phụ lục II Nghị định 105/2025/NĐ-CP và nhắc rằng nhóm nguy cơ cao còn có phương án PC08 do cơ quan Công an lập. | Đích |
+| FR-PLAN-02 | Trước khi tải lên, web kiểm tra tệp trên máy người dùng: đuôi `.ifc`, không rỗng, không vượt dung lượng tối đa, phần đầu có `ISO-10303-21;` và `FILE_SCHEMA` là IFC2X3, IFC4 hoặc IFC4X3. Tệp không đạt bị chặn trước khi gọi API, với thông báo riêng cho Word, PDF, ZIP, ảnh, tệp rỗng, tệp quá lớn và tệp STEP không phải IFC. Sau đó web mở tệp ngay trong trình duyệt (không dựng hình học) để kiểm tra nội dung: có tầng, có phòng, có cửa, có tường hoặc sàn, công trình nhiều tầng có cầu thang, đơn vị mét; mục không đạt được liệt kê và tệp không được tải lên. Web chỉ tự chạy xử lý khi hai bước kiểm tra này đạt. | Đích |
+| FR-PLAN-03 | Máy chủ kiểm tra lại `FILE_SCHEMA` và dung lượng, không để lại bản IFC dở khi tệp bị từ chối. Sau xử lý, QA báo thêm: không có tầng, công trình nhiều tầng không có cầu thang, đơn vị đo không phải mét. Tiêu chí được hiển thị cho Organization dạng danh sách đạt/không đạt. Để tệp rác không tiêu tốn lượt worker: máy chủ giới hạn số lượt xử lý mỗi ngày theo Organization, mỗi Organization một lượt xử lý cùng lúc, và từ chối tệp trùng mã băm đã hỏng QA; worker hình học dừng trước bước dựng lưới khi gặp lỗi chặn (không phải mô hình kiến trúc, không tầng, không phòng, không cửa). | Đích |
 | FR-PLAN-04 | Hạ tầng PCCC (thiết bị, lối thoát nạn, điểm tập kết, nguồn nước) được lưu theo bản IFC, tách khỏi tình huống, với trạng thái Nháp → Đã gửi → Đạt và khóa, hoặc Từ chối. Hạ tầng đã khóa không sửa được; sửa phải tạo phiên bản mới và thẩm định lại. | Đích |
 | FR-PLAN-05 | Chuyên viên PCCC thẩm định hạ tầng và thẩm định từng tình huống: đạt hoặc từ chối kèm lý do; kết quả trả về Organization. PlatformAdmin không thẩm định chuyên môn hai nội dung này. | Đích |
 | FR-PLAN-06 | Tình huống chỉ tạo được trên hạ tầng đã khóa và tham chiếu đúng phiên bản hạ tầng; một hạ tầng có nhiều tình huống. Tình huống không tự chứa thiết bị cố định hay lối thoát. | Đích |
@@ -247,7 +247,7 @@ Lưu ý lệch với FR-ANALYTICS-01: yêu cầu ghi `Duration` theo `started_at
 
 - Cấp chứng nhận hoàn thành; phê duyệt, kiểm định hoặc kết luận tuân thủ PCCC.
 - Phê duyệt phương án Mẫu PC06 thay người đứng đầu cơ sở; thay buổi thực tập phương án theo Điều 16 Nghị định 105/2025/NĐ-CP.
-- Loại công trình ngoài nhà chung cư và trường học; nhà trẻ, mầm non.
+- Loại công trình ngoài nhà chung cư và trường học. Nhà trẻ, mẫu giáo, mầm non: trẻ nhỏ không tự thao tác trong game và không tự thoát nạn.
 - Tình huống tai nạn, sự cố của PC06 mục IV.2; phương án của cơ quan Công an (Mẫu PC08).
 - AI tự lập kế hoạch PCCC; xuất bản nháp Mẫu PC06 dạng Word (hướng phát triển sau).
 - Kiểm tra tự động theo QCVN 06:2022/BXD và TCVN 3890.
