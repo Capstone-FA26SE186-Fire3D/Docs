@@ -65,7 +65,7 @@ Ba danh mục dành cho Organization không nằm trong Learn. Hai nhóm có quy
 
 Sửa tình huống đã thẩm định phải tạo phiên bản mới và thẩm định lại. Kết quả cũ giữ đúng phiên bản bài học viên đã chơi. Mỗi hạ tầng cần ít nhất một tình huống trong giờ và một tình huống ngoài giờ trước khi phát hành.
 
-**Ai chịu trách nhiệm gì:** người đứng đầu cơ sở phê duyệt phương án PC06 (Điều 15 Nghị định 105/2025/NĐ-CP), việc này diễn ra ngoài hệ thống. Chuyên viên PCCC thẩm định nội dung huấn luyện trên FET3D. PlatformAdmin báo giá và phát hành; không thẩm định chuyên môn hạ tầng và tình huống.
+**Ai chịu trách nhiệm gì:** người đứng đầu cơ sở phê duyệt phương án PC06 (Điều 15 Nghị định 105/2025/NĐ-CP), việc này diễn ra ngoài hệ thống. Chuyên viên PCCC thẩm định nội dung huấn luyện trên FET3D. PlatformAdmin báo giá và phát hành; không thẩm định chuyên môn hạ tầng và tình huống, và không có đường thẩm định thay khi chưa có Chuyên viên PCCC. Các Chuyên viên PCCC dùng chung một hàng đợi; quyết định đã ghi không đổi được và các chuyên viên khác xem lại được ở dạng chỉ đọc.
 
 **Tiêu chí tệp IFC hợp lệ** (hiển thị công khai dạng đạt/không đạt):
 
