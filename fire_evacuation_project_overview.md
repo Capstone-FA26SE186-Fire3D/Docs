@@ -16,9 +16,13 @@ Luồng cốt lõi:
 IFC -> 3D -> Unity Android -> QR -> Training -> Result
 ```
 
+**Định hướng 23/11/2026:** FET3D lấy phương án chữa cháy, cứu nạn, cứu hộ của cơ sở (Mẫu PC06, Nghị định 105/2025/NĐ-CP) làm khung nội dung. Tổ chức dựng hạ tầng PCCC và các tình huống cháy giả định của chính công trình mình; từng nhóm người (cư dân, học sinh, giáo viên, bảo vệ) luyện đúng nhiệm vụ của mình trong tình huống đó. Phạm vi công trình là nhà chung cư và trường học từ tiểu học trở lên. Căn cứ và ánh xạ nằm ở [pháp lý PCCC](phap-ly-pccc.md).
+
 Sản phẩm phục vụ học tập, tập huấn và nghiên cứu. Nó không chứng nhận an toàn PCCC, không phê duyệt thiết kế, không thay thế tư vấn chuyên môn và không đưa ra hướng dẫn trong sự cố cháy thực tế.
 
 ## Vấn đề giải quyết
+
+Mỗi cơ sở thuộc diện quản lý về PCCC phải có phương án chữa cháy theo Mẫu PC06 và phải thực tập ít nhất một lần mỗi năm, sao cho mọi tình huống giả định trong phương án lần lượt được thực tập (Điều 15, 16 Nghị định 105/2025/NĐ-CP). Trên thực tế hồ sơ PCCC nhiều mục, nhiều bước; người không chuyên như cư dân, học sinh, giáo viên khó đọc hết và khó hình dung mình phải làm gì, đi lối nào. Diễn tập thật cũng khó tổ chức đủ cho mọi tình huống và mọi người. FET3D cung cấp công cụ trực quan: phương án được thể hiện trên chính mô hình 3D của công trình, nội dung do Chuyên viên PCCC thẩm định, người học luyện từng tình huống và hệ thống ghi nhật ký luyện tập để cơ sở tham khảo khi báo cáo.
 
 Slide, sơ đồ hai chiều và bài giảng thuần văn bản khó giúp người học ghi nhớ phòng, cửa, cầu thang và lối ra trong công trình cụ thể. FET3D chuyển IFC thành không gian runtime 3D để người học thực hành với hazard surrogate, lựa chọn tuyến đường và rubric đánh giá.
 
@@ -31,9 +35,10 @@ Thời lượng, lựa chọn tuyến, trạng thái hoàn thành và modeled ex
 | `PlatformAdmin` | Quản trị nền tảng, thư viện hỗ trợ Organization, Learn công khai và duyệt mọi phiên bản kịch bản/rubric; quản lý gói và quota. |
 | `OrganizationUser` | Quản lý Building, IFC, scenario, publish, QR, analytics và billing của organization. |
 | `Trainee` | Đăng nhập Android, quét QR Building, chọn bài đã publish, thực hiện training và xem kết quả của chính mình. |
+| Chuyên viên PCCC (`FireSafetyExpert`, thiết kế đích 23/11/2026) | Thẩm định hạ tầng PCCC và từng tình huống do Organization dựng: đạt hoặc từ chối kèm lý do. Không phê duyệt phương án PC06 của cơ sở. |
 | Khách (Visitor) | Không phải tài khoản: xem landing, Khám phá, phần giới thiệu Dành cho tổ chức, đọc/tìm Learn và tải ứng dụng; muốn lưu bài, hỏi AI hoặc chơi phải đăng ký Trainee hoặc Organization. |
 
-Landing và Learn trên web là nội dung công khai cho khách; trong use case, khách (Visitor) là actor của phần công khai nhưng không phải tài khoản hay role hệ thống. Hệ thống không có guest account, guest training không định danh, lời mời thành viên hoặc role hệ thống thứ tư cho kiểm tra nội dung PCCC. Người đã đăng ký Trainee nhưng không thuộc tòa nhà nào vẫn chơi được mọi Building public; Building private cần mã tham gia chung của Organization. Trainee local nhập username ngay khi đăng ký; form → OTP → proof → account verified → login bằng email/password. Google đã link giữ role/tenant cũ; Google mới trả OnboardingRequired, email local trùng trả ACCOUNT_LINK_REQUIRED, đã có API hoàn tất onboarding/link; nghiệm thu provider/client riêng. Thiết kế đích chỉ onboarding Trainee/OrganizationUser. Trainee đăng nhập quét QR; Building public tham gia trực tiếp, private cần mã tham gia chung; xem/chọn bài được phép; session sau đó pin đúng `Training`, release và scenario.
+Landing và Learn trên web là nội dung công khai cho khách; trong use case, khách (Visitor) là actor của phần công khai nhưng không phải tài khoản hay role hệ thống. Hệ thống không có guest account, guest training không định danh, lời mời thành viên. Bản đang chạy chưa có role thứ tư; theo định hướng 23/11/2026, role Chuyên viên PCCC sẽ được bổ sung để thẩm định hạ tầng và tình huống (xem [Flow 1](phan_tich_khoang_cach_va_quyet_dinh_nghiep_vu.md#flow-1---organization-dựng-hạ-tầng-và-tình-huống-theo-phương-án-pc06)). Người đã đăng ký Trainee nhưng không thuộc tòa nhà nào vẫn chơi được mọi Building public; Building private cần mã tham gia chung của Organization. Trainee local nhập username ngay khi đăng ký; form → OTP → proof → account verified → login bằng email/password. Google đã link giữ role/tenant cũ; Google mới trả OnboardingRequired, email local trùng trả ACCOUNT_LINK_REQUIRED, đã có API hoàn tất onboarding/link; nghiệm thu provider/client riêng. Thiết kế đích chỉ onboarding Trainee/OrganizationUser. Trainee đăng nhập quét QR; Building public tham gia trực tiếp, private cần mã tham gia chung; xem/chọn bài được phép; session sau đó pin đúng `Training`, release và scenario.
 
 ## Trải nghiệm web
 
@@ -42,6 +47,8 @@ Website chung điều hướng theo nhu cầu với các mục Khám phá, Dành
 **Thư viện hỗ trợ Organization** gồm template kịch bản tùy chọn, bộ tiêu chí chấm mẫu và danh mục thiết bị game đã được runtime hỗ trợ. PlatformAdmin duy trì các nội dung chuẩn; OrganizationUser dùng để soạn/cấu hình bài trong khu quản lý đã đăng nhập. Thư viện này tách khỏi **Learn công khai** trên web: bài viết, mẹo và video cho mọi người đọc không cần đăng nhập; lưu bài/hỏi AI cần đăng nhập. Learn giữ quy trình biên tập hiện tại và không có bước duyệt bài riêng. Mode Learn trong Unity là trải nghiệm làm quen không gian, không phải blog. IFC, mô hình và kịch bản riêng của Organization không tự được chia sẻ vào thư viện.
 
 ## Workflow
+
+> Các bước dưới đây mô tả bản đang chạy. Flow 1 theo định hướng 23/11/2026 (tiêu chí IFC, tách Hạ tầng và Tình huống, hai vòng thẩm định của Chuyên viên PCCC, Admin báo giá, nhật ký luyện tập) nằm ở [ghi chú quyết định nghiệp vụ](phan_tich_khoang_cach_va_quyet_dinh_nghiep_vu.md#flow-1---organization-dựng-hạ-tầng-và-tình-huống-theo-phương-án-pc06).
 
 1. `OrganizationUser` tạo Building, tải IFC vào vùng lưu trữ riêng; có thể chỉnh thử trước khi mua dịch vụ trong hạn mức thử do Admin cấu hình.
 2. Worker kiểm tra hash/định dạng, dùng Python/IfcOpenShell/IfcConvert để trích xuất, dùng Blender script để tối ưu geometry và tạo preview/issue.
@@ -138,7 +145,7 @@ Cập nhật 15/11/2026: cột Trạng thái ghi mục nào đã có câu trả 
 - **Giá và hoàn tiền:** xem hai dòng "Đã chốt 16/11/2026" ở bảng trên. Không hoàn tiền.
 - **Một IFC cho mỗi phiên bản công trình:** mỗi công trình (Building) dùng một tệp IFC và được tính tiền theo công trình; không làm nhiều IFC cho một phiên bản (BE#103). Mô hình tách theo bộ môn phải gộp khi xuất.
 - **Số người trong tòa nhà (NPC):** do người soạn kịch bản đặt trong trình soạn thảo, không sinh ngẫu nhiên; hệ thống không đặt giới hạn cứng (Unity#11). Người soạn tự cân số lượng cho máy yếu.
-- **Duyệt nội dung an toàn cháy:** PlatformAdmin là người có chuyên môn và là người duyệt nội dung (bài Learn, kịch bản trước khi phát hành, thư viện mẫu) qua luồng duyệt và phát hành của Admin. Không có bước chuyên gia PCCC bên ngoài; game là mô phỏng tập huấn, không phải chứng nhận PCCC.
+- **Duyệt nội dung an toàn cháy (quyết định 16/11/2026; với hạ tầng và tình huống được thay bởi vai trò Chuyên viên PCCC theo định hướng 23/11/2026, còn hiệu lực cho Learn và thư viện mẫu):** PlatformAdmin là người có chuyên môn và là người duyệt nội dung (bài Learn, kịch bản trước khi phát hành, thư viện mẫu) qua luồng duyệt và phát hành của Admin. Không có bước chuyên gia PCCC bên ngoài; game là mô phỏng tập huấn, không phải chứng nhận PCCC.
 - **Giấy phép tài sản 3D và động tác:** không rà thêm điều khoản thương mại; dự án dùng cho mục đích học tập, phi thương mại. Nguồn từng tài sản ghi ở `Unity/Assets/_Fire3D/Art/Characters/CREDITS.md` (Unity#56).
 - **Hai tệp IFC nghiệm thu:** không rà thêm giấy phép (quyết định 16/11/2026). Đây là tệp thử nội bộ của nhóm, dùng cho học tập, phi thương mại, không phát hành kèm sản phẩm; công trình thật do tổ chức tự tải tệp IFC của mình lên. Tệp vẫn không commit vào repo (Docs#40).
 

@@ -154,6 +154,23 @@ OrganizationUser tạo Building
 
 Hướng dẫn xuất IFC từ Revit/ArchiCAD, danh sách thiết bị cần OrganizationUser xác nhận, mã issue và quy trình đặt thiết bị PCCC/vật dụng trong editor được đề xuất tại [IFC ingestion, hiển thị và tương tác](ifc_ingestion_visual_interaction.md).
 
+### 3a. Flow 1 theo định hướng 23/11/2026 (thiết kế đích)
+
+```text
+Organization tạo Building (Chung cư | Trường học) + phiếu thông tin cơ sở PC06
+  -> chọn tệp IFC -> kiểm tra trên máy (đuôi, dung lượng, ISO-10303-21, FILE_SCHEMA)
+       -> không đạt: chặn, báo đúng loại lỗi
+  -> tải lên -> máy chủ kiểm tra lại -> xử lý -> QA theo tiêu chí công khai
+  -> dựng HẠ TẦNG (thiết bị PCCC, lối thoát, điểm tập kết, nguồn nước)
+  -> Chuyên viên PCCC thẩm định hạ tầng -> Từ chối (kèm lý do) | Đạt -> KHÓA
+  -> tạo TÌNH HUỐNG trên hạ tầng đã khóa (đối tượng, giả định, trong giờ/ngoài giờ)
+  -> Chuyên viên PCCC thẩm định tình huống -> Từ chối (kèm lý do) | Đạt
+  -> Organization gửi PlatformAdmin báo giá -> thanh toán -> phát hành -> QR
+  -> Trainee luyện tập -> nhật ký theo tình huống -> xuất số liệu tham khảo cho báo cáo PC04
+```
+
+Bảng tiêu chí IFC, đối tượng theo loại công trình và nội dung nhật ký nằm ở [Flow 1](phan_tich_khoang_cach_va_quyet_dinh_nghiep_vu.md#flow-1---organization-dựng-hạ-tầng-và-tình-huống-theo-phương-án-pc06); căn cứ pháp lý ở [pháp lý PCCC](phap-ly-pccc.md). Mục 3 và 4 của tài liệu này mô tả bản đang chạy.
+
 ## 4. Workflow scenario và readiness
 
 Organization tự soạn hoặc dùng template tùy chọn, có thể kết hợp mục tiêu sơ tán, nhận biết nguy cơ, dùng thiết bị và hỗ trợ người khác trong capability runtime. Admin cung cấp tiêu chí mẫu; Organization điều chỉnh rồi gửi duyệt cùng kịch bản. PlatformAdmin duyệt mọi phiên bản trước phát hành hoặc từ chối kèm lý do. Sửa nội dung/rubric phải tạo phiên bản mới và gửi duyệt lại. IFC QA/ConfirmForTraining là readiness kỹ thuật, không thay bước duyệt nội dung; release chỉ publish khi cả hai đạt. Phiên và kết quả cũ giữ phiên bản đã pin.
