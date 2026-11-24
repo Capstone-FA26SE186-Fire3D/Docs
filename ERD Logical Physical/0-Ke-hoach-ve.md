@@ -5,7 +5,7 @@ Bạn cần vẽ hai bộ sơ đồ cho báo cáo:
 - **Logical:** 9 hình.
 - **Physical:** 12 hình, có thể thành 14 nếu tách hai nhóm lớn.
 
-Mọi nội dung (thực thể, cột, kiểu, khóa, bản số) đã lấy từ database thật trên production (Supabase Singapore, đối chiếu ngày 27/10/2026, 136 migration, đã tính đợt dọn dẹp cùng ngày; xem mục 7). Việc của bạn là **vẽ cho đẹp và đúng**, không cần tự thiết kế lại.
+Mọi nội dung (thực thể, cột, kiểu, khóa, bản số) đã lấy từ database thật trên production (Supabase Singapore, đối chiếu ngày 27/10/2026, 136 migration, đã tính đợt dọn dẹp cùng ngày, cộng phần thay đổi của các migration BE ngày 23–24/11/2026; xem mục 7). Việc của bạn là **vẽ cho đẹp và đúng**, không cần tự thiết kế lại.
 
 ## 1. Trong thư mục có gì
 
@@ -15,7 +15,7 @@ Mọi nội dung (thực thể, cột, kiểu, khóa, bản số) đã lấy t�
 | `1-Logical.md` | Đọc **trước**. Gồm ký hiệu bản số, logical khác physical ở đâu, 9 sơ đồ logical (A0–A8), từ điển thực thể, và các bảng không đưa vào logical. |
 | `2-Physical.md` | Quy ước physical, 16 kiểu enum, 12 sơ đồ physical (B1–B12), đủ cột, kiểu, PK/FK/UK, NULL. |
 | `dbml-theo-nhom/B01…B12.dbml` | Mỗi nhóm physical một file để dán vào dbdiagram.io. Bảng màu xám là bảng của nhóm khác, chỉ giữ cột khóa. |
-| `Fire3D-Physical.dbml` | Toàn bộ 112 bảng trong một file, đã chia sẵn 12 `TableGroup`. Dùng để tra cứu, **không** dùng để vẽ một hình duy nhất: 112 bảng trên một trang thì không đọc được. |
+| `Fire3D-Physical.dbml` | Toàn bộ 114 bảng trong một file, đã chia sẵn 12 `TableGroup`. Dùng để tra cứu, **không** dùng để vẽ một hình duy nhất: 114 bảng trên một trang thì không đọc được. |
 
 Mở file `.md` bằng VS Code (bấm `Ctrl+Shift+V` để xem sơ đồ) hoặc GitHub. Nếu không thấy hình, dán khối ` ```mermaid ` vào [mermaid.live](https://mermaid.live).
 
@@ -26,9 +26,9 @@ Mở file `.md` bằng VS Code (bấm `Ctrl+Shift+V` để xem sơ đồ) hoặc
 | Hình | Nội dung | Lấy từ | Độ lớn |
 |---|---|---|---|
 | L0 | Tổng quan trục nghiệp vụ, chỉ tên thực thể | `1-Logical.md` → A0 | 23 thực thể, 27 quan hệ |
-| L1 | Tổ chức, người dùng & công trình | A1 | 7 thực thể, 8 quan hệ |
+| L1 | Tổ chức, người dùng & công trình | A1 | 8 thực thể, 9 quan hệ |
 | L2 | Mô hình IFC & xử lý | A2 | 12 + 3 tham chiếu, 19 quan hệ |
-| L3 | Kịch bản & chơi thử | A3 | 7 + 4 tham chiếu, 12 quan hệ |
+| L3 | Kịch bản & chơi thử | A3 | 8 + 4 tham chiếu, 16 quan hệ |
 | L4 | Phát hành, huấn luyện & phiên học | A4 | 7 + 7 tham chiếu, 14 quan hệ |
 | L5 | Báo giá, thanh toán & dịch vụ | A5 | 14 + 3 tham chiếu, 26 quan hệ |
 | L6 | AI & kho tri thức | A6 | 4 + 3 tham chiếu, 7 quan hệ |
@@ -42,16 +42,16 @@ Mở file `.md` bằng VS Code (bấm `Ctrl+Shift+V` để xem sơ đồ) hoặc
 | Hình | Nhóm | File để dán | Độ lớn |
 |---|---|---|---|
 | P1 | Định danh & phiên đăng nhập | `B01-dinh-danh-phien-dang-nhap.dbml` | 14 bảng, 9 FK |
-| P2 | Công trình & quyền truy cập | `B02-cong-trinh-quyen-truy-cap.dbml` | 5 bảng (+2 xám), 10 FK |
+| P2 | Công trình & quyền truy cập | `B02-cong-trinh-quyen-truy-cap.dbml` | 6 bảng (+2 xám), 13 FK |
 | P3 | IFC & xử lý (worker) | `B03-ifc-xu-ly-worker.dbml` | 16 bảng (+4), 38 FK — **nên tách đôi** |
 | P4 | Outbox & giao job | `B04-outbox-giao-job-redis-http.dbml` | 7 bảng (+3), 8 FK |
-| P5 | Kịch bản & playtest | `B05-kich-ban-playtest.dbml` | 10 bảng (+7), 28 FK |
+| P5 | Kịch bản & playtest | `B05-kich-ban-playtest.dbml` | 11 bảng (+7), 36 FK |
 | P6 | Phát hành & bài huấn luyện | `B06-phat-hanh-bai-huan-luyen.dbml` | 4 bảng (+8), 14 FK |
 | P7 | Phiên học viên & chấm điểm | `B07-phien-hoc-vien-cham-diem.dbml` | 5 bảng (+6), 16 FK |
 | P8 | Báo giá, PayOS & dịch vụ | `B08-bao-gia-payos-dich-vu.dbml` | 19 bảng (+3), 62 FK — **nên tách đôi** |
 | P9 | AI & kho tri thức | `B09-ai-kho-tri-thuc.dbml` | 5 bảng (+2), 11 FK |
 | P10 | Learn & thư viện tổ chức | `B10-learn-thu-vien-to-chuc.dbml` | 9 bảng (+2), 17 FK |
-| P11 | Hỗ trợ, thông báo, audit | `B11-ho-tro-thong-bao-audit.dbml` | 7 bảng (+5), 18 FK |
+| P11 | Hỗ trợ, thông báo, audit | `B11-ho-tro-thong-bao-audit.dbml` | 7 bảng (+8), 21 FK |
 | P12 | Biên nhận idempotency | `B12-bien-nhan-idempotency.dbml` | 11 bảng (+3), 13 FK |
 
 **Cách tách hai nhóm lớn** nếu một trang A4 không đủ chỗ. Bảng ngoài phần đang vẽ thì để màu xám, chỉ giữ cột khóa.
@@ -137,12 +137,12 @@ Mỗi hình đặt tên dạng: *Hình x.y: ERD logical — Báo giá, thanh to�
 
 ## 5. Những điểm hay bị hỏi khi bảo vệ (nên nắm)
 
-- **Logical có 63 thực thể nhưng physical có 112 bảng?**
+- **Logical có 65 thực thể nhưng physical có 114 bảng?**
   - Physical có thêm 40 bảng kỹ thuật: hàng đợi email, phiên tải file, outbox giao job, biên nhận chống gửi lặp, các bước giữ chỗ khi thanh toán. Danh sách nằm ở mục *Bảng không đưa vào logical*.
   - Physical cũng có thêm 4 bảng trung gian cho quan hệ nhiều-nhiều.
   - Ngoài ra, 4 thực thể logical được lưu thành 2–3 bảng mỗi cái (thêm 5 bảng), do tách quan hệ 1:1, ví dụ `Building` = `buildings` + `building_locations`.
 - **Vì sao nhiều khóa ngoại ghép có `organization_id`?** Để chính database chặn việc gắn dữ liệu của tổ chức này vào tổ chức khác. Ví dụ phiên bản kịch bản không thể trỏ tới công trình của tổ chức khác.
-- **Bảng thứ 113 ở đâu?** `__EFMigrationsHistory`, bảng của EF Core ghi các migration đã chạy. Đây không phải dữ liệu nghiệp vụ nên không vẽ.
+- **Bảng thứ 115 ở đâu?** `__EFMigrationsHistory`, bảng của EF Core ghi các migration đã chạy. Đây không phải dữ liệu nghiệp vụ nên không vẽ.
 
 ## 6. Checklist trước khi nộp
 
@@ -162,4 +162,6 @@ Mỗi hình đặt tên dạng: *Hình x.y: ERD logical — Báo giá, thanh to�
 
 ## 7. Khi database thay đổi
 
-Số liệu trong thư mục này chốt theo production ngày 27/10/2026 (Supabase Singapore, 136 migration), đã tính đợt dọn dẹp cùng ngày: bỏ bảng `revision_processing_logs` (không có code nào ghi) và 2 enum chỉ bảng đó dùng. So với bản 26/10: thêm `learn_media_images` (ảnh bài Learn, nhóm B10) và `knowledge_source_files` (file tài liệu của nguồn tri thức, nhóm B9); cả hai là bảng kỹ thuật nên chỉ có ở physical. Nếu sau này có migration thêm hoặc xóa bảng, nhờ người giữ repo BE sinh lại thư mục. Script sinh file nằm trong `_sinh-lai/`. Không sửa tay các file `.md`/`.dbml`, vì lần sinh lại sẽ ghi đè.
+Số liệu trong thư mục này chốt theo production ngày 27/10/2026 (Supabase Singapore, 136 migration), đã tính đợt dọn dẹp cùng ngày: bỏ bảng `revision_processing_logs` (không có code nào ghi) và 2 enum chỉ bảng đó dùng. So với bản 26/10: thêm `learn_media_images` (ảnh bài Learn, nhóm B10) và `knowledge_source_files` (file tài liệu của nguồn tri thức, nhóm B9); cả hai là bảng kỹ thuật nên chỉ có ở physical.
+
+Cập nhật 24/11/2026 theo BE main `3786664` (150 migration; Luồng 1 theo Mẫu PC06): thêm `fire_infrastructures` (hạ tầng PCCC theo phiên bản IFC, nhóm B5, thực thể `FireInfrastructure`) và `building_plan_documents` (tệp phương án PC06 đã ký, nhóm B2, thực thể `BuildingPlanDocument`); thêm cột phiếu thông tin cơ sở vào `buildings`, `infrastructure_id` vào `scenario_drafts` và `scenario_versions`, ba cột tham chiếu vào `organization_notifications`; enum `user_role_enum` thêm `FireSafetyExpert`. Phần này lấy từ một database dựng tại máy bằng các migration của BE, chưa đối chiếu lại với production; các bảng có từ trước vẫn theo bản đối chiếu 27/10/2026. Nếu sau này có migration thêm hoặc xóa bảng, nhờ người giữ repo BE sinh lại thư mục. Script sinh file nằm trong `_sinh-lai/`. Không sửa tay các file `.md`/`.dbml`, vì lần sinh lại sẽ ghi đè.

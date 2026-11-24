@@ -20,7 +20,8 @@
   "building_locations",
   "building_contacts",
   "building_participation_grants",
-  "building_qr_codes"
+  "building_qr_codes",
+  "building_plan_documents"
  ],
  "3. IFC & xử lý (worker)": [
   "revisions",
@@ -50,6 +51,7 @@
   "processing_stream_retry_receipts"
  ],
  "5. Kịch bản & playtest": [
+  "fire_infrastructures",
   "scenarios",
   "scenario_drafts",
   "scenario_versions",

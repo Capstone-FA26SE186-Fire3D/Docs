@@ -2,7 +2,7 @@
 
 > Bắt đầu từ [0-Ke-hoach-ve.md](0-Ke-hoach-ve.md): danh sách hình cần vẽ, các bước và checklist.
 
-Sinh từ schema PostgreSQL thật trên production (Supabase Singapore, đối chiếu ngày 27/10/2026, 136 migration; đã bỏ trước bảng `revision_processing_logs` và 2 enum của nó, xóa ở đợt dọn dẹp cùng ngày). **Logical:** 63 thực thể, 4 quan hệ nhiều-nhiều. **Physical:** 112 bảng, 1289 cột, 244 khóa ngoại, 16 kiểu enum (chưa tính bảng hệ thống `__EFMigrationsHistory` của EF Core).
+Sinh từ schema PostgreSQL thật trên production (Supabase Singapore, đối chiếu ngày 27/10/2026, 136 migration; đã bỏ trước bảng `revision_processing_logs` và 2 enum của nó, xóa ở đợt dọn dẹp cùng ngày), cộng phần thay đổi của các migration BE từ 23/11 đến 24/11/2026 (BE main `3786664`, 150 migration: hạ tầng PCCC, phiếu thông tin cơ sở PC06, vai trò Chuyên viên PCCC), lấy từ một database dựng tại máy bằng chính các migration đó. **Logical:** 65 thực thể, 4 quan hệ nhiều-nhiều. **Physical:** 114 bảng, 1333 cột, 258 khóa ngoại, 16 kiểu enum (chưa tính bảng hệ thống `__EFMigrationsHistory` của EF Core).
 
 ## Mục lục
 
@@ -37,7 +37,7 @@ Mọi sơ đồ dùng ký hiệu chân chim (crow's foot) của Mermaid:
 | | Logical (file này) | Physical (`2-Physical.md`) |
 |---|---|---|
 | Mục đích | Mô tả **nghiệp vụ**: có những đối tượng nào và chúng liên quan ra sao | Mô tả **cách lưu thật** trong PostgreSQL |
-| Phạm vi | 63 thực thể nghiệp vụ; bỏ các bảng kỹ thuật (hàng đợi, outbox, biên nhận, giữ chỗ...) | Đủ 112 bảng |
+| Phạm vi | 65 thực thể nghiệp vụ; bỏ các bảng kỹ thuật (hàng đợi, outbox, biên nhận, giữ chỗ...) | Đủ 114 bảng |
 | Tên | Thực thể dạng `PascalCase` (`ServiceEntitlement`) | Bảng dạng `snake_case` số nhiều (`service_entitlements`) |
 | Kiểu dữ liệu | Kiểu miền: `ID`, `String`, `Money`, `DateTime`, `Enum`, `Json`... | Kiểu PostgreSQL: `uuid`, `varchar(64)`, `numeric(14,2)`, `timestamptz`, enum riêng, `jsonb`, `vector` |
 | Nhiều – nhiều | Vẽ thẳng `}o--o{` | Tách thành bảng trung gian có khóa chính ghép (xem dưới) |
@@ -96,6 +96,7 @@ Ai dùng hệ thống, thuộc tổ chức nào, và tổ chức có những cô
 
 ```mermaid
 erDiagram
+  Building ||--o{ BuildingPlanDocument : "có tệp PC06 đã ký"
   Organization |o--o{ User : "có thành viên"
   Organization ||--o{ Building : "sở hữu"
   User ||--o{ Building : "tạo"
@@ -156,9 +157,15 @@ erDiagram
     ID id PK
     ID organization_id FK
     ID created_by FK
+    ID signed_plan_document_id FK
     String name
     String building_type
     Int total_floors
+    Decimal floor_area_square_meters
+    String facility_head_name
+    Phone facility_head_phone
+    Json on_site_force
+    Json emergency_contacts
     Enum visibility
     String address
     String city
@@ -178,6 +185,19 @@ erDiagram
     Email email
     Bool is_primary
   }
+  BuildingPlanDocument {
+    ID id PK
+    ID building_id FK
+    ID created_by FK
+    String file_name
+    String content_type
+    Int size_bytes
+    String object_key
+    String sha256
+    DateTime created_at
+    DateTime expires_at
+    DateTime completed_at
+  }
   BuildingQrCode {
     ID id PK
     ID building_id FK
@@ -188,7 +208,7 @@ erDiagram
     DateTime revoked_at
   }
 ```
-*7 thực thể, 8 quan hệ.*
+*8 thực thể, 9 quan hệ.*
 
 ## A2. Mô hình IFC & xử lý
 
@@ -346,18 +366,42 @@ Kịch bản gắn với một công trình. Người soạn sửa bản nháp n
 
 ```mermaid
 erDiagram
+  Revision ||--o{ FireInfrastructure : "có hạ tầng PCCC"
+  User ||--o{ FireInfrastructure : "lập"
+  FireInfrastructure |o--o{ ScenarioDraft : "làm nền cho"
+  FireInfrastructure |o--o{ ScenarioVersion : "làm nền cho"
   Building ||--o{ Scenario : "có kịch bản"
   User ||--o{ Scenario : "tạo"
   Scenario ||--o{ ScenarioDraft : "có bản nháp"
   Revision ||--o{ ScenarioDraft : "làm nền cho"
   Scenario ||--o{ ScenarioVersion : "chốt thành"
   Revision ||--o{ ScenarioVersion : "làm nền cho"
-  ScenarioVersion ||--o| ContentReview : "được duyệt nội dung"
+  ScenarioVersion ||--o| ContentReview : "được thẩm định nội dung"
   ScenarioVersion ||--o{ PlaytestSession : "được chơi thử"
   ScenarioDraft |o--o{ PlaytestSession : "được chơi thử"
   ServiceEntitlement |o--o{ PlaytestSession : "trừ lượt chơi thử"
   User ||--o{ PlaytestSession : "chơi thử"
   PlaytestSession ||--o{ PlaytestEvent : "ghi sự kiện"
+  FireInfrastructure {
+    ID id PK
+    ID revision_id FK
+    ID building_id FK
+    ID organization_id FK
+    ID created_by FK
+    ID submitted_by FK
+    ID decided_by FK
+    Int version_number
+    String status
+    Json geometry
+    String runtime_version
+    Json items
+    String content_hash
+    Text decision_reason
+    DateTime created_at
+    DateTime updated_at
+    DateTime submitted_at
+    DateTime decided_at
+  }
   Scenario {
     ID id PK
     ID building_id FK
@@ -369,6 +413,7 @@ erDiagram
     ID id PK
     ID scenario_id FK
     ID revision_id FK
+    ID infrastructure_id FK
     ID created_by FK
     Int draft_number
     Json state
@@ -379,6 +424,7 @@ erDiagram
     ID id PK
     ID scenario_id FK
     ID revision_id FK
+    ID infrastructure_id FK
     ID created_by FK
     Int version_number
     String name
@@ -446,7 +492,7 @@ erDiagram
     ID id PK "mục A1"
   }
 ```
-*7 thực thể, 12 quan hệ. Thực thể chỉ có `id`: `Building`, `Revision`, `ServiceEntitlement`, `User` (vẽ đầy đủ ở mục khác).*
+*8 thực thể, 16 quan hệ. Thực thể chỉ có `id`: `Building`, `Revision`, `ServiceEntitlement`, `User` (vẽ đầy đủ ở mục khác).*
 
 ## A4. Phát hành, huấn luyện & phiên học
 
@@ -988,6 +1034,9 @@ erDiagram
     ID recipient_user_id FK
     ID building_id FK
     ID entitlement_id FK
+    ID content_review_id FK
+    ID scenario_version_id FK
+    ID fire_infrastructure_id FK
     Enum notification_type
     String title
     Text body
@@ -1050,6 +1099,7 @@ Cột "Bảng physical" cho biết thực thể logical được lưu ở bảng
 | A1 | `AuthSession` | Phiên đăng nhập | `auth_refresh_tokens` |
 | A1 | `Building` | Công trình | `buildings`<br>`building_locations` |
 | A1 | `BuildingContact` | Người liên hệ của công trình | `building_contacts` |
+| A1 | `BuildingPlanDocument` | Tệp phương án PC06 đã ký của công trình | `building_plan_documents` |
 | A1 | `BuildingQrCode` | Mã QR tham gia công trình | `building_qr_codes` |
 | A2 | `Revision` | Phiên bản mô hình IFC | `revisions` |
 | A2 | `SourceDocument` | File IFC gốc | `source_documents` |
@@ -1063,10 +1113,11 @@ Cột "Bảng physical" cho biết thực thể logical được lưu ở bảng
 | A2 | `EquipmentDecision` | Quyết định thiết bị PCCC | `revision_equipment_decisions` |
 | A2 | `StyleSelection` | Lựa chọn hiển thị mô hình | `revision_style_selections` |
 | A2 | `RevisionReview` | Duyệt mô hình cho huấn luyện | `revision_reviews` |
+| A3 | `FireInfrastructure` | Hạ tầng PCCC của một phiên bản IFC (có phiên bản, khóa khi đạt thẩm định) | `fire_infrastructures` |
 | A3 | `Scenario` | Kịch bản | `scenarios` |
 | A3 | `ScenarioDraft` | Bản nháp kịch bản | `scenario_drafts` |
 | A3 | `ScenarioVersion` | Phiên bản kịch bản (bất biến) | `scenario_versions` |
-| A3 | `ContentReview` | Duyệt nội dung kịch bản | `scenario_content_reviews` |
+| A3 | `ContentReview` | Thẩm định nội dung kịch bản | `scenario_content_reviews` |
 | A3 | `RuntimeVersion` | Phiên bản app Unity được hỗ trợ | `runtime_compatibility_catalog` |
 | A3 | `PlaytestSession` | Phiên chơi thử của tổ chức | `playtest_sessions`<br>`playtest_runtime_state`<br>`playtest_package_pins` |
 | A3 | `PlaytestEvent` | Sự kiện trong phiên chơi thử | `playtest_events` |

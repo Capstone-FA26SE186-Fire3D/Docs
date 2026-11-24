@@ -124,8 +124,12 @@ Table organization_notifications {
   "idempotency_key" varchar(255) [not null, unique]
   "read_at" timestamptz
   "created_at" timestamptz [not null, default: `now()`]
+  "content_review_id" uuid
+  "scenario_version_id" uuid
+  "fire_infrastructure_id" uuid
 
-  Note: '''CREATE INDEX organization_notifications_recipient ON organization_notifications USING btree (recipient_user_id, created_at DESC, id)'''
+  Note: '''CHECK (((((notification_type)::text = 'BuildingServiceExpiring'::text) AND (entitlement_id IS NOT NULL) AND (reference_ends_at IS NOT NULL) AND (content_review_id IS NULL) AND (scenario_version_id IS NULL) AND (fire_infrastructure_id IS NULL)) OR (((notification_type)::text = ANY ((ARRAY['ContentReviewApproved'::character varying, 'ContentReviewRejected'::character varying])::text[])) AND (content_review_id IS NOT NULL) AND (scenario_version_id IS NOT NULL) AND (entitlement_id IS NULL) AND (reference_ends_at IS NULL) AND (fire_infrastructure_id IS NULL)) OR (((notification_type)::text = ANY ((ARRAY['FireInfrastructureApproved'::character varying, 'FireInfrastructureRejected'::character varying])::text[])) AND (fire_infrastructure_id IS NOT NULL) AND (content_review_id IS NULL) AND (scenario_version_id IS NULL) AND (entitlement_id IS NULL) AND (reference_ends_at IS NULL))))
+CREATE INDEX organization_notifications_recipient ON organization_notifications USING btree (recipient_user_id, created_at DESC, id)'''
 }
 
 Table notification_deliveries {
@@ -189,7 +193,19 @@ Table buildings [headercolor: #9E9E9E, note: 'nhóm B2'] {
   "id" uuid [pk]
 }
 
+Table fire_infrastructures [headercolor: #9E9E9E, note: 'nhóm B5'] {
+  "id" uuid [pk]
+}
+
 Table organizations [headercolor: #9E9E9E, note: 'nhóm B1'] {
+  "id" uuid [pk]
+}
+
+Table scenario_content_reviews [headercolor: #9E9E9E, note: 'nhóm B5'] {
+  "id" uuid [pk]
+}
+
+Table scenario_versions [headercolor: #9E9E9E, note: 'nhóm B5'] {
   "id" uuid [pk]
 }
 
@@ -217,9 +233,12 @@ Ref support_tickets_session_id_fkey: support_tickets.session_id > sessions.id [d
 Ref support_ticket_messages_author_id_fkey: support_ticket_messages.author_id > users.id [delete: restrict]
 Ref support_ticket_messages_ticket_id_fkey: support_ticket_messages.ticket_id > support_tickets.id [delete: restrict]
 Ref organization_notifications_building_id_fkey: organization_notifications.building_id > buildings.id [delete: restrict]
+Ref organization_notifications_content_review_id_fkey: organization_notifications.content_review_id > scenario_content_reviews.id [delete: restrict]
 Ref organization_notifications_entitlement_id_fkey: organization_notifications.entitlement_id > service_entitlements.id [delete: restrict]
+Ref organization_notifications_fire_infrastructure_id_fkey: organization_notifications.fire_infrastructure_id > fire_infrastructures.id [delete: restrict]
 Ref organization_notifications_organization_id_fkey: organization_notifications.organization_id > organizations.id [delete: restrict]
 Ref organization_notifications_recipient_user_id_fkey: organization_notifications.recipient_user_id > users.id [delete: restrict]
+Ref organization_notifications_scenario_version_id_fkey: organization_notifications.scenario_version_id > scenario_versions.id [delete: restrict]
 Ref notification_deliveries_notification_id_fkey: notification_deliveries.notification_id > organization_notifications.id [delete: restrict]
 Ref analytics_exports_actor_id_fkey: analytics_exports.actor_id > users.id [delete: no action]
 Ref analytics_exports_organization_id_fkey: analytics_exports.organization_id > organizations.id [delete: no action]
