@@ -30,14 +30,17 @@ BE có source Redis cache/Streams/recovery; không gọi toàn bộ Redis pipeli
 
 ## Định hướng 23/11/2026: phần đã có mã và phần còn chờ
 
-Nhóm yêu cầu FR-PLAN theo góp ý của giảng viên hướng dẫn ngày 23/11/2026 là thiết kế đích. Xem [pháp lý PCCC](phap-ly-pccc.md) và [Flow 1](phan_tich_khoang_cach_va_quyet_dinh_nghiep_vu.md#flow-1---organization-dựng-hạ-tầng-và-tình-huống-theo-phương-án-pc06). Trạng thái mã nguồn tại ngày 23/11/2026 (bằng chứng là test có mock hoặc test trong Editor, chưa nghiệm thu trên máy chủ và thiết bị thật):
+Nhóm yêu cầu FR-PLAN theo góp ý của giảng viên hướng dẫn ngày 23/11/2026 là thiết kế đích. Xem [pháp lý PCCC](phap-ly-pccc.md) và [Flow 1](phan_tich_khoang_cach_va_quyet_dinh_nghiep_vu.md#flow-1---organization-dựng-hạ-tầng-và-tình-huống-theo-phương-án-pc06). Trạng thái mã nguồn tại ngày 24/11/2026 (bằng chứng là test có mock hoặc test trong Editor, chưa nghiệm thu trên máy chủ và thiết bị thật). Ngày 24/11 BE đã gộp vào main và deploy BE#211, #212, #213, #214 (BE PR #220 đến #223); phần web và worker tương ứng nằm ở FE PR #259 và Unity PR #159, đang chờ gộp:
 
 | Yêu cầu | Đã có mã | Còn chờ |
 | :--- | :--- | :--- |
-| FR-PLAN-01 | FE: loại công trình chỉ còn Chung cư, Trường học (FE main). | Phiếu thông tin cơ sở PC06, nhóm nguy cơ: BE#212. |
-| FR-PLAN-02 | FE: kiểm tra tệp IFC trên máy trước khi tải, có danh sách đạt/không đạt (FE main). | Giới hạn dung lượng từ máy chủ: BE#214. |
-| FR-PLAN-03 | Worker hình học dừng sớm khi IFC thiếu tầng/phòng (Unity main, chưa chạy job thật trên máy ảo). FE: danh sách tiêu chí sau xử lý từ mã QA (FE PR #257). | Kiểm tra lại ở máy chủ, giới hạn lượt xử lý, mã QA mới: BE#214, BE#219. |
-| FR-PLAN-04 đến 08 | Chưa có. | BE#211, #213, #215, #217; FE và Unity làm sau BE. |
+| FR-PLAN-01 | BE: loại công trình `Apartment`/`School`, phiếu thông tin cơ sở PC06, nhóm nguy cơ, tệp PC06 đã ký (BE main, BE#212). FE: form phiếu thông tin cơ sở, hiện nhóm nguy cơ kèm nhắc PC08, tải lên và xem bản đã ký (FE PR #259). | Gộp FE PR #259; thử với máy chủ thật, nhất là xem tệp PDF đã ký. |
+| FR-PLAN-02 | FE: kiểm tra tệp IFC trên máy trước khi tải (FE main). BE: `GET /api/ifc/upload-limits` (BE main, BE#214). FE: lấy giới hạn dung lượng từ máy chủ (FE PR #259). | Gộp FE PR #259. |
+| FR-PLAN-03 | BE: kiểm tra `FILE_SCHEMA` ở máy chủ, xoá bản tải bị từ chối, ba mã QA mới (BE main, BE#214). Worker hình học: dừng sớm (Unity main) và phát ba mã QA mới (Unity PR #159, chưa chạy job thật trên máy ảo). FE: thông báo sai phiên bản IFC, 12 tiêu chí sau xử lý (FE PR #259). | Gộp FE PR #259 và Unity PR #159. Giới hạn lượt xử lý, từ chối tệp trùng, quét nhanh nội dung: BE#219. |
+| FR-PLAN-04 | BE: hạ tầng PCCC theo bản IFC, có phiên bản, khoá khi đạt thẩm định (BE main, BE#213). FE: mục Hạ tầng PCCC và soạn hạ tầng trên mô hình 3D (FE PR #259). | Gộp FE PR #259; thử với máy chủ thật. |
+| FR-PLAN-05 | BE: vai trò Chuyên viên PCCC và hàng chờ thẩm định cho hạ tầng và tình huống (BE main, BE#211, #213). FE: khu Chuyên viên PCCC, màn quản trị chỉ còn theo dõi (FE PR #259). | Gộp FE PR #259; tạo tài khoản chuyên viên thật và thử một vòng thẩm định. |
+| FR-PLAN-06 | BE: tình huống chỉ tạo trên hạ tầng đã khoá và không chứa lối thoát, thiết bị cố định (BE main, BE#213). FE: bắt buộc chọn hạ tầng đã khoá, trình soạn tình huống hiện hạ tầng ở dạng chỉ đọc (FE PR #259). | Gộp FE PR #259. |
+| FR-PLAN-07, 08 | Chưa có. | BE#215, #217; FE làm sau BE. |
 | FR-PLAN-09 | Unity: khối "Nhiệm vụ của bạn" ở thẻ giới thiệu, ô mục tiêu hiện ở mọi chế độ (Unity develop, PR #157). | Lên main, thử trên điện thoại. |
 | FR-PLAN-10 | Unity: thẻ kết quả có thời gian, số bước ước tính và so với đường ngắn nhất, chỉ hiển thị trên máy (Unity develop, PR #157). | Gửi số bước và đường tối ưu về máy chủ, chấm điểm: BE#216. |
 | FR-PLAN-11 | FE: tab "Nhật ký luyện tập" theo kịch bản, xuất CSV kèm dòng ghi chú mô phỏng, tối đa 90 ngày (FE develop, PR #256). | Ngày luyện gần nhất, kịch bản chưa luyện trong năm, khoảng một năm: BE#218. |
