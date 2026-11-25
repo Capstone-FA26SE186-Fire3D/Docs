@@ -2,7 +2,7 @@
 
 > Bắt đầu từ [0-Ke-hoach-ve.md](0-Ke-hoach-ve.md): danh sách hình cần vẽ, các bước và checklist.
 
-Sinh từ schema PostgreSQL thật trên production (Supabase Singapore, đối chiếu ngày 27/10/2026, 136 migration; đã bỏ trước bảng `revision_processing_logs` và 2 enum của nó, xóa ở đợt dọn dẹp cùng ngày). **Logical:** 63 thực thể, 4 quan hệ nhiều-nhiều. **Physical:** 112 bảng, 1289 cột, 244 khóa ngoại, 16 kiểu enum (chưa tính bảng hệ thống `__EFMigrationsHistory` của EF Core).
+Sinh từ schema PostgreSQL thật trên production (Supabase Singapore, đối chiếu ngày 27/10/2026, 136 migration; đã bỏ trước bảng `revision_processing_logs` và 2 enum của nó, xóa ở đợt dọn dẹp cùng ngày), cộng phần thay đổi của các migration BE từ 23/11 đến 25/11/2026 (BE main `f589374`, 155 migration: hạ tầng PCCC, phiếu thông tin cơ sở PC06, vai trò Chuyên viên PCCC, hạn mức xử lý IFC; đã bỏ bảng `revision_style_selections`), lấy từ một database dựng tại máy bằng chính các migration đó. **Logical:** 65 thực thể, 4 quan hệ nhiều-nhiều. **Physical:** 114 bảng, 1335 cột, 258 khóa ngoại, 16 kiểu enum (chưa tính bảng hệ thống `__EFMigrationsHistory` của EF Core).
 
 ## Mục lục
 
@@ -50,7 +50,7 @@ Sinh từ schema PostgreSQL thật trên production (Supabase Singapore, đối 
 | `support_priority_enum` | Low, Normal, High, Urgent |
 | `support_ticket_status_enum` | Open, InProgress, Resolved, Closed |
 | `training_status_enum` | Draft, Active, Closed, Archived |
-| `user_role_enum` | PlatformAdmin, OrganizationUser, Trainee |
+| `user_role_enum` | PlatformAdmin, OrganizationUser, Trainee, FireSafetyExpert |
 
 ## B1. Định danh & phiên đăng nhập
 
@@ -254,14 +254,17 @@ erDiagram
 
 ```mermaid
 erDiagram
+  building_plan_documents |o--o{ buildings : "signed_plan_document_id"
   building_qr_codes |o--o{ building_qr_codes : "replaced_by"
   buildings ||--o{ building_contacts : "building_id"
   buildings ||--o| building_locations : "building_id"
   buildings ||--o{ building_participation_grants : "building_id"
+  buildings ||--o{ building_plan_documents : "building_id"
   buildings ||--o{ building_qr_codes : "building_id"
   organizations ||--o{ building_qr_codes : "organization_id"
   organizations ||--o{ buildings : "organization_id"
   users ||--o{ building_participation_grants : "trainee_user_id"
+  users ||--o{ building_plan_documents : "created_by"
   users ||--o{ building_qr_codes : "created_by"
   users ||--o{ buildings : "created_by"
   buildings {
@@ -278,6 +281,12 @@ erDiagram
     text visibility
     bigint access_revision
     varchar(64) participation_code_hash "NULL"
+    numeric floor_area_square_meters "(12,2), NULL"
+    varchar(200) facility_head_name "NULL"
+    varchar(32) facility_head_phone "NULL"
+    jsonb on_site_force "NULL"
+    jsonb emergency_contacts
+    uuid signed_plan_document_id FK "NULL"
   }
   building_locations {
     uuid id PK
@@ -320,6 +329,22 @@ erDiagram
     timestamptz revoked_at "NULL"
     uuid replaced_by FK "NULL"
   }
+  building_plan_documents {
+    uuid id PK
+    uuid building_id FK
+    uuid created_by FK
+    varchar(128) idempotency_key
+    char(64) input_hash
+    varchar(255) file_name
+    text content_type
+    bigint size_bytes
+    text staging_key UK
+    text object_key UK "NULL"
+    char(64) sha256 "NULL"
+    timestamptz created_at
+    timestamptz expires_at
+    timestamptz completed_at "NULL"
+  }
   organizations {
     uuid id PK "nhóm 1"
   }
@@ -327,9 +352,9 @@ erDiagram
     uuid id PK "nhóm 1"
   }
 ```
-*5 bảng, 10 khóa ngoại, 2 bảng ở nhóm khác.*
+*6 bảng, 13 khóa ngoại, 2 bảng ở nhóm khác.*
 
-- **UNIQUE nhiều cột:** `buildings(id, organization_id)`
+- **UNIQUE nhiều cột:** `buildings(id, organization_id)`; `building_plan_documents(created_by, idempotency_key)`
 
 ## B3. IFC & xử lý (worker)
 
@@ -340,6 +365,7 @@ erDiagram
   buildings ||--o{ ifc_upload_intents : "building_id"
   buildings ||--o{ revisions : "building_id, organization_id"
   ifc_upload_intents ||--o{ ifc_upload_attempts : "revision_id"
+  organizations |o--o{ ifc_processing_policies : "organization_id"
   organizations ||--o{ ifc_upload_intents : "organization_id"
   processing_job_attempts ||--o{ processing_candidate_outputs : "attempt_id"
   processing_job_attempts |o--o{ processing_jobs : "current_attempt_id"
@@ -356,7 +382,6 @@ erDiagram
   revisions ||--o{ revision_artifacts : "revision_id"
   revisions ||--o{ revision_equipment_decisions : "revision_id"
   revisions ||--o{ revision_reviews : "revision_id"
-  revisions ||--o{ revision_style_selections : "revision_id"
   revisions ||--o| source_documents : "revision_id"
   revisions ||--o{ validation_runs : "revision_id"
   scenario_versions |o--o{ processing_jobs : "scenario_version_id"
@@ -365,10 +390,10 @@ erDiagram
   source_documents |o--o{ ifc_upload_intents : "source_document_id"
   source_documents ||--o{ processing_jobs : "source_document_id, revision_id"
   users ||--o{ annotation_sets : "created_by"
+  users ||--o{ ifc_processing_policies : "created_by"
   users ||--o{ ifc_upload_intents : "actor_id"
   users ||--o{ revision_equipment_decisions : "created_by"
   users ||--o{ revision_reviews : "reviewed_by"
-  users ||--o{ revision_style_selections : "created_by"
   users ||--o{ revisions : "uploaded_by"
   users ||--o{ source_documents : "uploaded_by"
   validation_runs ||--o{ revision_issues : "validation_run_id"
@@ -545,14 +570,6 @@ erDiagram
     uuid created_by FK
     timestamptz created_at
   }
-  revision_style_selections {
-    uuid id PK
-    uuid revision_id FK
-    int version_number
-    jsonb data
-    uuid created_by FK
-    timestamptz created_at
-  }
   annotation_sets {
     uuid id PK
     uuid revision_id FK
@@ -573,6 +590,16 @@ erDiagram
     text review_message "NULL"
     timestamptz reviewed_at
   }
+  ifc_processing_policies {
+    uuid id PK
+    uuid organization_id FK "NULL"
+    text policy_kind
+    int daily_limit "NULL"
+    timestamptz effective_from
+    text note "NULL"
+    uuid created_by FK
+    timestamptz created_at
+  }
   buildings {
     uuid id PK "nhóm 2"
   }
@@ -588,7 +615,7 @@ erDiagram
 ```
 *16 bảng, 38 khóa ngoại, 4 bảng ở nhóm khác.*
 
-- **UNIQUE nhiều cột:** `revisions(building_id, version_label)`; `revisions(id, building_id, organization_id)`; `revisions(id, organization_id)`; `source_documents(id, revision_id)`; `ifc_upload_intents(actor_id, idempotency_key)`; `processing_jobs(id, revision_id)`; `processing_job_attempts(id, processing_job_id)`; `processing_job_attempts(processing_job_id, attempt_number)`; `revision_artifacts(id, revision_id)`; `revision_artifacts(job_id, artifact_type, sha256_hash)`; `bim_facts(revision_id, ifc_global_id, property_path)`; `revision_equipment_decisions(revision_id, version_number)`; `revision_style_selections(revision_id, version_number)`; `annotation_sets(id, revision_id)`; `annotation_sets(revision_id, version_number)`; `revision_reviews(validation_run_id, action)`
+- **UNIQUE nhiều cột:** `revisions(building_id, version_label)`; `revisions(id, building_id, organization_id)`; `revisions(id, organization_id)`; `source_documents(id, revision_id)`; `ifc_upload_intents(actor_id, idempotency_key)`; `processing_jobs(id, revision_id)`; `processing_job_attempts(id, processing_job_id)`; `processing_job_attempts(processing_job_id, attempt_number)`; `revision_artifacts(id, revision_id)`; `revision_artifacts(job_id, artifact_type, sha256_hash)`; `bim_facts(revision_id, ifc_global_id, property_path)`; `revision_equipment_decisions(revision_id, version_number)`; `annotation_sets(id, revision_id)`; `annotation_sets(revision_id, version_number)`; `revision_reviews(validation_run_id, action)`
 - **Xóa dây chuyền:** `bim_facts` → `revisions` ON DELETE CASCADE
 
 ## B4. Outbox & giao job (Redis/HTTP)
@@ -686,9 +713,13 @@ erDiagram
 
 ```mermaid
 erDiagram
+  buildings ||--o{ fire_infrastructures : "building_id"
   buildings ||--o{ playtest_sessions : "building_id"
   buildings ||--o{ scenario_drafts : "building_id"
   buildings ||--o{ scenarios : "building_id, organization_id"
+  fire_infrastructures |o--o{ scenario_drafts : "infrastructure_id"
+  fire_infrastructures |o--o{ scenario_versions : "infrastructure_id"
+  organizations ||--o{ fire_infrastructures : "organization_id"
   organizations ||--o{ playtest_sessions : "organization_id"
   organizations ||--o{ scenario_drafts : "organization_id"
   playtest_sessions ||--o{ playtest_events : "playtest_id"
@@ -698,6 +729,7 @@ erDiagram
   processing_job_attempts ||--o{ playtest_package_pins : "attempt_id"
   revision_artifacts ||--o{ playtest_package_pins : "artifact_id"
   revision_artifacts ||--o{ playtest_package_pins : "manifest_artifact_id"
+  revisions ||--o{ fire_infrastructures : "revision_id"
   revisions ||--o{ playtest_sessions : "revision_id"
   revisions ||--o{ scenario_drafts : "revision_id"
   revisions ||--o{ scenario_versions : "revision_id, building_id, organization_id"
@@ -706,6 +738,9 @@ erDiagram
   scenario_versions ||--o| scenario_content_reviews : "scenario_version_id"
   scenarios ||--o{ scenario_drafts : "scenario_id"
   scenarios ||--o{ scenario_versions : "scenario_id, building_id, organization_id"
+  users ||--o{ fire_infrastructures : "created_by"
+  users |o--o{ fire_infrastructures : "decided_by"
+  users |o--o{ fire_infrastructures : "submitted_by"
   users ||--o{ playtest_handoffs : "created_by"
   users ||--o{ playtest_sessions : "created_by"
   users |o--o{ scenario_content_reviews : "reviewed_by"
@@ -714,6 +749,27 @@ erDiagram
   users ||--o{ scenario_versions : "created_by"
   users ||--o{ scenarios : "created_by"
   validation_runs ||--o{ playtest_package_pins : "validation_run_id"
+  fire_infrastructures {
+    uuid id PK
+    uuid revision_id FK
+    uuid building_id FK
+    uuid organization_id FK
+    int version_number
+    text status
+    bigint row_revision
+    jsonb geometry "NULL"
+    varchar(32) runtime_version "NULL"
+    jsonb items
+    varchar(64) content_hash "NULL"
+    uuid created_by FK
+    timestamptz created_at
+    timestamptz updated_at
+    uuid submitted_by FK "NULL"
+    timestamptz submitted_at "NULL"
+    uuid decided_by FK "NULL"
+    timestamptz decided_at "NULL"
+    text decision_reason "NULL"
+  }
   scenarios {
     uuid id PK
     uuid building_id FK
@@ -735,6 +791,7 @@ erDiagram
     uuid created_by FK
     timestamptz created_at
     timestamptz updated_at
+    uuid infrastructure_id FK "NULL"
   }
   scenario_versions {
     uuid id PK
@@ -765,6 +822,7 @@ erDiagram
     jsonb learning_objectives "NULL"
     text learner_instructions "NULL"
     jsonb rubric "NULL"
+    uuid infrastructure_id FK "NULL"
   }
   scenario_content_reviews {
     uuid id PK
@@ -883,9 +941,9 @@ erDiagram
     uuid id PK "nhóm 3"
   }
 ```
-*10 bảng, 28 khóa ngoại, 7 bảng ở nhóm khác.*
+*11 bảng, 36 khóa ngoại, 7 bảng ở nhóm khác.*
 
-- **UNIQUE nhiều cột:** `scenarios(id, building_id, organization_id)`; `scenario_versions(id, revision_id, organization_id)`; `scenario_versions(scenario_id, version_number)`; `playtest_events(playtest_id, sequence)`
+- **UNIQUE nhiều cột:** `fire_infrastructures(revision_id, version_number)`; `scenarios(id, building_id, organization_id)`; `scenario_versions(id, revision_id, organization_id)`; `scenario_versions(scenario_id, version_number)`; `playtest_events(playtest_id, sequence)`
 - **Xóa dây chuyền:** `scenario_drafts` → `buildings` ON DELETE CASCADE; `scenario_drafts` → `organizations` ON DELETE CASCADE; `scenario_drafts` → `revisions` ON DELETE CASCADE; `scenario_drafts` → `scenarios` ON DELETE CASCADE; `scenario_drafts` → `users` ON DELETE CASCADE; `playtest_sessions` → `buildings` ON DELETE CASCADE; `playtest_sessions` → `organizations` ON DELETE CASCADE; `playtest_sessions` → `revisions` ON DELETE CASCADE; `playtest_sessions` → `scenario_versions` ON DELETE CASCADE; `playtest_sessions` → `users` ON DELETE CASCADE
 
 ## B6. Phát hành & bài huấn luyện
@@ -1805,11 +1863,14 @@ erDiagram
 erDiagram
   buildings ||--o{ organization_notifications : "building_id"
   feedback |o--o{ support_tickets : "feedback_id"
+  fire_infrastructures |o--o{ organization_notifications : "fire_infrastructure_id"
   organization_notifications ||--o{ notification_deliveries : "notification_id"
   organizations |o--o{ analytics_exports : "organization_id"
   organizations |o--o{ feedback : "organization_id"
   organizations ||--o{ organization_notifications : "organization_id"
   organizations |o--o{ support_tickets : "organization_id"
+  scenario_content_reviews |o--o{ organization_notifications : "content_review_id"
+  scenario_versions |o--o{ organization_notifications : "scenario_version_id"
   service_entitlements ||--o{ organization_notifications : "entitlement_id"
   sessions |o--o{ feedback : "session_id"
   sessions |o--o{ support_tickets : "session_id"
@@ -1873,6 +1934,9 @@ erDiagram
     varchar(255) idempotency_key UK
     timestamptz read_at "NULL"
     timestamptz created_at
+    uuid content_review_id FK "NULL"
+    uuid scenario_version_id FK "NULL"
+    uuid fire_infrastructure_id FK "NULL"
   }
   notification_deliveries {
     uuid id PK
@@ -1916,8 +1980,17 @@ erDiagram
   buildings {
     uuid id PK "nhóm 2"
   }
+  fire_infrastructures {
+    uuid id PK "nhóm 5"
+  }
   organizations {
     uuid id PK "nhóm 1"
+  }
+  scenario_content_reviews {
+    uuid id PK "nhóm 5"
+  }
+  scenario_versions {
+    uuid id PK "nhóm 5"
   }
   service_entitlements {
     uuid id PK "nhóm 8"
@@ -1929,7 +2002,7 @@ erDiagram
     uuid id PK "nhóm 1"
   }
 ```
-*7 bảng, 18 khóa ngoại, 5 bảng ở nhóm khác.*
+*7 bảng, 21 khóa ngoại, 8 bảng ở nhóm khác.*
 
 - **UNIQUE nhiều cột:** `notification_deliveries(notification_id, channel)`
 - **Xóa dây chuyền:** `feedback` → `organizations` ON DELETE SET NULL; `feedback` → `sessions` ON DELETE SET NULL; `support_tickets` → `feedback` ON DELETE SET NULL; `support_tickets` → `organizations` ON DELETE SET NULL; `support_tickets` → `sessions` ON DELETE SET NULL

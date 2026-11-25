@@ -15,6 +15,12 @@ Table buildings {
   "visibility" text [not null, default: 'Private', note: '''CHECK ((visibility = ANY (ARRAY['Private'::text, 'Public'::text])))''']
   "access_revision" bigint [not null, default: 1, note: '''CHECK ((access_revision > 0))''']
   "participation_code_hash" varchar(64) [note: '''CHECK (((participation_code_hash)::text ~ '^[0-9a-f]{64}$'::text))''']
+  "floor_area_square_meters" numeric(12,2) [note: '''CHECK (((floor_area_square_meters IS NULL) OR (floor_area_square_meters > (0)::numeric)))''']
+  "facility_head_name" varchar(200)
+  "facility_head_phone" varchar(32)
+  "on_site_force" jsonb [note: '''CHECK (((on_site_force IS NULL) OR (jsonb_typeof(on_site_force) = 'object'::text)))''']
+  "emergency_contacts" jsonb [not null, default: `'[]'::jsonb`, note: '''CHECK ((jsonb_typeof(emergency_contacts) = 'array'::text))''']
+  "signed_plan_document_id" uuid
 
   indexes {
     (id, organization_id) [unique]
@@ -76,6 +82,31 @@ CREATE INDEX building_qr_codes_building ON building_qr_codes USING btree (buildi
 CREATE UNIQUE INDEX building_qr_codes_one_active ON building_qr_codes USING btree (building_id) WHERE (status = 'Active'::text)'''
 }
 
+Table building_plan_documents {
+  "id" uuid [pk]
+  "building_id" uuid [not null]
+  "created_by" uuid [not null]
+  "idempotency_key" varchar(128) [not null, note: '''CHECK (((idempotency_key)::text ~ '^[!-~]{1,128}$'::text))''']
+  "input_hash" char(64) [not null, note: '''CHECK ((input_hash ~ '^[0-9a-f]{64}$'::text))''']
+  "file_name" varchar(255) [not null, note: '''CHECK (((length(btrim((file_name)::text)) >= 1) AND (length(btrim((file_name)::text)) <= 255)))''']
+  "content_type" text [not null, note: '''CHECK ((content_type = 'application/pdf'::text))''']
+  "size_bytes" bigint [not null, note: '''CHECK (((size_bytes >= 1) AND (size_bytes <= 20971520)))''']
+  "staging_key" text [not null, unique]
+  "object_key" text [unique]
+  "sha256" char(64) [note: '''CHECK ((sha256 ~ '^[0-9a-f]{64}$'::text))''']
+  "created_at" timestamptz [not null]
+  "expires_at" timestamptz [not null]
+  "completed_at" timestamptz
+
+  indexes {
+    (created_by, idempotency_key) [unique]
+  }
+
+  Note: '''CHECK ((expires_at > created_at))
+CHECK ((((completed_at IS NULL) = (object_key IS NULL)) AND ((completed_at IS NULL) = (sha256 IS NULL))))
+CREATE INDEX building_plan_documents_building ON building_plan_documents USING btree (building_id, created_at DESC)'''
+}
+
 Table organizations [headercolor: #9E9E9E, note: 'nhóm B1'] {
   "id" uuid [pk]
 }
@@ -86,6 +117,7 @@ Table users [headercolor: #9E9E9E, note: 'nhóm B1'] {
 
 Ref buildings_created_by_fkey: buildings.created_by > users.id [delete: no action]
 Ref buildings_organization_id_fkey: buildings.organization_id > organizations.id [delete: no action]
+Ref buildings_signed_plan_document_id_fkey: buildings.signed_plan_document_id > building_plan_documents.id [delete: no action]
 Ref building_locations_building_id_fkey: building_locations.building_id > buildings.id [delete: no action]
 Ref building_contacts_building_id_fkey: building_contacts.building_id > buildings.id [delete: no action]
 Ref building_participation_grants_building_id_fkey: building_participation_grants.building_id > buildings.id [delete: no action]
@@ -94,3 +126,5 @@ Ref building_qr_codes_building_id_fkey: building_qr_codes.building_id > building
 Ref building_qr_codes_created_by_fkey: building_qr_codes.created_by > users.id [delete: no action]
 Ref building_qr_codes_organization_id_fkey: building_qr_codes.organization_id > organizations.id [delete: no action]
 Ref building_qr_codes_replaced_by_fkey: building_qr_codes.replaced_by > building_qr_codes.id [delete: no action]
+Ref building_plan_documents_building_id_fkey: building_plan_documents.building_id > buildings.id [delete: no action]
+Ref building_plan_documents_created_by_fkey: building_plan_documents.created_by > users.id [delete: no action]
