@@ -2,7 +2,7 @@
 
 > Bắt đầu từ [0-Ke-hoach-ve.md](0-Ke-hoach-ve.md): danh sách hình cần vẽ, các bước và checklist.
 
-Sinh từ schema PostgreSQL thật trên production (Supabase Singapore, đối chiếu ngày 27/10/2026, 136 migration; đã bỏ trước bảng `revision_processing_logs` và 2 enum của nó, xóa ở đợt dọn dẹp cùng ngày), cộng phần thay đổi của các migration BE từ 23/11 đến 24/11/2026 (BE main `3786664`, 150 migration: hạ tầng PCCC, phiếu thông tin cơ sở PC06, vai trò Chuyên viên PCCC), lấy từ một database dựng tại máy bằng chính các migration đó. **Logical:** 65 thực thể, 4 quan hệ nhiều-nhiều. **Physical:** 114 bảng, 1333 cột, 258 khóa ngoại, 16 kiểu enum (chưa tính bảng hệ thống `__EFMigrationsHistory` của EF Core).
+Sinh từ schema PostgreSQL thật trên production (Supabase Singapore, đối chiếu ngày 27/10/2026, 136 migration; đã bỏ trước bảng `revision_processing_logs` và 2 enum của nó, xóa ở đợt dọn dẹp cùng ngày), cộng phần thay đổi của các migration BE từ 23/11 đến 25/11/2026 (BE main `f589374`, 155 migration: hạ tầng PCCC, phiếu thông tin cơ sở PC06, vai trò Chuyên viên PCCC, hạn mức xử lý IFC; đã bỏ bảng `revision_style_selections`), lấy từ một database dựng tại máy bằng chính các migration đó. **Logical:** 65 thực thể, 4 quan hệ nhiều-nhiều. **Physical:** 114 bảng, 1335 cột, 258 khóa ngoại, 16 kiểu enum (chưa tính bảng hệ thống `__EFMigrationsHistory` của EF Core).
 
 ## Mục lục
 
@@ -96,6 +96,7 @@ Ai dùng hệ thống, thuộc tổ chức nào, và tổ chức có những cô
 
 ```mermaid
 erDiagram
+  Organization |o--o{ IfcProcessingPolicy : "có hạn mức xử lý IFC"
   Building ||--o{ BuildingPlanDocument : "có tệp PC06 đã ký"
   Organization |o--o{ User : "có thành viên"
   Organization ||--o{ Building : "sở hữu"
@@ -207,8 +208,18 @@ erDiagram
     DateTime created_at
     DateTime revoked_at
   }
+  IfcProcessingPolicy {
+    ID id PK
+    ID organization_id FK
+    ID created_by FK
+    String policy_kind
+    Int daily_limit
+    DateTime effective_from
+    Text note
+    DateTime created_at
+  }
 ```
-*8 thực thể, 9 quan hệ.*
+*9 thực thể, 10 quan hệ.*
 
 ## A2. Mô hình IFC & xử lý
 
@@ -229,7 +240,6 @@ erDiagram
   Revision ||--o{ BimFact : "có thuộc tính BIM"
   Revision ||--o{ AnnotationSet : "có chú thích"
   Revision ||--o{ EquipmentDecision : "có quyết định thiết bị"
-  Revision ||--o{ StyleSelection : "có kiểu hiển thị"
   Revision ||--o{ RevisionReview : "được duyệt"
   ValidationRun ||--o{ RevisionReview : "là căn cứ"
   AnnotationSet |o--o{ RevisionReview : "được dùng khi duyệt"
@@ -330,13 +340,6 @@ erDiagram
     Int version_number
     Json data
   }
-  StyleSelection {
-    ID id PK
-    ID revision_id FK
-    ID created_by FK
-    Int version_number
-    Json data
-  }
   RevisionReview {
     ID id PK
     ID revision_id FK
@@ -358,7 +361,7 @@ erDiagram
     ID id PK "mục A1"
   }
 ```
-*12 thực thể, 19 quan hệ. Thực thể chỉ có `id`: `Building`, `ScenarioVersion`, `User` (vẽ đầy đủ ở mục khác).*
+*11 thực thể, 18 quan hệ. Thực thể chỉ có `id`: `Building`, `ScenarioVersion`, `User` (vẽ đầy đủ ở mục khác).*
 
 ## A3. Kịch bản & chơi thử
 
@@ -1101,6 +1104,7 @@ Cột "Bảng physical" cho biết thực thể logical được lưu ở bảng
 | A1 | `BuildingContact` | Người liên hệ của công trình | `building_contacts` |
 | A1 | `BuildingPlanDocument` | Tệp phương án PC06 đã ký của công trình | `building_plan_documents` |
 | A1 | `BuildingQrCode` | Mã QR tham gia công trình | `building_qr_codes` |
+| A1 | `IfcProcessingPolicy` | Hạn mức lượt xử lý IFC mỗi ngày (mức chung hoặc riêng một tổ chức) | `ifc_processing_policies` |
 | A2 | `Revision` | Phiên bản mô hình IFC | `revisions` |
 | A2 | `SourceDocument` | File IFC gốc | `source_documents` |
 | A2 | `ProcessingJob` | Lượt xử lý mô hình trên VM | `processing_jobs` |
@@ -1111,7 +1115,6 @@ Cột "Bảng physical" cho biết thực thể logical được lưu ở bảng
 | A2 | `BimFact` | Thuộc tính BIM trích từ IFC | `bim_facts` |
 | A2 | `AnnotationSet` | Bộ chú thích trên mô hình | `annotation_sets` |
 | A2 | `EquipmentDecision` | Quyết định thiết bị PCCC | `revision_equipment_decisions` |
-| A2 | `StyleSelection` | Lựa chọn hiển thị mô hình | `revision_style_selections` |
 | A2 | `RevisionReview` | Duyệt mô hình cho huấn luyện | `revision_reviews` |
 | A3 | `FireInfrastructure` | Hạ tầng PCCC của một phiên bản IFC (có phiên bản, khóa khi đạt thẩm định) | `fire_infrastructures` |
 | A3 | `Scenario` | Kịch bản | `scenarios` |

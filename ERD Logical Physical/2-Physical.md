@@ -2,7 +2,7 @@
 
 > Bắt đầu từ [0-Ke-hoach-ve.md](0-Ke-hoach-ve.md): danh sách hình cần vẽ, các bước và checklist.
 
-Sinh từ schema PostgreSQL thật trên production (Supabase Singapore, đối chiếu ngày 27/10/2026, 136 migration; đã bỏ trước bảng `revision_processing_logs` và 2 enum của nó, xóa ở đợt dọn dẹp cùng ngày), cộng phần thay đổi của các migration BE từ 23/11 đến 24/11/2026 (BE main `3786664`, 150 migration: hạ tầng PCCC, phiếu thông tin cơ sở PC06, vai trò Chuyên viên PCCC), lấy từ một database dựng tại máy bằng chính các migration đó. **Logical:** 65 thực thể, 4 quan hệ nhiều-nhiều. **Physical:** 114 bảng, 1333 cột, 258 khóa ngoại, 16 kiểu enum (chưa tính bảng hệ thống `__EFMigrationsHistory` của EF Core).
+Sinh từ schema PostgreSQL thật trên production (Supabase Singapore, đối chiếu ngày 27/10/2026, 136 migration; đã bỏ trước bảng `revision_processing_logs` và 2 enum của nó, xóa ở đợt dọn dẹp cùng ngày), cộng phần thay đổi của các migration BE từ 23/11 đến 25/11/2026 (BE main `f589374`, 155 migration: hạ tầng PCCC, phiếu thông tin cơ sở PC06, vai trò Chuyên viên PCCC, hạn mức xử lý IFC; đã bỏ bảng `revision_style_selections`), lấy từ một database dựng tại máy bằng chính các migration đó. **Logical:** 65 thực thể, 4 quan hệ nhiều-nhiều. **Physical:** 114 bảng, 1335 cột, 258 khóa ngoại, 16 kiểu enum (chưa tính bảng hệ thống `__EFMigrationsHistory` của EF Core).
 
 ## Mục lục
 
@@ -365,6 +365,7 @@ erDiagram
   buildings ||--o{ ifc_upload_intents : "building_id"
   buildings ||--o{ revisions : "building_id, organization_id"
   ifc_upload_intents ||--o{ ifc_upload_attempts : "revision_id"
+  organizations |o--o{ ifc_processing_policies : "organization_id"
   organizations ||--o{ ifc_upload_intents : "organization_id"
   processing_job_attempts ||--o{ processing_candidate_outputs : "attempt_id"
   processing_job_attempts |o--o{ processing_jobs : "current_attempt_id"
@@ -381,7 +382,6 @@ erDiagram
   revisions ||--o{ revision_artifacts : "revision_id"
   revisions ||--o{ revision_equipment_decisions : "revision_id"
   revisions ||--o{ revision_reviews : "revision_id"
-  revisions ||--o{ revision_style_selections : "revision_id"
   revisions ||--o| source_documents : "revision_id"
   revisions ||--o{ validation_runs : "revision_id"
   scenario_versions |o--o{ processing_jobs : "scenario_version_id"
@@ -390,10 +390,10 @@ erDiagram
   source_documents |o--o{ ifc_upload_intents : "source_document_id"
   source_documents ||--o{ processing_jobs : "source_document_id, revision_id"
   users ||--o{ annotation_sets : "created_by"
+  users ||--o{ ifc_processing_policies : "created_by"
   users ||--o{ ifc_upload_intents : "actor_id"
   users ||--o{ revision_equipment_decisions : "created_by"
   users ||--o{ revision_reviews : "reviewed_by"
-  users ||--o{ revision_style_selections : "created_by"
   users ||--o{ revisions : "uploaded_by"
   users ||--o{ source_documents : "uploaded_by"
   validation_runs ||--o{ revision_issues : "validation_run_id"
@@ -570,14 +570,6 @@ erDiagram
     uuid created_by FK
     timestamptz created_at
   }
-  revision_style_selections {
-    uuid id PK
-    uuid revision_id FK
-    int version_number
-    jsonb data
-    uuid created_by FK
-    timestamptz created_at
-  }
   annotation_sets {
     uuid id PK
     uuid revision_id FK
@@ -598,6 +590,16 @@ erDiagram
     text review_message "NULL"
     timestamptz reviewed_at
   }
+  ifc_processing_policies {
+    uuid id PK
+    uuid organization_id FK "NULL"
+    text policy_kind
+    int daily_limit "NULL"
+    timestamptz effective_from
+    text note "NULL"
+    uuid created_by FK
+    timestamptz created_at
+  }
   buildings {
     uuid id PK "nhóm 2"
   }
@@ -613,7 +615,7 @@ erDiagram
 ```
 *16 bảng, 38 khóa ngoại, 4 bảng ở nhóm khác.*
 
-- **UNIQUE nhiều cột:** `revisions(building_id, version_label)`; `revisions(id, building_id, organization_id)`; `revisions(id, organization_id)`; `source_documents(id, revision_id)`; `ifc_upload_intents(actor_id, idempotency_key)`; `processing_jobs(id, revision_id)`; `processing_job_attempts(id, processing_job_id)`; `processing_job_attempts(processing_job_id, attempt_number)`; `revision_artifacts(id, revision_id)`; `revision_artifacts(job_id, artifact_type, sha256_hash)`; `bim_facts(revision_id, ifc_global_id, property_path)`; `revision_equipment_decisions(revision_id, version_number)`; `revision_style_selections(revision_id, version_number)`; `annotation_sets(id, revision_id)`; `annotation_sets(revision_id, version_number)`; `revision_reviews(validation_run_id, action)`
+- **UNIQUE nhiều cột:** `revisions(building_id, version_label)`; `revisions(id, building_id, organization_id)`; `revisions(id, organization_id)`; `source_documents(id, revision_id)`; `ifc_upload_intents(actor_id, idempotency_key)`; `processing_jobs(id, revision_id)`; `processing_job_attempts(id, processing_job_id)`; `processing_job_attempts(processing_job_id, attempt_number)`; `revision_artifacts(id, revision_id)`; `revision_artifacts(job_id, artifact_type, sha256_hash)`; `bim_facts(revision_id, ifc_global_id, property_path)`; `revision_equipment_decisions(revision_id, version_number)`; `annotation_sets(id, revision_id)`; `annotation_sets(revision_id, version_number)`; `revision_reviews(validation_run_id, action)`
 - **Xóa dây chuyền:** `bim_facts` → `revisions` ON DELETE CASCADE
 
 ## B4. Outbox & giao job (Redis/HTTP)

@@ -276,19 +276,6 @@ Table revision_equipment_decisions {
   }
 }
 
-Table revision_style_selections {
-  "id" uuid [pk]
-  "revision_id" uuid [not null]
-  "version_number" integer [not null, note: '''CHECK ((version_number > 0))''']
-  "data" jsonb [not null, note: '''CHECK ((jsonb_typeof(data) = 'object'::text))''']
-  "created_by" uuid [not null]
-  "created_at" timestamptz [not null]
-
-  indexes {
-    (revision_id, version_number) [unique]
-  }
-}
-
 Table annotation_sets {
   "id" uuid [pk, default: `extensions.gen_random_uuid()`]
   "revision_id" uuid [not null]
@@ -321,6 +308,20 @@ Table revision_reviews {
 
   Note: '''CHECK (((action <> 'Rejected'::review_action_enum) OR (NULLIF(btrim(review_message), ''::text) IS NOT NULL)))
 CREATE UNIQUE INDEX one_scenario_confirmation ON revision_reviews USING btree (scenario_version_id) WHERE (action = 'ConfirmForTraining'::review_action_enum)'''
+}
+
+Table ifc_processing_policies {
+  "id" uuid [pk]
+  "organization_id" uuid
+  "policy_kind" text [not null, default: 'DailyGeometryRuns', note: '''CHECK ((policy_kind = 'DailyGeometryRuns'::text))''']
+  "daily_limit" integer [note: '''CHECK (((daily_limit IS NULL) OR ((daily_limit >= 0) AND (daily_limit <= 100000))))''']
+  "effective_from" timestamptz [not null]
+  "note" text [note: '''CHECK (((note IS NULL) OR ((length(note) >= 1) AND (length(note) <= 500))))''']
+  "created_by" uuid [not null]
+  "created_at" timestamptz [not null, default: `now()`]
+
+  Note: '''CHECK (((organization_id IS NOT NULL) OR (daily_limit IS NOT NULL)))
+CREATE INDEX ifc_processing_policies_lookup ON ifc_processing_policies USING btree (organization_id, effective_from DESC, created_at DESC)'''
 }
 
 Table buildings [headercolor: #9E9E9E, note: 'nhóm B2'] {
@@ -369,8 +370,6 @@ Ref revision_issues_validation_run_id_fkey: revision_issues.validation_run_id > 
 Ref bim_facts_revision_id_fkey: bim_facts.revision_id > revisions.id [delete: cascade]
 Ref revision_equipment_decisions_created_by_fkey: revision_equipment_decisions.created_by > users.id [delete: no action]
 Ref revision_equipment_decisions_revision_id_fkey: revision_equipment_decisions.revision_id > revisions.id [delete: no action]
-Ref revision_style_selections_created_by_fkey: revision_style_selections.created_by > users.id [delete: no action]
-Ref revision_style_selections_revision_id_fkey: revision_style_selections.revision_id > revisions.id [delete: no action]
 Ref annotation_sets_created_by_fkey: annotation_sets.created_by > users.id [delete: no action]
 Ref annotation_sets_revision_id_fkey: annotation_sets.revision_id > revisions.id [delete: no action]
 Ref revision_reviews_annotation_set_id_revision_id_fkey: revision_reviews.(annotation_set_id, revision_id) > annotation_sets.(id, revision_id) [delete: no action]
@@ -378,3 +377,5 @@ Ref revision_reviews_reviewed_by_fkey: revision_reviews.reviewed_by > users.id [
 Ref revision_reviews_revision_id_fkey: revision_reviews.revision_id > revisions.id [delete: no action]
 Ref revision_reviews_scenario_version_id_fkey: revision_reviews.scenario_version_id > scenario_versions.id [delete: no action]
 Ref revision_reviews_validation_run_id_fkey: revision_reviews.validation_run_id > validation_runs.id [delete: no action]
+Ref ifc_processing_policies_created_by_fkey: ifc_processing_policies.created_by > users.id [delete: no action]
+Ref ifc_processing_policies_organization_id_fkey: ifc_processing_policies.organization_id > organizations.id [delete: no action]

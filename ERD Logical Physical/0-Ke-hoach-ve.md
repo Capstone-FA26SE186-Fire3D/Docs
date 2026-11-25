@@ -26,8 +26,8 @@ Mở file `.md` bằng VS Code (bấm `Ctrl+Shift+V` để xem sơ đồ) hoặc
 | Hình | Nội dung | Lấy từ | Độ lớn |
 |---|---|---|---|
 | L0 | Tổng quan trục nghiệp vụ, chỉ tên thực thể | `1-Logical.md` → A0 | 23 thực thể, 27 quan hệ |
-| L1 | Tổ chức, người dùng & công trình | A1 | 8 thực thể, 9 quan hệ |
-| L2 | Mô hình IFC & xử lý | A2 | 12 + 3 tham chiếu, 19 quan hệ |
+| L1 | Tổ chức, người dùng & công trình | A1 | 9 thực thể, 10 quan hệ |
+| L2 | Mô hình IFC & xử lý | A2 | 11 + 3 tham chiếu, 18 quan hệ |
 | L3 | Kịch bản & chơi thử | A3 | 8 + 4 tham chiếu, 16 quan hệ |
 | L4 | Phát hành, huấn luyện & phiên học | A4 | 7 + 7 tham chiếu, 14 quan hệ |
 | L5 | Báo giá, thanh toán & dịch vụ | A5 | 14 + 3 tham chiếu, 26 quan hệ |
@@ -164,4 +164,6 @@ Mỗi hình đặt tên dạng: *Hình x.y: ERD logical — Báo giá, thanh to�
 
 Số liệu trong thư mục này chốt theo production ngày 27/10/2026 (Supabase Singapore, 136 migration), đã tính đợt dọn dẹp cùng ngày: bỏ bảng `revision_processing_logs` (không có code nào ghi) và 2 enum chỉ bảng đó dùng. So với bản 26/10: thêm `learn_media_images` (ảnh bài Learn, nhóm B10) và `knowledge_source_files` (file tài liệu của nguồn tri thức, nhóm B9); cả hai là bảng kỹ thuật nên chỉ có ở physical.
 
-Cập nhật 24/11/2026 theo BE main `3786664` (150 migration; Luồng 1 theo Mẫu PC06): thêm `fire_infrastructures` (hạ tầng PCCC theo phiên bản IFC, nhóm B5, thực thể `FireInfrastructure`) và `building_plan_documents` (tệp phương án PC06 đã ký, nhóm B2, thực thể `BuildingPlanDocument`); thêm cột phiếu thông tin cơ sở vào `buildings`, `infrastructure_id` vào `scenario_drafts` và `scenario_versions`, ba cột tham chiếu vào `organization_notifications`; enum `user_role_enum` thêm `FireSafetyExpert`. Phần này lấy từ một database dựng tại máy bằng các migration của BE, chưa đối chiếu lại với production; các bảng có từ trước vẫn theo bản đối chiếu 27/10/2026. Nếu sau này có migration thêm hoặc xóa bảng, nhờ người giữ repo BE sinh lại thư mục. Script sinh file nằm trong `_sinh-lai/`. Không sửa tay các file `.md`/`.dbml`, vì lần sinh lại sẽ ghi đè.
+Cập nhật 24/11/2026 theo BE main `3786664` (150 migration; Luồng 1 theo Mẫu PC06): thêm `fire_infrastructures` (hạ tầng PCCC theo phiên bản IFC, nhóm B5, thực thể `FireInfrastructure`) và `building_plan_documents` (tệp phương án PC06 đã ký, nhóm B2, thực thể `BuildingPlanDocument`); thêm cột phiếu thông tin cơ sở vào `buildings`, `infrastructure_id` vào `scenario_drafts` và `scenario_versions`, ba cột tham chiếu vào `organization_notifications`; enum `user_role_enum` thêm `FireSafetyExpert`. Phần này lấy từ một database dựng tại máy bằng các migration của BE, chưa đối chiếu lại với production; các bảng có từ trước vẫn theo bản đối chiếu 27/10/2026.
+
+Cập nhật 25/11/2026 theo BE main `f589374` (155 file migration): thêm `ifc_processing_policies` (hạn mức lượt xử lý IFC mỗi ngày, nhóm B3, thực thể `IfcProcessingPolicy` ở mục A1) và bỏ `revision_style_selections` (BE#194, kéo theo thực thể `StyleSelection`). Tổng số vẫn là 65 thực thể và 114 bảng. Đối tượng, giả định và trong giờ hoặc ngoài giờ của tình huống (BE#215) nằm trong JSON của bản nháp và phiên bản kịch bản, không thêm cột. Con số "150 migration" ở đoạn trên là số dòng trong bảng lịch sử của database dựng thử; đếm theo file trong mã nguồn BE lúc đó là 148. Nếu sau này có migration thêm hoặc xóa bảng, nhờ người giữ repo BE sinh lại thư mục. Script sinh file nằm trong `_sinh-lai/`. Không sửa tay các file `.md`/`.dbml`, vì lần sinh lại sẽ ghi đè.

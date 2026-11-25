@@ -78,7 +78,8 @@ E('AuthSession', 'Phiên đăng nhập', ['auth_refresh_tokens'], 'ID id PK; ID 
 E('Building', 'Công trình', ['buildings', 'building_locations'], 'ID id PK; ID organization_id FK; ID created_by FK; ID signed_plan_document_id FK; String name; String building_type; Int total_floors; Decimal floor_area_square_meters; String facility_head_name; Phone facility_head_phone; Json on_site_force; Json emergency_contacts; Enum visibility; String address; String city; String district; Decimal latitude; Decimal longitude; Bool is_active; DateTime created_at; DateTime deleted_at')
 E('BuildingContact', 'Người liên hệ của công trình', ['building_contacts'], 'ID id PK; ID building_id FK; String contact_name; String contact_role; Phone phone; Email email; Bool is_primary')
 E('BuildingPlanDocument', 'Tệp phương án PC06 đã ký của công trình', ['building_plan_documents'], 'ID id PK; ID building_id FK; ID created_by FK; String file_name; String content_type; Int size_bytes; String object_key; String sha256; DateTime created_at; DateTime expires_at; DateTime completed_at')
-E('BuildingQrCode','Mã QR tham gia công trình', ['building_qr_codes'], 'ID id PK; ID building_id FK; ID created_by FK; String label; Enum status; DateTime created_at; DateTime revoked_at')
+E('IfcProcessingPolicy', 'Hạn mức lượt xử lý IFC mỗi ngày (mức chung hoặc riêng một tổ chức)', ['ifc_processing_policies'], 'ID id PK; ID organization_id FK; ID created_by FK; String policy_kind; Int daily_limit; DateTime effective_from; Text note; DateTime created_at')
+E('BuildingQrCode', 'Mã QR tham gia công trình', ['building_qr_codes'], 'ID id PK; ID building_id FK; ID created_by FK; String label; Enum status; DateTime created_at; DateTime revoked_at')
 E('Revision', 'Phiên bản mô hình IFC', ['revisions'], 'ID id PK; ID building_id FK; ID uploaded_by FK; String version_label; Enum status; DateTime created_at')
 E('SourceDocument', 'File IFC gốc', ['source_documents'], 'ID id PK; ID revision_id FK; String original_filename; Enum file_type; Int file_size_bytes; String sha256_hash; Enum quarantine_status; String usage_rights; String source_tool; DateTime upload_verified_at')
 E('ProcessingJob', 'Lượt xử lý mô hình trên VM', ['processing_jobs'], 'ID id PK; ID revision_id FK; ID source_document_id FK; ID scenario_version_id FK; Enum kind; Enum status; DateTime started_at; DateTime finished_at; Text error_message')
@@ -89,7 +90,6 @@ E('RevisionIssue', 'Lỗi phát hiện khi kiểm tra', ['revision_issues'], 'ID
 E('BimFact', 'Thuộc tính BIM trích từ IFC', ['bim_facts'], 'ID id PK; ID revision_id FK; String ifc_global_id; String entity_type; String property_path; Json value')
 E('AnnotationSet', 'Bộ chú thích trên mô hình', ['annotation_sets'], 'ID id PK; ID revision_id FK; ID created_by FK; Int version_number; Json data; String provenance')
 E('EquipmentDecision', 'Quyết định thiết bị PCCC', ['revision_equipment_decisions'], 'ID id PK; ID revision_id FK; ID created_by FK; Int version_number; Json data')
-E('StyleSelection', 'Lựa chọn hiển thị mô hình', ['revision_style_selections'], 'ID id PK; ID revision_id FK; ID created_by FK; Int version_number; Json data')
 E('RevisionReview', 'Duyệt mô hình cho huấn luyện', ['revision_reviews'], 'ID id PK; ID revision_id FK; ID scenario_version_id FK; ID validation_run_id FK; ID annotation_set_id FK; ID reviewed_by FK; Enum action; Text review_message; DateTime reviewed_at')
 E('Scenario', 'Kịch bản', ['scenarios'], 'ID id PK; ID building_id FK; ID created_by FK; String name; DateTime created_at')
 E('ScenarioDraft', 'Bản nháp kịch bản', ['scenario_drafts'], 'ID id PK; ID scenario_id FK; ID revision_id FK; ID infrastructure_id FK; ID created_by FK; Int draft_number; Json state; Enum source; DateTime updated_at')
@@ -147,7 +147,8 @@ MN = [('User', 'Building', 'được tham gia', 'building_participation_grants')
 D = []
 def DOM(title, intro, ents, rels): D.append((title, intro, ents.split(), [r.strip() for r in rels.strip().split('\n')]))
 DOM('Tổ chức, người dùng & công trình', 'Ai dùng hệ thống, thuộc tổ chức nào, và tổ chức có những công trình nào. Học viên (Trainee) không thuộc tổ chức; họ được **tham gia** công trình qua mã QR, đó là quan hệ nhiều-nhiều.',
-    'Organization User Device AuthSession Building BuildingContact BuildingPlanDocument BuildingQrCode', '''
+    'Organization User Device AuthSession Building BuildingContact BuildingPlanDocument BuildingQrCode IfcProcessingPolicy', '''
+    Organization |o--o{ IfcProcessingPolicy : "có hạn mức xử lý IFC"
     Building ||--o{ BuildingPlanDocument : "có tệp PC06 đã ký"
     Organization |o--o{ User : "có thành viên"
     Organization ||--o{ Building : "sở hữu"
@@ -158,7 +159,7 @@ DOM('Tổ chức, người dùng & công trình', 'Ai dùng hệ thống, thuộ
     Building ||--o{ BuildingQrCode : "phát mã QR"
     User }o--o{ Building : "được tham gia"''')
 DOM('Mô hình IFC & xử lý', 'Mỗi công trình có nhiều phiên bản mô hình IFC. Một phiên bản được xử lý trên VM thành các kết quả (GLB, navmesh, danh sách tầng), được kiểm tra, rồi được duyệt cho huấn luyện.',
-    'Revision SourceDocument ProcessingJob ProcessingAttempt RevisionArtifact ValidationRun RevisionIssue BimFact AnnotationSet EquipmentDecision StyleSelection RevisionReview', '''
+    'Revision SourceDocument ProcessingJob ProcessingAttempt RevisionArtifact ValidationRun RevisionIssue BimFact AnnotationSet EquipmentDecision RevisionReview', '''
     Building ||--o{ Revision : "có phiên bản IFC"
     User ||--o{ Revision : "tải lên"
     Revision ||--|| SourceDocument : "có file gốc"
@@ -172,7 +173,6 @@ DOM('Mô hình IFC & xử lý', 'Mỗi công trình có nhiều phiên bản mô
     Revision ||--o{ BimFact : "có thuộc tính BIM"
     Revision ||--o{ AnnotationSet : "có chú thích"
     Revision ||--o{ EquipmentDecision : "có quyết định thiết bị"
-    Revision ||--o{ StyleSelection : "có kiểu hiển thị"
     Revision ||--o{ RevisionReview : "được duyệt"
     ValidationRun ||--o{ RevisionReview : "là căn cứ"
     AnnotationSet |o--o{ RevisionReview : "được dùng khi duyệt"
@@ -318,7 +318,7 @@ def emit(*xs): out.extend(xs)
 n_fk = sum(len(fks(t)) for t in TABLES)
 n_cols = sum(len(cols[t]) for t in TABLES)
 emit('# Fire3D — Mô hình dữ liệu Logical & Physical', '',
-     f'Sinh từ schema PostgreSQL thật trên production (Supabase Singapore, đối chiếu ngày 27/10/2026, 136 migration; đã bỏ trước bảng `revision_processing_logs` và 2 enum của nó, xóa ở đợt dọn dẹp cùng ngày), cộng phần thay đổi của các migration BE từ 23/11 đến 24/11/2026 (BE main `3786664`, 150 migration: hạ tầng PCCC, phiếu thông tin cơ sở PC06, vai trò Chuyên viên PCCC), lấy từ một database dựng tại máy bằng chính các migration đó. '
+     f'Sinh từ schema PostgreSQL thật trên production (Supabase Singapore, đối chiếu ngày 27/10/2026, 136 migration; đã bỏ trước bảng `revision_processing_logs` và 2 enum của nó, xóa ở đợt dọn dẹp cùng ngày), cộng phần thay đổi của các migration BE từ 23/11 đến 25/11/2026 (BE main `f589374`, 155 migration: hạ tầng PCCC, phiếu thông tin cơ sở PC06, vai trò Chuyên viên PCCC, hạn mức xử lý IFC; đã bỏ bảng `revision_style_selections`), lấy từ một database dựng tại máy bằng chính các migration đó. '
      f'**Logical:** {len(L)} thực thể, {len(MN)} quan hệ nhiều-nhiều. '
      f'**Physical:** {len(TABLES)} bảng, {n_cols} cột, {n_fk} khóa ngoại, {len(S["enums"])} kiểu enum '
      f'(chưa tính bảng hệ thống `__EFMigrationsHistory` của EF Core).', '')
@@ -457,7 +457,7 @@ def ascii_slug(name, sep):
     plain = ''.join(ch for ch in plain if not unicodedata.combining(ch))
     return re.sub(r'[^A-Za-z0-9]+', sep, plain).strip(sep).lower()
 SIMPLE_IDX = re.compile(r'CREATE (UNIQUE )?INDEX (\S+) ON \S+ USING (\w+) \(([^()]*)\)$')
-db = ['// Fire3D physical model, generated from the production PostgreSQL schema (Supabase Singapore, checked 2026-10-27, 136 migrations; revision_processing_logs and its two enums already left out, dropped by the same-day cleanup), plus the delta of the BE migrations of 2026-11-23..24 (BE main 3786664, 150 migrations) read from a local database built from those migrations.',
+db = ['// Fire3D physical model, generated from the production PostgreSQL schema (Supabase Singapore, checked 2026-10-27, 136 migrations; revision_processing_logs and its two enums already left out, dropped by the same-day cleanup), plus the delta of the BE migrations of 2026-11-23..25 (BE main f589374, 155 migrations) read from a local database built from those migrations.',
       '// Paste into https://dbdiagram.io . Tables are grouped like 2-Physical.md (B1-B12).', '',
       "Project fire3d {\n  database_type: 'PostgreSQL'\n}", '']
 for e in sorted(S['enums'], key=lambda e: e['name']):

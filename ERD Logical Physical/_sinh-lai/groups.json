@@ -37,9 +37,9 @@
   "revision_issues",
   "bim_facts",
   "revision_equipment_decisions",
-  "revision_style_selections",
   "annotation_sets",
-  "revision_reviews"
+  "revision_reviews",
+  "ifc_processing_policies"
  ],
  "4. Outbox & giao job (Redis/HTTP)": [
   "integration_outbox_events",

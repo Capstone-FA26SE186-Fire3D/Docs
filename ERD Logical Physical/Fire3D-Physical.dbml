@@ -1,4 +1,4 @@
-// Fire3D physical model, generated from the production PostgreSQL schema (Supabase Singapore, checked 2026-10-27, 136 migrations; revision_processing_logs and its two enums already left out, dropped by the same-day cleanup), plus the delta of the BE migrations of 2026-11-23..24 (BE main 3786664, 150 migrations) read from a local database built from those migrations.
+// Fire3D physical model, generated from the production PostgreSQL schema (Supabase Singapore, checked 2026-10-27, 136 migrations; revision_processing_logs and its two enums already left out, dropped by the same-day cleanup), plus the delta of the BE migrations of 2026-11-23..25 (BE main f589374, 155 migrations) read from a local database built from those migrations.
 // Paste into https://dbdiagram.io . Tables are grouped like 2-Physical.md (B1-B12).
 
 Project fire3d {
@@ -831,6 +831,20 @@ Table ifc_object_cleanup {
   indexes {
     (available_at, lease_until) [name: 'ifc_cleanup_due']
   }
+}
+
+Table ifc_processing_policies {
+  "id" uuid [pk]
+  "organization_id" uuid
+  "policy_kind" text [not null, default: 'DailyGeometryRuns', note: '''CHECK ((policy_kind = 'DailyGeometryRuns'::text))''']
+  "daily_limit" integer [note: '''CHECK (((daily_limit IS NULL) OR ((daily_limit >= 0) AND (daily_limit <= 100000))))''']
+  "effective_from" timestamptz [not null]
+  "note" text [note: '''CHECK (((note IS NULL) OR ((length(note) >= 1) AND (length(note) <= 500))))''']
+  "created_by" uuid [not null]
+  "created_at" timestamptz [not null, default: `now()`]
+
+  Note: '''CHECK (((organization_id IS NOT NULL) OR (daily_limit IS NOT NULL)))
+CREATE INDEX ifc_processing_policies_lookup ON ifc_processing_policies USING btree (organization_id, effective_from DESC, created_at DESC)'''
 }
 
 Table ifc_upload_attempts {
@@ -1866,19 +1880,6 @@ Table revision_reviews {
 CREATE UNIQUE INDEX one_scenario_confirmation ON revision_reviews USING btree (scenario_version_id) WHERE (action = 'ConfirmForTraining'::review_action_enum)'''
 }
 
-Table revision_style_selections {
-  "id" uuid [pk]
-  "revision_id" uuid [not null]
-  "version_number" integer [not null, note: '''CHECK ((version_number > 0))''']
-  "data" jsonb [not null, note: '''CHECK ((jsonb_typeof(data) = 'object'::text))''']
-  "created_by" uuid [not null]
-  "created_at" timestamptz [not null]
-
-  indexes {
-    (revision_id, version_number) [unique]
-  }
-}
-
 Table revisions {
   "id" uuid [pk, default: `extensions.gen_random_uuid()`]
   "building_id" uuid [not null]
@@ -2479,6 +2480,8 @@ Ref fire_infrastructures_decided_by_fkey: fire_infrastructures.decided_by > user
 Ref fire_infrastructures_organization_id_fkey: fire_infrastructures.organization_id > organizations.id [delete: no action]
 Ref fire_infrastructures_revision_id_fkey: fire_infrastructures.revision_id > revisions.id [delete: no action]
 Ref fire_infrastructures_submitted_by_fkey: fire_infrastructures.submitted_by > users.id [delete: no action]
+Ref ifc_processing_policies_created_by_fkey: ifc_processing_policies.created_by > users.id [delete: no action]
+Ref ifc_processing_policies_organization_id_fkey: ifc_processing_policies.organization_id > organizations.id [delete: no action]
 Ref ifc_upload_attempts_revision_id_fkey: ifc_upload_attempts.revision_id > ifc_upload_intents.revision_id [delete: no action]
 Ref ifc_upload_intents_actor_id_fkey: ifc_upload_intents.actor_id > users.id [delete: no action]
 Ref ifc_upload_intents_building_id_fkey: ifc_upload_intents.building_id > buildings.id [delete: no action]
@@ -2597,8 +2600,6 @@ Ref revision_reviews_reviewed_by_fkey: revision_reviews.reviewed_by > users.id [
 Ref revision_reviews_revision_id_fkey: revision_reviews.revision_id > revisions.id [delete: no action]
 Ref revision_reviews_scenario_version_id_fkey: revision_reviews.scenario_version_id > scenario_versions.id [delete: no action]
 Ref revision_reviews_validation_run_id_fkey: revision_reviews.validation_run_id > validation_runs.id [delete: no action]
-Ref revision_style_selections_created_by_fkey: revision_style_selections.created_by > users.id [delete: no action]
-Ref revision_style_selections_revision_id_fkey: revision_style_selections.revision_id > revisions.id [delete: no action]
 Ref revisions_building_id_organization_id_fkey: revisions.(building_id, organization_id) > buildings.(id, organization_id) [delete: no action]
 Ref revisions_uploaded_by_fkey: revisions.uploaded_by > users.id [delete: no action]
 Ref scenario_content_reviews_reviewed_by_fkey: scenario_content_reviews.reviewed_by > users.id [delete: no action]
@@ -2701,9 +2702,9 @@ TableGroup B03_ifc_xu_ly_worker {
   revision_issues
   bim_facts
   revision_equipment_decisions
-  revision_style_selections
   annotation_sets
   revision_reviews
+  ifc_processing_policies
 }
 
 TableGroup B04_outbox_giao_job_redis_http {
