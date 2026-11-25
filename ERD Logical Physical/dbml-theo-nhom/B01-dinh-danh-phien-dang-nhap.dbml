@@ -5,6 +5,7 @@ Enum user_role_enum {
   "PlatformAdmin"
   "OrganizationUser"
   "Trainee"
+  "FireSafetyExpert"
 }
 
 Table users {

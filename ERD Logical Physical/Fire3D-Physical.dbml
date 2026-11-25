@@ -1,4 +1,4 @@
-// Fire3D physical model, generated from the production PostgreSQL schema (Supabase Singapore, checked 2026-10-27, 136 migrations; revision_processing_logs and its two enums already left out, dropped by the same-day cleanup).
+// Fire3D physical model, generated from the production PostgreSQL schema (Supabase Singapore, checked 2026-10-27, 136 migrations; revision_processing_logs and its two enums already left out, dropped by the same-day cleanup), plus the delta of the BE migrations of 2026-11-23..25 (BE main f589374, 155 migrations) read from a local database built from those migrations.
 // Paste into https://dbdiagram.io . Tables are grouped like 2-Physical.md (B1-B12).
 
 Project fire3d {
@@ -131,6 +131,7 @@ Enum user_role_enum {
   "PlatformAdmin"
   "OrganizationUser"
   "Trainee"
+  "FireSafetyExpert"
 }
 
 Table ai_command_receipts {
@@ -605,6 +606,31 @@ Table building_participation_grants {
   }
 }
 
+Table building_plan_documents {
+  "id" uuid [pk]
+  "building_id" uuid [not null]
+  "created_by" uuid [not null]
+  "idempotency_key" varchar(128) [not null, note: '''CHECK (((idempotency_key)::text ~ '^[!-~]{1,128}$'::text))''']
+  "input_hash" char(64) [not null, note: '''CHECK ((input_hash ~ '^[0-9a-f]{64}$'::text))''']
+  "file_name" varchar(255) [not null, note: '''CHECK (((length(btrim((file_name)::text)) >= 1) AND (length(btrim((file_name)::text)) <= 255)))''']
+  "content_type" text [not null, note: '''CHECK ((content_type = 'application/pdf'::text))''']
+  "size_bytes" bigint [not null, note: '''CHECK (((size_bytes >= 1) AND (size_bytes <= 20971520)))''']
+  "staging_key" text [not null, unique]
+  "object_key" text [unique]
+  "sha256" char(64) [note: '''CHECK ((sha256 ~ '^[0-9a-f]{64}$'::text))''']
+  "created_at" timestamptz [not null]
+  "expires_at" timestamptz [not null]
+  "completed_at" timestamptz
+
+  indexes {
+    (created_by, idempotency_key) [unique]
+  }
+
+  Note: '''CHECK ((expires_at > created_at))
+CHECK ((((completed_at IS NULL) = (object_key IS NULL)) AND ((completed_at IS NULL) = (sha256 IS NULL))))
+CREATE INDEX building_plan_documents_building ON building_plan_documents USING btree (building_id, created_at DESC)'''
+}
+
 Table building_qr_codes {
   "id" uuid [pk]
   "building_id" uuid [not null]
@@ -636,6 +662,12 @@ Table buildings {
   "visibility" text [not null, default: 'Private', note: '''CHECK ((visibility = ANY (ARRAY['Private'::text, 'Public'::text])))''']
   "access_revision" bigint [not null, default: 1, note: '''CHECK ((access_revision > 0))''']
   "participation_code_hash" varchar(64) [note: '''CHECK (((participation_code_hash)::text ~ '^[0-9a-f]{64}$'::text))''']
+  "floor_area_square_meters" numeric(12,2) [note: '''CHECK (((floor_area_square_meters IS NULL) OR (floor_area_square_meters > (0)::numeric)))''']
+  "facility_head_name" varchar(200)
+  "facility_head_phone" varchar(32)
+  "on_site_force" jsonb [note: '''CHECK (((on_site_force IS NULL) OR (jsonb_typeof(on_site_force) = 'object'::text)))''']
+  "emergency_contacts" jsonb [not null, default: `'[]'::jsonb`, note: '''CHECK ((jsonb_typeof(emergency_contacts) = 'array'::text))''']
+  "signed_plan_document_id" uuid
 
   indexes {
     (id, organization_id) [unique]
@@ -757,6 +789,36 @@ Table feedback {
 CREATE INDEX feedback_owner_page ON feedback USING btree (submitted_by, created_at DESC, id)'''
 }
 
+Table fire_infrastructures {
+  "id" uuid [pk]
+  "revision_id" uuid [not null]
+  "building_id" uuid [not null]
+  "organization_id" uuid [not null]
+  "version_number" integer [not null, note: '''CHECK ((version_number > 0))''']
+  "status" text [not null, default: 'Draft', note: '''CHECK ((status = ANY (ARRAY['Draft'::text, 'Submitted'::text, 'Approved'::text, 'Rejected'::text])))''']
+  "row_revision" bigint [not null, default: 1, note: '''CHECK ((row_revision > 0))''']
+  "geometry" jsonb [note: '''CHECK (((geometry IS NULL) OR (jsonb_typeof(geometry) = 'object'::text)))''']
+  "runtime_version" varchar(32)
+  "items" jsonb [not null, default: `'[]'::jsonb`, note: '''CHECK ((jsonb_typeof(items) = 'array'::text))''']
+  "content_hash" varchar(64)
+  "created_by" uuid [not null]
+  "created_at" timestamptz [not null, default: `now()`]
+  "updated_at" timestamptz [not null, default: `now()`]
+  "submitted_by" uuid
+  "submitted_at" timestamptz
+  "decided_by" uuid
+  "decided_at" timestamptz
+  "decision_reason" text [note: '''CHECK (((decision_reason IS NULL) OR ((length(decision_reason) >= 1) AND (length(decision_reason) <= 2000))))''']
+
+  indexes {
+    (revision_id, version_number) [unique]
+    (status, submitted_at) [name: 'fire_infrastructures_queue']
+  }
+
+  Note: '''CHECK ((((status = 'Draft'::text) AND (submitted_at IS NULL) AND (decided_at IS NULL) AND (decision_reason IS NULL)) OR ((status = 'Submitted'::text) AND (submitted_by IS NOT NULL) AND (submitted_at IS NOT NULL) AND (content_hash IS NOT NULL) AND (decided_at IS NULL) AND (decision_reason IS NULL)) OR ((status = 'Approved'::text) AND (submitted_at IS NOT NULL) AND (decided_by IS NOT NULL) AND (decided_at IS NOT NULL) AND (decision_reason IS NULL)) OR ((status = 'Rejected'::text) AND (submitted_at IS NOT NULL) AND (decided_by IS NOT NULL) AND (decided_at IS NOT NULL) AND (decision_reason IS NOT NULL))))
+CREATE UNIQUE INDEX fire_infrastructures_one_open ON fire_infrastructures USING btree (revision_id) WHERE (status = ANY (ARRAY['Draft'::text, 'Submitted'::text]))'''
+}
+
 Table ifc_object_cleanup {
   "object_key" text [pk]
   "available_at" timestamptz [not null]
@@ -769,6 +831,20 @@ Table ifc_object_cleanup {
   indexes {
     (available_at, lease_until) [name: 'ifc_cleanup_due']
   }
+}
+
+Table ifc_processing_policies {
+  "id" uuid [pk]
+  "organization_id" uuid
+  "policy_kind" text [not null, default: 'DailyGeometryRuns', note: '''CHECK ((policy_kind = 'DailyGeometryRuns'::text))''']
+  "daily_limit" integer [note: '''CHECK (((daily_limit IS NULL) OR ((daily_limit >= 0) AND (daily_limit <= 100000))))''']
+  "effective_from" timestamptz [not null]
+  "note" text [note: '''CHECK (((note IS NULL) OR ((length(note) >= 1) AND (length(note) <= 500))))''']
+  "created_by" uuid [not null]
+  "created_at" timestamptz [not null, default: `now()`]
+
+  Note: '''CHECK (((organization_id IS NOT NULL) OR (daily_limit IS NOT NULL)))
+CREATE INDEX ifc_processing_policies_lookup ON ifc_processing_policies USING btree (organization_id, effective_from DESC, created_at DESC)'''
 }
 
 Table ifc_upload_attempts {
@@ -1127,8 +1203,12 @@ Table organization_notifications {
   "idempotency_key" varchar(255) [not null, unique]
   "read_at" timestamptz
   "created_at" timestamptz [not null, default: `now()`]
+  "content_review_id" uuid
+  "scenario_version_id" uuid
+  "fire_infrastructure_id" uuid
 
-  Note: '''CREATE INDEX organization_notifications_recipient ON organization_notifications USING btree (recipient_user_id, created_at DESC, id)'''
+  Note: '''CHECK (((((notification_type)::text = 'BuildingServiceExpiring'::text) AND (entitlement_id IS NOT NULL) AND (reference_ends_at IS NOT NULL) AND (content_review_id IS NULL) AND (scenario_version_id IS NULL) AND (fire_infrastructure_id IS NULL)) OR (((notification_type)::text = ANY ((ARRAY['ContentReviewApproved'::character varying, 'ContentReviewRejected'::character varying])::text[])) AND (content_review_id IS NOT NULL) AND (scenario_version_id IS NOT NULL) AND (entitlement_id IS NULL) AND (reference_ends_at IS NULL) AND (fire_infrastructure_id IS NULL)) OR (((notification_type)::text = ANY ((ARRAY['FireInfrastructureApproved'::character varying, 'FireInfrastructureRejected'::character varying])::text[])) AND (fire_infrastructure_id IS NOT NULL) AND (content_review_id IS NULL) AND (scenario_version_id IS NULL) AND (entitlement_id IS NULL) AND (reference_ends_at IS NULL))))
+CREATE INDEX organization_notifications_recipient ON organization_notifications USING btree (recipient_user_id, created_at DESC, id)'''
 }
 
 Table organizations {
@@ -1800,19 +1880,6 @@ Table revision_reviews {
 CREATE UNIQUE INDEX one_scenario_confirmation ON revision_reviews USING btree (scenario_version_id) WHERE (action = 'ConfirmForTraining'::review_action_enum)'''
 }
 
-Table revision_style_selections {
-  "id" uuid [pk]
-  "revision_id" uuid [not null]
-  "version_number" integer [not null, note: '''CHECK ((version_number > 0))''']
-  "data" jsonb [not null, note: '''CHECK ((jsonb_typeof(data) = 'object'::text))''']
-  "created_by" uuid [not null]
-  "created_at" timestamptz [not null]
-
-  indexes {
-    (revision_id, version_number) [unique]
-  }
-}
-
 Table revisions {
   "id" uuid [pk, default: `extensions.gen_random_uuid()`]
   "building_id" uuid [not null]
@@ -1871,6 +1938,7 @@ Table scenario_drafts {
   "created_by" uuid [not null]
   "created_at" timestamptz [not null, default: `now()`]
   "updated_at" timestamptz [not null, default: `now()`]
+  "infrastructure_id" uuid
 
   indexes {
     (building_id) [name: 'IX_scenario_drafts_building_id']
@@ -1911,6 +1979,7 @@ Table scenario_versions {
   "learning_objectives" jsonb
   "learner_instructions" text
   "rubric" jsonb
+  "infrastructure_id" uuid
 
   indexes {
     (id, revision_id, organization_id) [unique]
@@ -2383,12 +2452,15 @@ Ref building_contacts_building_id_fkey: building_contacts.building_id > building
 Ref building_locations_building_id_fkey: building_locations.building_id > buildings.id [delete: no action]
 Ref building_participation_grants_building_id_fkey: building_participation_grants.building_id > buildings.id [delete: no action]
 Ref building_participation_grants_trainee_user_id_fkey: building_participation_grants.trainee_user_id > users.id [delete: no action]
+Ref building_plan_documents_building_id_fkey: building_plan_documents.building_id > buildings.id [delete: no action]
+Ref building_plan_documents_created_by_fkey: building_plan_documents.created_by > users.id [delete: no action]
 Ref building_qr_codes_building_id_fkey: building_qr_codes.building_id > buildings.id [delete: no action]
 Ref building_qr_codes_created_by_fkey: building_qr_codes.created_by > users.id [delete: no action]
 Ref building_qr_codes_organization_id_fkey: building_qr_codes.organization_id > organizations.id [delete: no action]
 Ref building_qr_codes_replaced_by_fkey: building_qr_codes.replaced_by > building_qr_codes.id [delete: no action]
 Ref buildings_created_by_fkey: buildings.created_by > users.id [delete: no action]
 Ref buildings_organization_id_fkey: buildings.organization_id > organizations.id [delete: no action]
+Ref buildings_signed_plan_document_id_fkey: buildings.signed_plan_document_id > building_plan_documents.id [delete: no action]
 Ref content_command_receipts_actor_id_fkey: content_command_receipts.actor_id > users.id [delete: no action]
 Ref email_verification_tokens_user_id_fkey: email_verification_tokens.user_id > users.id [delete: cascade]
 Ref enterprise_quote_requests_assigned_to_fkey: enterprise_quote_requests.assigned_to > users.id [delete: no action]
@@ -2402,6 +2474,14 @@ Ref feedback_organization_id_fkey: feedback.organization_id > organizations.id [
 Ref feedback_reviewed_by_fkey: feedback.reviewed_by > users.id [delete: restrict]
 Ref feedback_session_id_fkey: feedback.session_id > sessions.id [delete: set null]
 Ref feedback_submitted_by_fkey: feedback.submitted_by > users.id [delete: restrict]
+Ref fire_infrastructures_building_id_fkey: fire_infrastructures.building_id > buildings.id [delete: no action]
+Ref fire_infrastructures_created_by_fkey: fire_infrastructures.created_by > users.id [delete: no action]
+Ref fire_infrastructures_decided_by_fkey: fire_infrastructures.decided_by > users.id [delete: no action]
+Ref fire_infrastructures_organization_id_fkey: fire_infrastructures.organization_id > organizations.id [delete: no action]
+Ref fire_infrastructures_revision_id_fkey: fire_infrastructures.revision_id > revisions.id [delete: no action]
+Ref fire_infrastructures_submitted_by_fkey: fire_infrastructures.submitted_by > users.id [delete: no action]
+Ref ifc_processing_policies_created_by_fkey: ifc_processing_policies.created_by > users.id [delete: no action]
+Ref ifc_processing_policies_organization_id_fkey: ifc_processing_policies.organization_id > organizations.id [delete: no action]
 Ref ifc_upload_attempts_revision_id_fkey: ifc_upload_attempts.revision_id > ifc_upload_intents.revision_id [delete: no action]
 Ref ifc_upload_intents_actor_id_fkey: ifc_upload_intents.actor_id > users.id [delete: no action]
 Ref ifc_upload_intents_building_id_fkey: ifc_upload_intents.building_id > buildings.id [delete: no action]
@@ -2437,9 +2517,12 @@ Ref organization_library_versions_created_by_fkey: organization_library_versions
 Ref organization_library_versions_item_id_fkey: organization_library_versions.item_id > organization_library_items.id [delete: no action]
 Ref organization_library_versions_published_by_fkey: organization_library_versions.published_by > users.id [delete: no action]
 Ref organization_notifications_building_id_fkey: organization_notifications.building_id > buildings.id [delete: restrict]
+Ref organization_notifications_content_review_id_fkey: organization_notifications.content_review_id > scenario_content_reviews.id [delete: restrict]
 Ref organization_notifications_entitlement_id_fkey: organization_notifications.entitlement_id > service_entitlements.id [delete: restrict]
+Ref organization_notifications_fire_infrastructure_id_fkey: organization_notifications.fire_infrastructure_id > fire_infrastructures.id [delete: restrict]
 Ref organization_notifications_organization_id_fkey: organization_notifications.organization_id > organizations.id [delete: restrict]
 Ref organization_notifications_recipient_user_id_fkey: organization_notifications.recipient_user_id > users.id [delete: restrict]
+Ref organization_notifications_scenario_version_id_fkey: organization_notifications.scenario_version_id > scenario_versions.id [delete: restrict]
 Ref payment_provisioning_records_organization_id_fkey: payment_provisioning_records.organization_id > organizations.id [delete: restrict]
 Ref payment_provisioning_records_payment_transaction_id_fkey: payment_provisioning_records.payment_transaction_id > payment_transactions.id [delete: restrict]
 Ref payment_provisioning_records_quotation_id_fkey: payment_provisioning_records.quotation_id > quotations.id [delete: restrict]
@@ -2517,8 +2600,6 @@ Ref revision_reviews_reviewed_by_fkey: revision_reviews.reviewed_by > users.id [
 Ref revision_reviews_revision_id_fkey: revision_reviews.revision_id > revisions.id [delete: no action]
 Ref revision_reviews_scenario_version_id_fkey: revision_reviews.scenario_version_id > scenario_versions.id [delete: no action]
 Ref revision_reviews_validation_run_id_fkey: revision_reviews.validation_run_id > validation_runs.id [delete: no action]
-Ref revision_style_selections_created_by_fkey: revision_style_selections.created_by > users.id [delete: no action]
-Ref revision_style_selections_revision_id_fkey: revision_style_selections.revision_id > revisions.id [delete: no action]
 Ref revisions_building_id_organization_id_fkey: revisions.(building_id, organization_id) > buildings.(id, organization_id) [delete: no action]
 Ref revisions_uploaded_by_fkey: revisions.uploaded_by > users.id [delete: no action]
 Ref scenario_content_reviews_reviewed_by_fkey: scenario_content_reviews.reviewed_by > users.id [delete: no action]
@@ -2529,7 +2610,9 @@ Ref FK_scenario_drafts_organizations_organization_id: scenario_drafts.organizati
 Ref FK_scenario_drafts_revisions_revision_id: scenario_drafts.revision_id > revisions.id [delete: cascade]
 Ref FK_scenario_drafts_scenarios_scenario_id: scenario_drafts.scenario_id > scenarios.id [delete: cascade]
 Ref FK_scenario_drafts_users_created_by: scenario_drafts.created_by > users.id [delete: cascade]
+Ref scenario_drafts_infrastructure_id_fkey: scenario_drafts.infrastructure_id > fire_infrastructures.id [delete: no action]
 Ref scenario_versions_created_by_fkey: scenario_versions.created_by > users.id [delete: no action]
+Ref scenario_versions_infrastructure_id_fkey: scenario_versions.infrastructure_id > fire_infrastructures.id [delete: no action]
 Ref scenario_versions_revision_id_building_id_organization_id_fkey: scenario_versions.(revision_id, building_id, organization_id) > revisions.(id, building_id, organization_id) [delete: no action]
 Ref scenario_versions_scenario_id_building_id_organization_id_fkey: scenario_versions.(scenario_id, building_id, organization_id) > scenarios.(id, building_id, organization_id) [delete: no action]
 Ref scenarios_building_id_organization_id_fkey: scenarios.(building_id, organization_id) > buildings.(id, organization_id) [delete: no action]
@@ -2602,6 +2685,7 @@ TableGroup B02_cong_trinh_quyen_truy_cap {
   building_contacts
   building_participation_grants
   building_qr_codes
+  building_plan_documents
 }
 
 TableGroup B03_ifc_xu_ly_worker {
@@ -2618,9 +2702,9 @@ TableGroup B03_ifc_xu_ly_worker {
   revision_issues
   bim_facts
   revision_equipment_decisions
-  revision_style_selections
   annotation_sets
   revision_reviews
+  ifc_processing_policies
 }
 
 TableGroup B04_outbox_giao_job_redis_http {
@@ -2634,6 +2718,7 @@ TableGroup B04_outbox_giao_job_redis_http {
 }
 
 TableGroup B05_kich_ban_playtest {
+  fire_infrastructures
   scenarios
   scenario_drafts
   scenario_versions
