@@ -545,6 +545,33 @@ Bổ sung cho [workflows mục 4](fire-evacuation-training-workflows.md#4-workfl
 
 Editor chỉ thêm vật lên artifact; không sửa tường, cửa, sàn hay kích thước công trình.
 
+### 9.1. Quy ước đặt thiết bị (26/11/2026)
+
+Ứng dụng huấn luyện vẽ thiết bị đúng theo `placement.position` và `placement.rotation` đã lưu; nó **không tự xoay, không tự áp tường** và không tự chỉnh độ cao. Vì vậy trình soạn trên web phải cho người soạn thấy đúng thứ sẽ hiện trong ứng dụng.
+
+Quy ước của mô hình thiết bị trong ứng dụng (mã dựng prefab của Unity là nguồn gốc):
+
+- Mặt trước của mọi thiết bị là trục **−Z** của chính nó. Toạ độ hợp đồng ở hệ GLB tay phải; Unity lật trục X khi nạp, và sau phép lật mặt trước vẫn là −Z.
+- Thiết bị **gắn tường** có mặt lưng nằm đúng trên điểm đặt (z = 0), thân nhô về phía −Z. Điểm đặt phải nằm trên mặt tường và mặt trước quay vào phòng.
+- Thiết bị **đặt sàn hoặc mặt bàn** đứng trên điểm đặt. Thiết bị **gắn trần** treo ngay dưới điểm đặt.
+- Cửa, cửa sổ, ô kính, thang máy và trạng thái cửa (cửa thoát bị khoá, cửa chống cháy bị chèn) lấy vị trí và hướng từ cấu kiện của mô hình mà đối tượng neo vào.
+
+Ý nghĩa của `y` (cao so với sàn tầng) khác nhau theo loại, nên trình soạn nói rõ cho từng loại:
+
+| Thiết bị | Kiểu lắp | Kích thước (rộng × cao × sâu, m) | `y` phải là |
+| :--- | :--- | :--- | :--- |
+| Tủ vòi chữa cháy vách tường | Tường | 0,9 × 0,9 × 0,24 | 0; mô hình tự nâng, tâm tủ cách sàn 1,15 m |
+| Nút ấn báo cháy | Tường | 0,12 × 0,12 × 0,06 | 0; nút ở 1,4 m, chuông tự lên sát trần |
+| Tủ điện có cầu dao | Tường | 0,5 × 0,7 × 0,2 | 0; đáy tủ cách sàn 1,0 m |
+| Búa thoát hiểm | Tường | 0,3 × 0,2 × 0,06 | 0; giữa bảng treo ở 1,35 m |
+| Chăn chữa cháy | Tường | 0,3 × 0,32 × 0,07 | Chiều cao treo, thường 1,25 m |
+| Đầu báo cháy, đầu phun sprinkler | Trần | khoảng 0,1 | Chiều cao trần |
+| Bình chữa cháy xách tay, bình gas, túi sơ cứu, khăn, đồ đạc, bồn rửa, giường… | Sàn hoặc mặt bàn | theo từng loại | Mặt đặt: 0 trên sàn, hoặc chiều cao mặt bàn |
+
+Trình soạn (FE PR #269) dùng bảng này để: vẽ thêm một hộp đúng kích thước thật ở đúng độ cao, mặt trước có mũi tên; quay mặt trước ra khỏi tường khi bấm đặt lên tường; nút "Áp vào tường gần nhất" đưa thiết bị về mặt tường và đặt `y` đúng quy ước; cảnh báo khi thiết bị gắn tường cách tường hơn 0,3 m hoặc `y` sai với loại. Unity PR #165 có test khoá hai quy ước trên, để một phía đổi thì test đỏ. Kích thước của các mô hình nhập ngoài (bồn rửa, giường, bình xách tay) là số làm tròn.
+
+Trước ngày này trình soạn vẽ mọi thiết bị bằng một khối vuông đối xứng với hướng 0 độ, nên tủ vòi và chăn chữa cháy đặt trên web hiện ra cắm vuông góc vào tường trong ứng dụng. Thiết bị đã đặt theo cách cũ cần được áp lại vào tường trong trình soạn; hạ tầng đã đạt thẩm định thì phải tạo phiên bản mới.
+
 ## 10. Kiểm thử và tiêu chí nghiệm thu
 
 - Fixture: 25 file ở mục 2.1 giữ ở máy/CI riêng (không commit vì license chưa rõ). Mỗi file có kỳ vọng về số tầng, phòng, cửa, ứng viên vệ sinh/PCCC và issue.
