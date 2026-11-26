@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | Luật Phòng cháy, chữa cháy và cứu nạn, cứu hộ số 55/2024/QH15 | Luật gốc | Chỉ dẫn chiếu tên; chưa trích điều khoản. |
 | Nghị định 105/2025/NĐ-CP ngày 15/5/2025, hiệu lực 01/7/2025 | Điều 4, 15, 16; Phụ lục I, II; Phụ lục VIII (Mẫu PC04, PC06) | **Đã đọc bản gốc** trên Công báo số 717+718 và 719+720 ngày 31/5/2025 (congbao.chinhphu.vn), ngày 23/11/2026. |
-| Nghị định 347/2026/NĐ-CP ngày 08/9/2026, hiệu lực 15/9/2026 | Sửa một số điều của Nghị định 105/2025 | **Chỉ qua nguồn thứ cấp** (Báo Chính phủ và các trang pháp luật): sửa Điều 10, 13, 14, 23; thay Mẫu PC01, PC11, PC12; bỏ PC17; thêm PC24. Các nguồn này không nêu thay đổi ở Điều 4, 15, 16 hay Mẫu PC04, PC06. Cần đọc văn bản gốc trước khi trích trong báo cáo. |
+| Nghị định 347/2026/NĐ-CP | Không liên quan PCCC | **Đã đối chiếu Công báo** ngày 26/11/2026: nghị định này sửa Nghị định 169/2025/NĐ-CP về hoạt động khoa học, công nghệ, không sửa Nghị định 105/2025. Không ảnh hưởng Điều 4, 15, 16 hay Mẫu PC04, PC06. Ghi chú ngày 23/11 (sửa Điều 10, 13, 14, 23, thay một số mẫu) lấy từ nguồn thứ cấp và đã sai; không trích nghị định này trong báo cáo. |
 | QCVN 06:2022/BXD và Sửa đổi 1:2023 (an toàn cháy cho nhà và công trình) | Lối thoát nạn | Chỉ dẫn chiếu tên; chưa đối chiếu. |
 | TCVN 3890 (trang bị phương tiện PCCC) | Loại và số lượng thiết bị theo loại nhà | Chỉ dẫn chiếu tên; chưa đối chiếu. |
 
