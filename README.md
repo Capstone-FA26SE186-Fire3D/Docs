@@ -28,7 +28,7 @@ Thư mục này chứa tài liệu sản phẩm và kiến trúc cho **Fire Evac
 | `release-manifest.md` | Bản phát hành 16/11/2026: commit `main` của từng repo, runtime 2.5.0, bản Unity ghim trong Mobile, phiên bản app và máy chủ production. |
 | `huong-dan-hoc-vien.md` | Hướng dẫn cho học viên: cài ứng dụng, đăng nhập, quét QR, tải bài, chơi và đọc kết quả. |
 | `huong-dan-quan-tri.md` | Hướng dẫn cho quản trị FET3D: duyệt kịch bản, phiên bản runtime, thư viện mẫu và bài học. |
-| `kich-ban-uat.md` | Kịch bản kiểm thử chấp nhận (UAT) cho Quản trị, Tổ chức và Học viên, gồm các ca bị từ chối quyền, phiếu góp ý, sổ lỗi và biên bản nghiệm thu để điền. |
+| `kich-ban-uat.md` | Kịch bản kiểm thử chấp nhận (UAT) cho Quản trị, Tổ chức, Chuyên viên PCCC và Học viên, kèm kết quả lượt nhóm tự chạy ngày 26–27/11/2026, gồm các ca bị từ chối quyền, phiếu góp ý, sổ lỗi và biên bản nghiệm thu để điền. |
 | `ma-tran-nghiem-thu.md` | Trạng thái và bằng chứng của 89 mã yêu cầu, 9 nhóm NFR và checklist (Docs#37), các yêu cầu mồ côi và việc còn chặn mức 100%. |
 | `cau-hinh-va-thu-vien.md` | Mục lục hướng dẫn vận hành của từng repo, tên biến cấu hình (không kèm giá trị) và danh mục thư viện, tài sản kèm giấy phép. |
 | `bien-ban-ban-giao.md` | Mẫu biên bản bàn giao bản cuối: nội dung bàn giao, tình trạng tiêu chí D5, phần ký. |
