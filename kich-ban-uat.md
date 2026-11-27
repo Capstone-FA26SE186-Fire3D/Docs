@@ -82,7 +82,7 @@ Quy ước cột **Đạt / Không đạt**: ghi Đạt, Không đạt, hoặc B
 | B16 | Ở báo cáo Huấn luyện, bấm **Xuất CSV** | Tải được tệp `.csv`; tệp chỉ có dòng tổng hợp, không có tên hay email học viên | | | | |
 | B17 | Ở mục Mã QR, bấm **Tạo mã mới**, đọc hộp thoại "Tạo lại mã QR?" rồi bấm **Tạo mã mới** | Trang báo "Đã tạo mã QR mới" và "QR cũ đã ngừng hoạt động." (kiểm mã cũ ở ca D8) | Chạy 27/11 22:09: hộp thoại "Tạo lại mã QR?" nói mã hiện tại ngừng ngay và mã tham gia giữ nguyên; sau khi bấm: "Đã tạo mã QR mới" — "QR cũ đã ngừng hoạt động."; lịch sử có 2 mã | Đạt | Chạy trước phần C vì chưa có điện thoại; mã cũ giữ lại cho D8 | |
 | B18 | Mở **Dịch vụ & thanh toán**, bấm **Mua gói công trình**, chọn công trình và gói | Trang báo "Đã tạo báo giá nháp"; báo giá chờ quản trị phát hành ("Đang chờ quản trị FET3D phát hành") | Chạy 27/11 22:08: chọn "Chung cư UAT 27/11" (Mua mới) và "Gói thử nghiệm thu BE#138 (QA)" 12 tháng; trang báo "Đã tạo báo giá nháp"; báo giá `FET-d2e03b4f…` ghi "Bản nháp · chờ phát hành", tạm tính 1.200 ₫, "Đang chờ quản trị FET3D phát hành", chỉ có nút Hủy báo giá | Đạt | Danh sách báo giá cho thấy đã có ba báo giá "Đã chấp nhận" từ 10–18/11 (2.000–8.200 ₫), tức luồng thanh toán đã từng chạy thật | |
-| B19 | (Sau bước A14) Mở báo giá đã phát hành, xem giá từng dòng, rồi bấm **Hủy báo giá**, nhập lý do và xác nhận | Giá khớp với giá quản trị đặt; trang báo "Đã hủy báo giá". **Không thanh toán thật** trong buổi UAT trừ khi trưởng nhóm đồng ý: sau khi thanh toán không hoàn tiền | | | | |
+| B19 | (Sau bước A14) Mở báo giá đã phát hành, xem giá từng dòng, rồi bấm **Hủy báo giá**, nhập lý do và xác nhận | Giá khớp với giá quản trị đặt; trang báo "Đã hủy báo giá". **Không thanh toán thật** trong buổi UAT trừ khi trưởng nhóm đồng ý: sau khi thanh toán không hoàn tiền | Chạy 27/11 22:47: báo giá 1.200 ₫ đã phát hành, đã chấp nhận; hủy liên kết PayOS rồi bấm **Hủy báo giá**, nhập lý do: "Đã hủy báo giá — Báo giá không còn dùng để chấp nhận hoặc thanh toán." | Đạt | Hủy vì 1.200 ₫ dưới mức chuyển khoản tối thiểu 2.000 ₫ (lỗi 19). Báo giá mới 2.000 ₫ đã thanh toán thật nhưng không kích hoạt (lỗi 20) | BE#241 |
 | B20 | Mở thẻ **Nhắc gia hạn** trong Dịch vụ & thanh toán | Trang ghi hệ thống nhắc gia hạn trước 5 ngày khi kỳ dịch vụ sắp hết. Nếu có công trình còn dưới 5 ngày dịch vụ: có dòng nhắc trên web, thư nhắc và thông báo trên điện thoại đã đăng nhập tài khoản tổ chức (đã cho phép thông báo). Không có công trình nào sắp hết hạn thì ghi Bỏ qua | Chạy 27/11: thẻ ghi "Nhắc gia hạn trước 5 ngày khi kỳ dịch vụ sắp hết; không còn nhắc cho kỳ đã gia hạn." Không có công trình nào còn dưới 5 ngày (kỳ gần nhất hết 18/5/2027) | Bỏ qua | Phần nhắc thật chưa kiểm được. Thẻ này lại liệt kê ba thông báo kết quả thẩm định của công trình | Lỗi 15 |
 
 ## 5. Phần E — Chuyên viên PCCC
@@ -145,7 +145,7 @@ Mỗi ca dưới đây đạt khi hệ thống **chặn** thao tác và hiện t
 | D16 | Học viên | Mở công trình đã hết hạn dịch vụ | Xem được danh sách bài nhưng không bắt đầu được lượt mới; có dòng giải thích dịch vụ đã hết hạn | | | | |
 | D17 | Tổ chức | Bấm lưu một bài học công khai | "Chỉ tài khoản học viên mới lưu được bài." | Chạy 27/11: ở trang Bài học, nút "Lưu bài viết" bị khoá, bên cạnh ghi "Chỉ tài khoản học viên lưu được bài." | Đạt | Nút khoá sẵn nên không bấm được | |
 | D18 | Quản trị | Mở một báo giá của tổ chức và tìm nút thanh toán | Không thanh toán được thay tổ chức: "Quản trị FET3D có thể xem trạng thái nhưng không tạo thanh toán thay tổ chức." | Chạy 27/11: báo giá đã phát hành không có nút thanh toán; ghi "Đang chờ tổ chức chấp nhận — Quản trị FET3D không chấp nhận hay thanh toán thay tổ chức." | Đạt | Câu thật khác câu trong tài liệu |  |
-| D19 | Chuyên viên PCCC (hai người) | Hai Chuyên viên cùng mở một mục chờ thẩm định; người thứ hai quyết định sau người thứ nhất | Người thứ hai bị từ chối; quyết định đầu giữ nguyên (hàng chờ dùng chung: ai thẩm định trước thì kết quả của người đó được ghi) | | | | |
+| D19 | Chuyên viên PCCC (hai người) | Hai Chuyên viên cùng mở một mục chờ thẩm định; người thứ hai quyết định sau người thứ nhất | Người thứ hai bị từ chối; quyết định đầu giữ nguyên (hàng chờ dùng chung: ai thẩm định trước thì kết quả của người đó được ghi) | Chưa chạy | Bỏ qua | Nhóm đổi quy tắc 27/11: mục chờ sẽ được gán cho một Chuyên viên theo lượt thay vì ai quyết trước thắng; ca này viết lại khi BE xong | BE#242 |
 | D20 | Tổ chức | Xuất CSV báo cáo lần thứ 11 trong cùng một ngày | Bị từ chối vì quá 10 lần xuất mỗi ngày; không tải được tệp | | | | |
 | D21 | Tổ chức | Ở báo cáo, chọn khoảng thời gian dài hơn 90 ngày | Không áp dụng được; trang báo "Khoảng thời gian tối đa 90 ngày (đang chọn … ngày)." | Chạy 27/11: chọn 01/07–27/11/2026, bấm Áp dụng: "Khoảng thời gian tối đa 90 ngày (đang chọn 150 ngày)."; báo cáo giữ nguyên 30 ngày gần đây | Đạt | | |
 | D22 | Quản trị | Đăng nhập ứng dụng điện thoại bằng email và mật khẩu của tài khoản quản trị | Không vào được: "Phiên đăng nhập không hợp lệ hoặc loại tài khoản này chưa dùng được trên ứng dụng." | | | | |
@@ -255,17 +255,19 @@ Ghi mỗi lỗi một dòng. Mức độ: **Nghiêm trọng** (không làm tiế
 | 16 | D26 | Báo giá đã nhận tiền vẫn hiện nút "Hủy báo giá" ngay dưới dòng "Đã có tiền: không hủy được báo giá này" (chưa bấm thử) | Thấp |  |  |  |  |
 | 17 | D5 | Quản trị gõ `/workspace/billing` không bị chặn: trang của tổ chức mở ra ở chế độ "Chỉ xem" với công trình của mọi tổ chức và dòng lỗi "Dữ liệu chưa hợp lệ…" | Trung bình |  |  |  |  |
 | 18 | A7 | Mục thư viện đang "Ngừng dùng" nhưng phiên bản v1 vẫn mang nhãn "Tổ chức đang thấy" và dòng "Bản tổ chức đang thấy: v1", trái với khung "Tổ chức không thấy mục này" ngay bên trên | Thấp |  |  |  |  |
+| 19 | B18, A14 | Hệ thống cho phát hành báo giá 1.200 ₫ nhưng chuyển khoản dưới 2.000 ₫ không thực hiện được; phải hủy làm lại | Trung bình | BE#241 |  |  |  |
+| 20 | A14, B19 | Báo giá 2.000 ₫ (bắt đầu = hạn hiệu lực = 22:53:00): PayOS nhận tiền 22:53:01, trễ 1 giây, dịch vụ không kích hoạt ("cần đối soát", `PAYOS_SERVICE_PERIOD_NEEDS_RECONCILE`, đơn 10000025); đối soát của quản trị không sửa được. Tổ chức mất tiền, công trình chưa có dịch vụ | Nghiêm trọng | BE#241 |  |  |  |
 
 ## 11. Tổng kết lượt kiểm thử
 
 | Phần | Số bước | Đạt | Không đạt | Bỏ qua |
 | :--- | :--- | :--- | :--- | :--- |
 | A — Quản trị | 15 | 15 | 0 | 0 |
-| B — Tổ chức | 23 | 15 | 1 | 2 |
+| B — Tổ chức | 23 | 16 | 1 | 2 |
 | E — Chuyên viên PCCC | 6 | 6 | 0 | 0 |
 | C — Học viên | 20 | 0 | 1 | 0 |
-| D — Từ chối quyền | 26 | 9 | 1 | 0 |
-| Tổng | 90 | 45 | 3 | 2 |
+| D — Từ chối quyền | 26 | 9 | 1 | 1 |
+| Tổng | 90 | 46 | 3 | 3 |
 
 Các số trên là của lượt chạy 26–27/11/2026 do nhóm tự chạy; các bước còn trống chưa chạy.
 
