@@ -148,7 +148,7 @@ Viết tắt bằng chứng production dùng nhiều lần:
 | Bake/lighting và material library | Unity#6 (đóng 16/11) | Đã thử trên production / máy thật | Gói theo tầng dựng trên máy ảo, chơi trên Redmi; Unity#114 lọc vật nhỏ ở xa sau lỗi GPU 13/11 | |
 | Quyết định thương mại/quota/rubric | Docs#10 (mở) | Bỏ / đổi theo quyết định | Quyết định 16/11: giá/quota/Trial do PlatformAdmin đặt, không hoàn tiền, một IFC mỗi công trình (Docs#38, BE#103). Quyết định 18/11: hạ tầng dùng tài khoản miễn phí cho sinh viên, chỉ trả Tripo 125.000 đ và khóa API AI 100.000 đ; rubric mẫu, Redis, OneShield ghi vào giới hạn đã biết | |
 | Asset và dataset licensing | Unity#56 (đóng 16/11 theo quyết định) | Bỏ / đổi theo quyết định | Quyết định 16/11: dự án học tập phi thương mại, không rà thêm; nguồn ghi ở `Unity/Assets/_Fire3D/Art/Characters/CREDITS.md`; hai tệp IFC là tệp thử nội bộ, không commit (Docs#40) | |
-| UAT/user-study và hồ sơ bàn giao | Docs#41 (mở) | Chờ trưởng nhóm | `kich-ban-uat.md`, `huong-dan-hoc-vien.md`, `huong-dan-quan-tri.md`, `release-manifest.md` (Docs PR #103/#104) | Chưa có buổi UAT, phản hồi người dùng, biên bản ký; Docs#42 còn thiếu mục lục vận hành, danh sách biến cấu hình, người xác nhận bàn giao |
+| UAT/user-study và hồ sơ bàn giao | Docs#41 (mở) | Chờ trưởng nhóm | `kich-ban-uat.md`, `huong-dan-hoc-vien.md`, `huong-dan-quan-tri.md`, `release-manifest.md` (Docs PR #103/#104) | 26–27/11/2026 nhóm tự chạy luồng Tổ chức → Chuyên viên PCCC trên fet3d.io.vn (19 bước Đạt, 1 Không đạt, 12 lỗi ghi ở `kich-ban-uat.md` mục 10); chưa có buổi UAT với người dùng ngoài nhóm, phản hồi người dùng, biên bản ký; Docs#42 còn thiếu mục lục vận hành, danh sách biến cấu hình, người xác nhận bàn giao |
 
 ## Tổng hợp theo trạng thái
 

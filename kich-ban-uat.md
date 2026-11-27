@@ -1,23 +1,25 @@
 # Kịch bản kiểm thử chấp nhận (UAT)
 
-Kịch bản này để người dùng thật đi qua ba vai trò của FET3D (Quản trị, Tổ chức, Học viên) theo đúng thứ tự một bài tập đi từ mô hình công trình tới kết quả của học viên, rồi thử các trường hợp phải bị từ chối quyền. Người kiểm thử chỉ cần làm theo từng dòng và điền các cột **Kết quả thực tế**, **Đạt / Không đạt**, **Ghi chú** và **Mã lỗi / issue**. Cuối tài liệu có phiếu góp ý cho từng vai trò, bảng ghi lỗi và biên bản nghiệm thu để ký.
+Kịch bản này để người dùng thật đi qua bốn vai trò của FET3D (Quản trị, Tổ chức, Chuyên viên PCCC, Học viên) theo đúng thứ tự một bài tập đi từ mô hình công trình tới kết quả của học viên, rồi thử các trường hợp phải bị từ chối quyền. Người kiểm thử chỉ cần làm theo từng dòng và điền các cột **Kết quả thực tế**, **Đạt / Không đạt**, **Ghi chú** và **Mã lỗi / issue**. Cuối tài liệu có phiếu góp ý cho từng vai trò, bảng ghi lỗi và biên bản nghiệm thu để ký.
 
-> **Phạm vi.** Đây là nghiệm thu đồ án tốt nghiệp (capstone), không phải chứng nhận phòng cháy chữa cháy (PCCC). Nội dung PCCC trong bài học và kịch bản do quản trị FET3D (người có chuyên môn của nhóm) duyệt; không có bước thẩm định của chuyên gia PCCC bên ngoài. Tác dụng của khăn ướt, chăn ướt, che mũi miệng, chèn khe cửa và chỗ trú tạm trong game là mô phỏng để tập huấn ([quyết định ngày 16/11/2026](fire_evacuation_project_overview.md#quyết-định-của-trưởng-nhóm-ngày-16112026)).
+> **Phạm vi.** Đây là nghiệm thu đồ án tốt nghiệp (capstone), không phải chứng nhận phòng cháy chữa cháy (PCCC). Từ BE#211, hạ tầng PCCC và tình huống của tổ chức do **Chuyên viên PCCC** thẩm định; tài khoản Chuyên viên do quản trị FET3D cấp, quản trị chỉ theo dõi. Thẩm định trên mô phỏng không thay việc người đứng đầu cơ sở phê duyệt phương án PC06, và không có chứng nhận của cơ quan PCCC. Tác dụng của khăn ướt, chăn ướt, che mũi miệng, chèn khe cửa và chỗ trú tạm trong game là mô phỏng để tập huấn ([quyết định ngày 16/11/2026](fire_evacuation_project_overview.md#quyết-định-của-trưởng-nhóm-ngày-16112026)).
 
-> **Nguồn và mức xác nhận.** Các bước và câu chữ được đối chiếu với mã nguồn của [bản phát hành ngày 16/11/2026](release-manifest.md) (web FE `f1a7a22`, ứng dụng Mobile `533b6ee`, máy chủ BE `528f9c4`, runtime 2.5.0). Câu chữ trong ngoặc kép là câu đọc được trong mã nguồn. **Chưa có bước nào được chạy lại trên màn hình thật khi soạn tài liệu này**; mục 7 liệt kê những chỗ cần chú ý khi chạy lần đầu.
+> **Nguồn và mức xác nhận.** Các bước và câu chữ được đối chiếu với mã nguồn của [bản phát hành ngày 16/11/2026](release-manifest.md) (web FE `f1a7a22`, ứng dụng Mobile `533b6ee`, máy chủ BE `528f9c4`, runtime 2.5.0), rồi sửa theo Flow 1 PC06 (web FE `e965b41`, máy chủ BE `25df26d`). Câu chữ trong ngoặc kép là câu đọc được trong mã nguồn.
+>
+> **Lượt chạy thật ngày 26–27/11/2026** trên https://fet3d.io.vn do nhóm tự chạy (chưa có người dùng ngoài nhóm): luồng tạo và đăng nhập lần đầu của Chuyên viên PCCC (A12, E1) và luồng Tổ chức → Chuyên viên (B1–B11, E2–E6, D23, D24). Kết quả ghi ở cột Kết quả thực tế với nhãn "Chạy 27/11"; lỗi ghi ở mục 9. Phần C (điện thoại) và các ca D khác chưa chạy.
 
 ## 1. Thông tin lượt kiểm thử
 
 | Mục | Điền |
 | :--- | :--- |
-| Ngày kiểm thử (dd/mm/yyyy) | |
-| Người kiểm thử và vai trò (Quản trị / Tổ chức / Học viên) | |
+| Ngày kiểm thử (dd/mm/yyyy) | 26/11/2026 (A12, E1) và 27/11/2026 (B, E) |
+| Người kiểm thử và vai trò (Quản trị / Tổ chức / Chuyên viên PCCC / Học viên) | Thành viên nhóm, lần lượt đăng nhập Quản trị, Tổ chức, Chuyên viên PCCC |
 | Người chứng kiến (thành viên nhóm) | |
-| Môi trường web (địa chỉ) | |
+| Môi trường web (địa chỉ) | https://fet3d.io.vn (FE `e965b41`, BE `25df26d`) |
 | Phiên bản ứng dụng (mục Tôi → Phiên bản ứng dụng) | |
 | Cách cài ứng dụng (Google Play kênh thử nghiệm / tệp cài do nhóm gửi) | |
 | Điện thoại và phiên bản Android | |
-| Phiên bản runtime đang bật (trang Phiên bản runtime) | |
+| Phiên bản runtime đang bật (trang Phiên bản runtime) | Tình huống chọn 2.5.0; bản phát hành ghi ứng dụng tối thiểu 2.3.0 |
 
 ## 2. Chuẩn bị
 
@@ -25,20 +27,21 @@ Kịch bản này để người dùng thật đi qua ba vai trò của FET3D (Q
 | :--- | :--- |
 | Tài khoản quản trị | Do nhóm cấp; không tự đăng ký được |
 | Tài khoản tổ chức A | Dùng cho phần Tổ chức |
+| Tài khoản Chuyên viên PCCC | Quản trị tạo ở bước A12 với một email người kiểm thử mở được; lần đăng nhập đầu cần mã gửi về email đó (E1) |
 | Tài khoản tổ chức B | Chỉ dùng cho các ca từ chối quyền giữa hai tổ chức |
 | Tài khoản học viên 1 và học viên 2 | Học viên 2 dùng cho ca Riêng tư và ca hết suất |
 | Một tài khoản Google chưa dùng với FET3D | Cho bước đăng nhập Google (C2) |
-| Một tệp IFC | Ví dụ tệp trường học ở [IFC mục 10.1](ifc_ingestion_visual_interaction.md#101-hai-công-trình-nghiệm-thu). Mỗi lần tải lên nhận đúng một tệp; mô hình tách theo bộ môn phải gộp khi xuất |
+| Một tệp IFC | Lượt 27/11 dùng `ISSUE_159_kleine_Wohnung_R22.ifc` (chung cư 4 tầng, có 6 bình chữa cháy và cầu thang). Ví dụ khác: tệp trường học ở [IFC mục 10.1](ifc_ingestion_visual_interaction.md#101-hai-công-trình-nghiệm-thu). Mỗi lần tải lên nhận đúng một tệp; mô hình tách theo bộ môn phải gộp khi xuất |
 | Điện thoại Android đã cài ứng dụng FET3D | Chỉ có bản Android, không có bản iOS. Xem [hướng dẫn học viên, mục 2](huong-dan-hoc-vien.md#2-cài-ứng-dụng) |
 | Công trình của tổ chức A còn dịch vụ | Cần để phát hành và để học viên bắt đầu lượt chơi |
 
-Quy ước cột **Đạt / Không đạt**: ghi Đạt, Không đạt, hoặc Bỏ qua (ghi lý do ở cột Ghi chú). Khi Không đạt, ghi lỗi vào bảng ở mục 9 và chép số thứ tự lỗi (hoặc số issue nếu nhóm đã mở) vào cột **Mã lỗi / issue**.
+Quy ước cột **Đạt / Không đạt**: ghi Đạt, Không đạt, hoặc Bỏ qua (ghi lý do ở cột Ghi chú). Khi Không đạt, ghi lỗi vào bảng ở mục 10 và chép số thứ tự lỗi (hoặc số issue nếu nhóm đã mở) vào cột **Mã lỗi / issue**.
 
 ## 3. Phần A — Quản trị
 
 | # | Bước | Kết quả mong đợi | Kết quả thực tế | Đạt / Không đạt | Ghi chú | Mã lỗi / issue |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| A1 | Đăng nhập web bằng tài khoản quản trị | Web chuyển tới trang Tổng quan của khu Quản trị hệ thống; thanh bên có Duyệt kịch bản, Phiên bản runtime, Bài học, Thư viện mẫu, Dịch vụ & thanh toán | | | | |
+| A1 | Đăng nhập web bằng tài khoản quản trị | Web chuyển tới trang Tổng quan của khu Quản trị hệ thống; thanh bên có Theo dõi thẩm định, Tài khoản, Phiên bản runtime, Bài học, Thư viện mẫu, Dịch vụ & thanh toán | | | | |
 | A2 | Mở **Phiên bản runtime** | Thấy danh sách phiên bản, mới nhất ở trên; phiên bản 2.5.0 có trạng thái "Đang dùng" | | | | |
 | A3 | Bấm vào hàng 2.5.0 | Thấy danh sách năng lực của phiên bản, kèm sự kiện và thao tác; không có nút sửa nội dung | | | | |
 | A4 | Bấm **Đăng ký phiên bản**, chọn một tệp không phải tệp danh mục của runtime | Trang báo "Tệp chưa đúng" và không đăng ký được | | | | |
@@ -49,29 +52,29 @@ Quy ước cột **Đạt / Không đạt**: ghi Đạt, Không đạt, hoặc B
 | A9 | Xuất bản bài nháp đó | Bài hiện ở trang Bài học công khai khi chưa đăng nhập | | | | |
 | A10 | **Ẩn bài**, kiểm tra trang công khai, rồi **Hiện lại** | Sau khi ẩn, bài không còn ở trang công khai; sau Hiện lại, bài có lại | | | | |
 | A11 | **Xóa bài** rồi **Khôi phục** | Sau khôi phục, bài ở trạng thái Đã ẩn, không tự công khai | | | | |
-| A12 | (Sau bước B10) Mở **Duyệt kịch bản**, lọc Chờ duyệt | Thấy phiên bản tổ chức A vừa gửi, có tên kịch bản, tổ chức · công trình và thời điểm gửi | | | | |
-| A13 | Mở bản duyệt | Thấy Mục tiêu học tập, Hướng dẫn cho người học, Tiêu chí chấm điểm (ngưỡng đạt, trọng số, bắt buộc) và Nội dung kịch bản; tất cả chỉ đọc | | | | |
-| A14 | Bấm **Từ chối**, để trống lý do | Không ghi được; trang yêu cầu "Nhập lý do từ chối (1–4000 ký tự)." | | | | |
-| A15 | Bấm **Duyệt nội dung** và xác nhận | Trang báo "Đã duyệt nội dung"; hộp thoại đã nhắc duyệt nội dung không phải là phát hành | | | | |
-| A16 | Mở lại bản vừa duyệt | Thấy "Quyết định đã được ghi và không đổi được."; không còn nút Duyệt hay Từ chối | | | | |
-| A17 | (Sau bước B18) Mở **Dịch vụ & thanh toán** → thẻ **Báo giá**, bấm vào báo giá nháp của tổ chức A, bấm **Phát hành báo giá** | Trang báo "Đã phát hành báo giá"; giá của từng dòng công trình là giá quản trị đặt ở gói dịch vụ và giảm giá, không phải con số cố định trong tài liệu | | | | |
-| A18 | Mở lại báo giá đó và tìm nút hoàn tiền | Không có thao tác hoàn tiền ở bất kỳ đâu; báo giá chưa thanh toán chỉ có **Hủy báo giá** | | | | |
+| A12 | Mở **Tài khoản**, bấm **Tạo tài khoản**, chọn vai trò Chuyên viên PCCC, nhập email người kiểm thử mở được, họ tên và mật khẩu ban đầu | Tài khoản được tạo; danh sách ghi "Chưa xác minh email". Nếu email gõ sai, mở tài khoản đó và bấm **Sửa email** | Chạy 27/11 (26/11): lần đầu máy chủ báo lỗi 500 (BE#237); sau khi BE sửa, tạo được lúc 15:25Z | Đạt | Form báo rõ lỗi máy chủ kèm mã theo dõi (FE #275) | BE#237 |
+| A13 | Mở **Theo dõi thẩm định** | Thấy các mục tổ chức đã gửi và kết quả của Chuyên viên PCCC; quản trị không có nút Đạt / Chưa đạt | | | | |
+| A14 | (Sau bước B18) Mở **Dịch vụ & thanh toán** → thẻ **Báo giá**, bấm vào báo giá nháp của tổ chức A, bấm **Phát hành báo giá** | Trang báo "Đã phát hành báo giá"; giá của từng dòng công trình là giá quản trị đặt ở gói dịch vụ và giảm giá, không phải con số cố định trong tài liệu | | | | |
+| A15 | Mở lại báo giá đó và tìm nút hoàn tiền | Không có thao tác hoàn tiền ở bất kỳ đâu; báo giá chưa thanh toán chỉ có **Hủy báo giá** | | | | |
 
 ## 4. Phần B — Tổ chức
 
 | # | Bước | Kết quả mong đợi | Kết quả thực tế | Đạt / Không đạt | Ghi chú | Mã lỗi / issue |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| B1 | Đăng nhập web bằng tài khoản tổ chức A | Web chuyển tới trang **Công trình** của Không gian tổ chức | | | | |
-| B2 | Bấm **Thêm công trình**, nhập Tên công trình, Loại công trình, Số tầng, Tỉnh / Thành phố, Quận / Huyện, Địa chỉ; lưu rồi mở công trình | Trang công trình có năm thẻ: Hành trình, IFC, Kịch bản, Truy cập, Dịch vụ | | | | |
-| B3 | Ở thẻ **IFC**, bấm **Tải IFC** và chọn tệp IFC | Mục Tiến trình cập nhật tới khi xử lý xong; mục Xem trước 3D hiện mô hình; mục Kỹ thuật có danh sách vấn đề (nếu có) | | | | |
-| B4 | Mở mục **Thiết bị**. Nếu có khung "Chọn cửa thoát ra ngoài", chọn một cửa làm cửa thoát; xác nhận hoặc loại các thiết bị được đề xuất rồi lưu | Trang báo "Đã lưu quyết định thiết bị" | | | | |
-| B5 | Ở thẻ **Kịch bản**, bấm **Tạo kịch bản**, đặt tên rồi bấm vào kịch bản để mở trình soạn. Đặt điểm xuất phát, nguồn lửa, thiết bị, số người trong tòa nhà, mục tiêu và tiêu chí chấm; bấm **Lưu** | Bản nháp được lưu; trình soạn không có mục cấu hình gió; số người trong tòa nhà đúng bằng số người soạn đã đặt | | | | |
-| B6 | Trong trình soạn bấm **Phiên bản**, rồi **Tạo phiên bản mới**, chọn bản nháp vừa lưu và bấm **Tạo phiên bản** | Trang báo "Đã tạo phiên bản mới"; trang phiên bản có các thẻ Tổng quan, Dựng gói, Kiểm tra, Gửi duyệt, Phát hành, Chạy thử | | | | |
-| B7 | Ở thẻ **Dựng gói**, bấm **Dựng gói** và chờ xong; sang thẻ **Kiểm tra**, khi kết quả đạt thì bấm **Chốt gói phát hành** | Dựng gói xong (có thể mất nhiều phút); trang báo "Đã chốt gói phát hành" | | | | |
+| B1 | Đăng nhập web bằng tài khoản tổ chức A | Web chuyển tới trang **Công trình** của Không gian tổ chức | Chạy 27/11: vào trang Công trình | Đạt | | |
+| B2 | Bấm **Thêm công trình**, nhập Tên công trình, Loại công trình, Số tầng, Tỉnh / Thành phố, Quận / Huyện, Địa chỉ; lưu rồi mở công trình | Trang công trình có năm thẻ: Hành trình, IFC, Kịch bản, Truy cập, Dịch vụ | Chạy 27/11: tạo "Chung cư UAT 27/11" (chung cư, 4 tầng) lúc 08:39, mở thẳng thẻ IFC | Đạt | Chọn Chung cư vẫn hiện gợi ý của Trường học | Lỗi 5 |
+| B3 | Ở thẻ **IFC**, bấm **Tải IFC** và chọn tệp IFC | Mục Tiến trình cập nhật tới khi xử lý xong; mục Xem trước 3D hiện mô hình; mục Kỹ thuật có danh sách vấn đề (nếu có) | Chạy 27/11: tệp 9,7 MB qua kiểm tra trên máy (4 tầng, 28 phòng, 47 cửa, có cầu thang); máy xử lý nhận sau khoảng 3 phút, dựng xong 08:44 với 0 lỗi, 3 cảnh báo | Đạt | Thanh tiến trình hiện "bước Bước khác" | Lỗi 4 |
+| B4 | Mở mục **Thiết bị**. Nếu có khung "Chọn cửa thoát ra ngoài", chọn một cửa làm cửa thoát; xác nhận hoặc loại các thiết bị được đề xuất rồi lưu | Trang báo "Đã lưu quyết định thiết bị" | Chạy 27/11: chọn một cửa tầng trệt làm cửa thoát, xác nhận 6 bình chữa cháy; trang báo đã lưu và "Bản IFC đã sẵn sàng soạn kịch bản." | Đạt | | |
+| B4a | Mở mục **Hạ tầng PCCC**, bấm **Lập hạ tầng PCCC**. Kiểm tra lối thoát nạn, điểm tập kết và thiết bị cố định; bấm **Kiểm tra** rồi **Lưu** | Phiên bản 1 lấy sẵn các thiết bị đã xác nhận ở B4; máy chủ báo nội dung hợp lệ; danh sách ghi số lối thoát, điểm tập kết và thiết bị | Chạy 27/11: 6 bình được lấy sang nhưng thiếu loại chất chữa cháy và thời gian phun (12 lỗi "Cần điền ô này."); cửa thoát vào thành thiết bị nên vẫn báo "Cần ít nhất một lối thoát nạn.". Điền tay, thêm Lối ra ngoài gắn vào cửa đó và một Điểm tập kết thì máy chủ báo hợp lệ: "1 lối thoát · 1 điểm tập kết · 7 thiết bị cố định" | Không đạt | Đi tiếp được bằng cách điền tay | Lỗi 1, 2, 3, 4 |
+| B4b | Ở danh sách Hạ tầng PCCC, bấm **Gửi thẩm định** và xác nhận | Phiên bản chuyển sang "Chờ thẩm định" và không sửa được nữa | Chạy 27/11: gửi 08:49, "Chờ thẩm định", ghi người gửi và giờ gửi | Đạt | | |
+| B5 | (Sau bước E3) Ở thẻ **Kịch bản**, bấm **Tạo kịch bản**, đặt tên, bấm **Tạo bản nháp**. Áp một mẫu ở thẻ **Thư viện** (hoặc tự điền), đặt điểm xuất phát, nguồn lửa, chọn phiên bản ứng dụng; bấm **Lưu** rồi **Kiểm tra** | Bản nháp tự dùng Hạ tầng PCCC đã khoá (lối thoát, điểm tập kết, thiết bị không sửa được ở đây); máy chủ báo nội dung hợp lệ; trình soạn không có mục cấu hình gió | Chạy 27/11: bản nháp ghi "Dùng Hạ tầng PCCC phiên bản 1 (đã khoá)" với 9 đối tượng; áp mẫu PC06 "Chung cư – trong giờ: cháy bếp căn hộ" điền 9 nhóm; thêm phiên bản 2.5.0, điểm xuất phát và nguồn cháy tầng 2; máy chủ hợp lệ 08:54 | Đạt | Mẫu đổi tên bản nháp thành "…tầng 8" trong tòa 4 tầng; còn chữ kỹ thuật | Lỗi 6, 7 |
+| B6 | Trong trình soạn bấm **Phiên bản**, rồi **Tạo phiên bản mới**, chọn bản nháp vừa lưu và bấm **Tạo phiên bản** | Trang báo "Đã tạo phiên bản mới"; trang phiên bản có các thẻ Tổng quan, Dựng gói, Kiểm tra, Gửi thẩm định, Phát hành, Chạy thử | Chạy 27/11: "Đã tạo phiên bản mới" 08:56, đủ sáu thẻ | Đạt | Hộp tạo phiên bản hiện mã lần lưu dạng `"20805"` | Lỗi 8 |
+| B7 | Ở thẻ **Dựng gói**, bấm **Dựng gói** và chờ xong; sang thẻ **Kiểm tra**, khi kết quả đạt thì bấm **Chốt gói phát hành** | Dựng gói xong (có thể mất nhiều phút); trang báo "Đã chốt gói phát hành" | Chạy 27/11: v1 dựng khoảng 7 phút, kiểm tra đạt 09:03 với 0 lỗi; v2 máy dựng nhận lại lần 2, xong 09:23, kiểm tra đạt; cả hai lần trang báo "Đã chốt gói" | Đạt | Trạng thái đầu trang chỉ đổi sau khi tải lại; lần nhận lại không có lý do | Lỗi 9 |
 | B8 | Quay lại thẻ **IFC** → mục **Tiến trình**, ở khung "Xác nhận mô hình dùng được cho huấn luyện" chọn phiên bản kịch bản vừa tạo rồi bấm **Xác nhận dùng cho huấn luyện** | Trang báo "Đã xác nhận mô hình dùng được cho huấn luyện" | | | | |
 | B9 | Ở trang phiên bản, mở thẻ **Chạy thử**, bấm **Bắt đầu chạy thử** rồi **Tạo mã QR mở trên điện thoại**. Trên điện thoại đăng nhập bằng tài khoản tổ chức A, bấm **Quét mã bàn giao**, quét mã, **Tải và kiểm tra gói**, **Bắt đầu chạy thử**, chơi hết | Web báo "Điện thoại đã nhận mã và đang giữ lượt chạy thử này."; màn chơi mở trên điện thoại; xong, ứng dụng báo "Đã gửi kết quả chạy thử. Xem kết quả trên web." | | | | |
-| B10 | Ở thẻ **Gửi duyệt**, bấm **Gửi duyệt** và xác nhận | Phiên bản chuyển sang "Đã gửi, chờ duyệt"; trang ghi phiên bản đã được gửi duyệt nên không gửi lại | | | | |
-| B11 | (Sau bước A15) Ở thẻ **Phát hành**, bấm **Tạo bản phát hành**, rồi bấm **Phát hành** | Trang báo "Đã tạo bản phát hành"; sau khi bấm Phát hành, trạng thái là "Đã phát hành" | | | | |
+| B10 | Ở thẻ **Gửi thẩm định**, bấm **Gửi thẩm định** và xác nhận | Phiên bản chuyển sang "Đã gửi, đang chờ Chuyên viên PCCC"; trang ghi phiên bản đã được gửi nên không gửi lại | Chạy 27/11: v1 gửi 09:06, v2 gửi 09:11 (trước khi gói v2 dựng xong) | Đạt | Thông báo ghi "đã gửi cho quản trị FET3D"; tab hiện mã băm dài | Lỗi 10, 11 |
+| B10a | (Sau bước E5) Mở thẻ **Gửi thẩm định** của phiên bản bị Chưa đạt; sửa bản nháp theo lý do, tạo phiên bản mới, dựng gói và gửi thẩm định lại | Thấy "Chưa đạt thẩm định", giờ quyết định và đúng lý do Chuyên viên viết; phiên bản cũ không gửi lại được | Chạy 27/11: v1 hiện "Chưa đạt thẩm định" 09:08 kèm lý do; sửa tên, vị trí cháy, hướng dẫn sang tầng 2 → v2 | Đạt | Bảng quyết định còn chữ "Rejected" | Lỗi 10 |
+| B11 | (Sau bước E6) Ở thẻ **Phát hành**, bấm **Tạo bản phát hành**, rồi bấm **Phát hành** | Trang báo "Đã tạo bản phát hành"; sau khi bấm Phát hành, trạng thái là "Đã phát hành". Công trình chưa có dịch vụ trả phí thì Phát hành bị chặn kèm lý do | Chạy 27/11: tạo bản phát hành 09:24 ("Đã tạo, chưa phát hành", Android). Phát hành bị chặn đúng: "Công trình chưa có dịch vụ trả phí còn hiệu lực. Gói dùng thử không đủ để phát hành." | Bỏ qua | Chưa mua dịch vụ cho công trình thử (thanh toán thật); phần chặn chạy đúng | Lỗi 12 |
 | B12 | Ở thẻ **Truy cập** → mục **Mã QR**, bấm **Tạo mã QR** và xác nhận | Trang báo "Đã tạo mã QR"; có liên kết dạng `https://fet3d.io.vn/qr/…`, nút **Sao chép liên kết** và **In mã QR**; trang nhắc "Mã này chỉ hiển thị một lần" | | | | |
 | B13 | Khi công trình đã có mã QR đang hoạt động, xem lại mục Mã QR | Không còn nút Tạo mã QR; chỉ có **Tạo mã mới** và **Thu hồi mã** (mỗi công trình chỉ có một mã đang hoạt động) | | | | |
 | B14 | Ở thẻ **Truy cập** → mục **Quyền tham gia**, chọn **Riêng tư (cần mã tham gia)**, bấm **Áp dụng chế độ**, rồi **Tạo mã tham gia** và **Sao chép** | Có mã tham gia; trang báo "Đã sao chép mã tham gia" | | | | |
@@ -79,10 +82,21 @@ Quy ước cột **Đạt / Không đạt**: ghi Đạt, Không đạt, hoặc B
 | B16 | Ở báo cáo Huấn luyện, bấm **Xuất CSV** | Tải được tệp `.csv`; tệp chỉ có dòng tổng hợp, không có tên hay email học viên | | | | |
 | B17 | Ở mục Mã QR, bấm **Tạo mã mới**, đọc hộp thoại "Tạo lại mã QR?" rồi bấm **Tạo mã mới** | Trang báo "Đã tạo mã QR mới" và "QR cũ đã ngừng hoạt động." (kiểm mã cũ ở ca D8) | | | | |
 | B18 | Mở **Dịch vụ & thanh toán**, bấm **Mua gói công trình**, chọn công trình và gói | Trang báo "Đã tạo báo giá nháp"; báo giá chờ quản trị phát hành ("Đang chờ quản trị FET3D phát hành") | | | | |
-| B19 | (Sau bước A17) Mở báo giá đã phát hành, xem giá từng dòng, rồi bấm **Hủy báo giá**, nhập lý do và xác nhận | Giá khớp với giá quản trị đặt; trang báo "Đã hủy báo giá". **Không thanh toán thật** trong buổi UAT trừ khi trưởng nhóm đồng ý: sau khi thanh toán không hoàn tiền | | | | |
+| B19 | (Sau bước A14) Mở báo giá đã phát hành, xem giá từng dòng, rồi bấm **Hủy báo giá**, nhập lý do và xác nhận | Giá khớp với giá quản trị đặt; trang báo "Đã hủy báo giá". **Không thanh toán thật** trong buổi UAT trừ khi trưởng nhóm đồng ý: sau khi thanh toán không hoàn tiền | | | | |
 | B20 | Mở thẻ **Nhắc gia hạn** trong Dịch vụ & thanh toán | Trang ghi hệ thống nhắc gia hạn trước 5 ngày khi kỳ dịch vụ sắp hết. Nếu có công trình còn dưới 5 ngày dịch vụ: có dòng nhắc trên web, thư nhắc và thông báo trên điện thoại đã đăng nhập tài khoản tổ chức (đã cho phép thông báo). Không có công trình nào sắp hết hạn thì ghi Bỏ qua | | | | |
 
-## 5. Phần C — Học viên
+## 5. Phần E — Chuyên viên PCCC
+
+| # | Bước | Kết quả mong đợi | Kết quả thực tế | Đạt / Không đạt | Ghi chú | Mã lỗi / issue |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| E1 | (Sau bước A12) Đăng nhập web bằng email và mật khẩu ban đầu của Chuyên viên | Web không vào thẳng mà hiện "Xác minh email"; nhập mã 6 chữ số gửi về email thì phải "Đổi mật khẩu ban đầu"; đổi xong đăng nhập lại bằng mật khẩu mới và vào **Hàng chờ thẩm định** | Chạy 27/11 (26/11): nhập mã, đổi mật khẩu, đăng nhập lại 15:27Z; tài khoản có email đã xác minh, hàng chờ mở được | Đạt | Chưa thử xác minh bằng Google và sửa email khi gõ sai | |
+| E2 | (Sau bước B4b) Mở **Hàng chờ thẩm định** | Thấy mục Hạ tầng PCCC tổ chức vừa gửi, có tổ chức · công trình và giờ gửi | Chạy 27/11: thấy "Hạ tầng PCCC · phiên bản 1" của Chung cư UAT 27/11, gửi 08:49 | Đạt | | |
+| E3 | Mở mục đó, xem mô hình 3D và danh sách đối tượng, bấm **Đạt thẩm định** và xác nhận | Trang báo "Đã ghi: Đạt thẩm định"; hộp xác nhận nhắc hạ tầng sẽ được khoá; mục rời hàng chờ | Chạy 27/11: "Đã ghi: Đạt thẩm định", hàng chờ trống | Đạt | Cột Tên hiện "IfcBuildingElementProxy" thay cho tên thiết bị | Lỗi 4 |
+| E4 | (Sau bước B10) Mở tình huống chờ thẩm định | Thấy mục tiêu học tập, hướng dẫn, tiêu chí chấm (điểm đạt, mức quan trọng, bắt buộc), đối tượng trên mô hình; tất cả chỉ đọc | Chạy 27/11: đủ các phần, 11 đối tượng, 7 tiêu chí, điểm đạt 0.7 | Đạt | Phần Nội dung kịch bản hiện tên trường kỹ thuật | Lỗi 7 |
+| E5 | Bấm **Chưa đạt**, nhập lý do cần sửa, bấm **Ghi: Chưa đạt** | Trang báo "Đã ghi: Chưa đạt"; tổ chức đọc được lý do (B10a) | Chạy 27/11: lý do "hướng dẫn ghi tầng 8, tòa 4 tầng"; "Đã ghi: Chưa đạt" | Đạt | | |
+| E6 | (Sau bước B10a) Mở phiên bản mới và bấm **Đạt thẩm định** | Nội dung đã sửa theo lý do; trang báo "Đã ghi: Đạt thẩm định" | Chạy 27/11: v2 hướng dẫn ghi tầng 2; "Đã ghi: Đạt thẩm định" | Đạt | | |
+
+## 6. Phần C — Học viên
 
 | # | Bước | Kết quả mong đợi | Kết quả thực tế | Đạt / Không đạt | Ghi chú | Mã lỗi / issue |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -107,13 +121,13 @@ Quy ước cột **Đạt / Không đạt**: ghi Đạt, Không đạt, hoặc B
 | C19 | Đăng nhập web bằng tài khoản học viên | Web chuyển tới Góc học tập; xem được lịch sử kết quả của chính mình | | | | |
 | C20 | Chơi liên tục khoảng 15 phút một bài | Chơi được không văng; ghi vào Ghi chú độ ấm của máy và có giật hình không (máy ấm lên khi chơi lâu là giới hạn đã biết) | | | | |
 
-## 6. Phần D — Các trường hợp phải bị từ chối
+## 7. Phần D — Các trường hợp phải bị từ chối
 
 Mỗi ca dưới đây đạt khi hệ thống **chặn** thao tác và hiện thông báo dễ hiểu, không lộ dữ liệu của người khác.
 
 | # | Vai trò | Thao tác | Kết quả mong đợi | Kết quả thực tế | Đạt / Không đạt | Ghi chú | Mã lỗi / issue |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| D1 | Học viên | Trên web, gõ thẳng địa chỉ `/admin/reviews` | "Không có quyền truy cập" — "Chỉ quản trị FET3D duyệt được kịch bản." | | | | |
+| D1 | Học viên hoặc Tổ chức | Trên web, gõ thẳng địa chỉ `/expert/reviews` | "Không có quyền truy cập" — "Chỉ Chuyên viên PCCC thẩm định được hạ tầng và tình huống." | | | | |
 | D2 | Tổ chức | Gõ thẳng địa chỉ `/admin/runtime` | "Không có quyền truy cập" — "Chỉ quản trị FET3D có thể quản lý phiên bản chương trình mô phỏng." | | | | |
 | D3 | Tổ chức | Gõ thẳng địa chỉ `/admin/learn` và `/admin/library` | "Không có quyền truy cập" ở cả hai trang | | | | |
 | D4 | Học viên | Gõ thẳng địa chỉ `/workspace/ifc` | "Không có quyền truy cập" — "Tài khoản học viên không có quyền chuẩn bị mô hình IFC." | | | | |
@@ -131,30 +145,31 @@ Mỗi ca dưới đây đạt khi hệ thống **chặn** thao tác và hiện t
 | D16 | Học viên | Mở công trình đã hết hạn dịch vụ | Xem được danh sách bài nhưng không bắt đầu được lượt mới; có dòng giải thích dịch vụ đã hết hạn | | | | |
 | D17 | Tổ chức | Bấm lưu một bài học công khai | "Chỉ tài khoản học viên mới lưu được bài." | | | | |
 | D18 | Quản trị | Mở một báo giá của tổ chức và tìm nút thanh toán | Không thanh toán được thay tổ chức: "Quản trị FET3D có thể xem trạng thái nhưng không tạo thanh toán thay tổ chức." | | | | |
-| D19 | Quản trị (hai người) | Hai quản trị cùng mở một bản chờ duyệt; người thứ hai quyết định sau người thứ nhất | Người thứ hai được báo bản này "không còn ở trạng thái chờ duyệt"; quyết định đầu giữ nguyên | | | | |
+| D19 | Chuyên viên PCCC (hai người) | Hai Chuyên viên cùng mở một mục chờ thẩm định; người thứ hai quyết định sau người thứ nhất | Người thứ hai bị từ chối; quyết định đầu giữ nguyên (hàng chờ dùng chung: ai thẩm định trước thì kết quả của người đó được ghi) | | | | |
 | D20 | Tổ chức | Xuất CSV báo cáo lần thứ 11 trong cùng một ngày | Bị từ chối vì quá 10 lần xuất mỗi ngày; không tải được tệp | | | | |
 | D21 | Tổ chức | Ở báo cáo, chọn khoảng thời gian dài hơn 90 ngày | Không áp dụng được; trang báo "Khoảng thời gian tối đa 90 ngày (đang chọn … ngày)." | | | | |
 | D22 | Quản trị | Đăng nhập ứng dụng điện thoại bằng email và mật khẩu của tài khoản quản trị | Không vào được: "Phiên đăng nhập không hợp lệ hoặc loại tài khoản này chưa dùng được trên ứng dụng." | | | | |
-| D23 | Tổ chức | Phát hành một phiên bản chưa được quản trị duyệt | Không phát hành được; bước Chuẩn bị phát hành ghi "Cần nội dung được duyệt" | | | | |
-| D24 | Tổ chức | Sửa nội dung hoặc gửi duyệt lại một phiên bản đã gửi duyệt | Không làm được trên phiên bản đó; phải tạo phiên bản mới và gửi duyệt lại | | | | |
+| D23 | Tổ chức | Tạo bản phát hành cho phiên bản chưa được Chuyên viên PCCC thẩm định đạt | Không tạo được; tab Phát hành ghi "Tạo được khi nội dung đã đạt thẩm định và gói đã chốt." | Chạy 27/11: v1 (Chưa đạt) không có bản phát hành; chỉ v2 (Đạt) tạo được | Đạt | | |
+| D24 | Tổ chức | Sửa nội dung hoặc gửi thẩm định lại một phiên bản đã gửi | Không làm được trên phiên bản đó; phải tạo phiên bản mới và gửi thẩm định lại | Chạy 27/11: v1 ghi "v1 đã được gửi thẩm định nên không gửi lại. Tạo phiên bản mới để gửi nội dung khác." | Đạt | | |
 | D25 | Tổ chức | Trong ứng dụng, bấm **Tiếp tục với Google** bằng tài khoản Google của tổ chức | "Ứng dụng chỉ dành cho học viên. Tài khoản Google này thuộc tài khoản tổ chức hoặc quản trị, hãy đăng nhập trên trang web fet3d.io.vn." | | | | |
 | D26 | Quản trị | (Chỉ khi có báo giá đã thanh toán) Mở báo giá đó và tìm nút hủy hoặc hoàn tiền | Không hủy được: "Đã có tiền: không hủy được báo giá này"; không có thao tác hoàn tiền | | | | |
 
-## 7. Chỗ chưa xác nhận trên màn hình thật
+## 8. Chỗ chưa xác nhận trên màn hình thật
 
 Người kiểm thử lần đầu cần chú ý và ghi lại câu chữ thật ở các chỗ sau, vì tài liệu này chỉ đọc được mã nguồn mà chưa thấy màn hình:
 
 - B3: tên các bước xử lý IFC hiện trên màn hình và thời gian xử lý.
 - B5: trình soạn mới không có gió. Bản nháp cũ (soạn trước khi có trình soạn trên mô hình 3D) mở bằng trình soạn cũ, trong đó danh sách loại nguy hiểm còn mục "Gió (Wind)". Nếu gặp, ghi vào Ghi chú.
 - B7: thời gian dựng gói (máy dựng gói chạy riêng, có thể phải chờ).
-- B18, B19, A17: luồng báo giá chưa chạy với người dùng thật; giá phụ thuộc gói và giảm giá quản trị đang cấu hình.
+- B18, B19, A14: luồng báo giá chưa chạy với người dùng thật; giá phụ thuộc gói và giảm giá quản trị đang cấu hình.
 - B20: mục Nhận thông báo trong Cài đặt tài khoản của ứng dụng ghi phụ đề "Kết quả, nhắc đồng bộ", nhưng hiện nay thông báo đẩy duy nhất là nhắc gia hạn dịch vụ trước 5 ngày gửi cho tài khoản tổ chức. Tài khoản tổ chức trên điện thoại vào thẳng màn Chạy thử; thiết bị đăng ký nhận thông báo khi đăng nhập nếu người dùng cho phép.
 - C2: đăng nhập Google mới được cấu hình cho bản ký của Google Play ngày 15/11/2026; chưa ai thử trên bản cài từ Google Play.
 - C7–C10: câu chữ trong màn chơi đọc từ mã nguồn Unity; vị trí nút trên màn hình chưa xác nhận.
-- D16, D20, D23, D24: quy tắc có trong máy chủ hoặc tài liệu nghiệp vụ, nhưng câu thông báo trên màn hình chưa đọc được đủ trong mã nguồn.
+- A13, D1, D19: màn Theo dõi thẩm định của quản trị và ca hai Chuyên viên chưa chạy trên màn hình thật.
+- D16, D20: quy tắc có trong máy chủ hoặc tài liệu nghiệp vụ, nhưng câu thông báo trên màn hình chưa đọc được đủ trong mã nguồn.
 - Toàn bộ phần C chưa chạy lại trên điện thoại khác ngoài máy nghiệm thu của nhóm (Redmi Note 10S).
 
-## 8. Phiếu góp ý của người tham gia
+## 9. Phiếu góp ý của người tham gia
 
 **Đồng ý tham gia và cho thu phản hồi.** Tôi đồng ý tham gia buổi kiểm thử này và đồng ý để nhóm FET3D ghi lại kết quả, ảnh chụp màn hình và câu trả lời dưới đây để đánh giá đồ án. Phản hồi chỉ dùng cho đồ án, không công bố họ tên nếu tôi không đồng ý.
 
@@ -164,34 +179,45 @@ Người kiểm thử lần đầu cần chú ý và ghi lại câu chữ thật
 
 Thang điểm: 1 = rất không đồng ý, 2 = không đồng ý, 3 = bình thường, 4 = đồng ý, 5 = rất đồng ý.
 
-### 8.1. Quản trị
+### 9.1. Quản trị
 
 | # | Câu hỏi | Điểm (1–5) | Ý kiến thêm |
 | :--- | :--- | :--- | :--- |
 | QT1 | Tôi tìm được ngay chức năng mình cần ở thanh bên | | |
-| QT2 | Màn Duyệt kịch bản cho tôi đủ thông tin để quyết định duyệt hay từ chối | | |
-| QT3 | Tôi hiểu rõ duyệt nội dung khác với phát hành | | |
+| QT2 | Tạo tài khoản Chuyên viên PCCC và sửa email gõ sai dễ làm | | |
+| QT3 | Màn Theo dõi thẩm định cho tôi biết mục nào đang chờ và kết quả ra sao | | |
 | QT4 | Soạn, ẩn, hiện và khôi phục bài học dễ làm | | |
 | QT5 | Lập và phát hành báo giá cho tổ chức dễ làm | | |
 | QT6 | Câu thông báo (thành công, lỗi, không có quyền) dễ hiểu, không có từ kỹ thuật khó | | |
 
 Điều tôi muốn nhóm sửa nhất: ............................................................
 
-### 8.2. Tổ chức
+### 9.2. Tổ chức
 
 | # | Câu hỏi | Điểm (1–5) | Ý kiến thêm |
 | :--- | :--- | :--- | :--- |
 | TC1 | Tôi biết bước tiếp theo phải làm nhờ thẻ Hành trình của công trình | | |
 | TC2 | Tải IFC và chọn cửa thoát, thiết bị dễ làm | | |
 | TC3 | Trình soạn kịch bản đủ rõ để tôi đặt lửa, người trong tòa nhà, mục tiêu và tiêu chí chấm | | |
-| TC4 | Chạy thử trên điện thoại giúp tôi kiểm tra bài trước khi gửi duyệt | | |
+| TC4 | Chạy thử trên điện thoại giúp tôi kiểm tra bài trước khi gửi thẩm định | | |
 | TC5 | Phát hành, mã QR và mã tham gia dễ hiểu | | |
 | TC6 | Báo cáo và báo giá cho tôi đủ thông tin cần biết | | |
 | TC7 | Câu thông báo trên web dễ hiểu, không có từ kỹ thuật khó | | |
 
 Điều tôi muốn nhóm sửa nhất: ............................................................
 
-### 8.3. Học viên
+### 9.3. Chuyên viên PCCC
+
+| # | Câu hỏi | Điểm (1–5) | Ý kiến thêm |
+| :--- | :--- | :--- | :--- |
+| CV1 | Lần đăng nhập đầu (mã email, đổi mật khẩu) dễ làm | | |
+| CV2 | Màn thẩm định cho tôi đủ thông tin để cho Đạt hay Chưa đạt | | |
+| CV3 | Tôi nhận ra ngay từng thiết bị, lối thoát và điểm tập kết trên mô hình | | |
+| CV4 | Câu chữ trên màn hình dễ hiểu, không có từ kỹ thuật khó | | |
+
+Điều tôi muốn nhóm sửa nhất: ............................................................
+
+### 9.4. Học viên
 
 | # | Câu hỏi | Điểm (1–5) | Ý kiến thêm |
 | :--- | :--- | :--- | :--- |
@@ -205,29 +231,39 @@ Thang điểm: 1 = rất không đồng ý, 2 = không đồng ý, 3 = bình th�
 
 Điều tôi muốn nhóm sửa nhất: ............................................................
 
-## 9. Nhật ký lỗi
+## 10. Nhật ký lỗi
 
 Ghi mỗi lỗi một dòng. Mức độ: **Nghiêm trọng** (không làm tiếp được bước chính), **Cao** (làm được nhưng sai kết quả), **Trung bình** (khó dùng, có cách né), **Thấp** (câu chữ, giao diện).
 
 | STT | Bước | Mô tả (kèm ảnh chụp màn hình nếu có) | Mức độ | Issue | Đã sửa ở commit | Kiểm lại ngày (dd/mm/yyyy) | Kết quả kiểm lại |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| 1 | | | | | | | |
-| 2 | | | | | | | |
-| 3 | | | | | | | |
-| 4 | | | | | | | |
-| 5 | | | | | | | |
+| 1 | B4a | Hạ tầng PCCC lấy bình chữa cháy từ thiết bị đã xác nhận nhưng để trống loại chất chữa cháy và thời gian phun; phải điền tay từng bình | Trung bình |  | FE `a84e66b` (PR #278) |  | Đã sửa trên web; chưa kiểm lại bằng một lượt chạy thật |
+| 2 | B4a | Thông báo "Cần điền ô này." không nói đối tượng hay ô nào; chỉ có trong Thông tin cho bộ phận hỗ trợ | Trung bình |  | FE `a84e66b` (PR #278) |  | Đã sửa trên web; chưa kiểm lại bằng một lượt chạy thật |
+| 3 | B4a | Cửa chọn làm cửa thoát ở B4 vào hạ tầng thành thiết bị chứ không thành lối thoát, nên vẫn báo "Cần ít nhất một lối thoát nạn."; phải tự thêm Lối ra ngoài gắn vào cửa đó | Cao | BE#239 | FE `a84e66b` (PR #278) |  | Đã sửa trên web; chưa kiểm lại bằng một lượt chạy thật |
+| 4 | B3, B4a, E3 | Chữ kỹ thuật lộ ra: "IfcBuildingElementProxy", "IfcDoor", "Equipment", "Goal", "LightFixture", "bước Bước khác"; Chuyên viên không biết thiết bị là gì; tên tầng hiện tên thô trong IFC | Trung bình | BE#239 | FE `a84e66b` (PR #278) |  | Đã sửa trên web; chưa kiểm lại bằng một lượt chạy thật |
+| 5 | B2 | Chọn loại Chung cư vẫn hiện gợi ý "Trường học: từ tiểu học trở lên" | Thấp |  | FE `a84e66b` (PR #278) |  | Đã sửa trên web; chưa kiểm lại bằng một lượt chạy thật |
+| 6 | B5 | Áp mẫu ghi đè tên bản nháp bằng tên mẫu ("Cháy bếp căn hộ tầng 8…") dù kịch bản đã có tên và tòa chỉ có 4 tầng; tên này đi tiếp vào hộp gửi thẩm định và bài huấn luyện | Trung bình |  | FE `a84e66b` (PR #278) |  | Đã sửa trên web; chưa kiểm lại bằng một lượt chạy thật |
+| 7 | B5, E4 | Còn chữ kỹ thuật: tiêu chí "step_count", "route_efficiency"; "rubric"; mục "NPC"; "Spawn", "Hazard"; ở màn Chuyên viên còn các khoá objects, audience Evacuee, workingHours InHours, schemaVersion; điểm đạt ghi 0.7 thay vì 70% | Thấp |  | FE `a84e66b` (PR #278) |  | Đã sửa trên web; chưa kiểm lại bằng một lượt chạy thật |
+| 8 | B6 | Hộp tạo phiên bản hiện mã lần lưu dạng `"20805"` | Thấp |  | FE `a84e66b` (PR #278) |  | Đã sửa trên web; chưa kiểm lại bằng một lượt chạy thật |
+| 9 | B7 | Trạng thái dựng gói đầu trang chỉ đổi sau khi tải lại trang; lượt dựng v2 bị máy dựng nhận lại lần 2 mà không nói lý do | Thấp | BE#239 | FE `a84e66b` (PR #278) |  | Đã sửa trên web; chưa kiểm lại bằng một lượt chạy thật |
+| 10 | B10, B10a | Thông báo sau khi gửi ghi "đã gửi cho quản trị FET3D" (người thẩm định là Chuyên viên PCCC); bảng quyết định có chữ "Rejected" | Thấp |  | FE `a84e66b` (PR #278) |  | Đã sửa trên web; chưa kiểm lại bằng một lượt chạy thật |
+| 11 | B10, B11 | Tab Gửi thẩm định và Phát hành hiện mã băm và mã gói dài cho người dùng tổ chức | Thấp |  | FE `a84e66b` (PR #278) |  | Đã sửa trên web; chưa kiểm lại bằng một lượt chạy thật |
+| 12 | B11 | Tab Phát hành còn chữ "Built"; bảng Bài huấn luyện ghi "Đang dùng" cho bài chưa phát hành được | Thấp |  | FE `a84e66b` (PR #278) | 27/11/2026 | Đạt: tab Phát hành ghi "Chưa phát hành", không còn chữ "Built" |
 
-## 10. Tổng kết lượt kiểm thử
+## 11. Tổng kết lượt kiểm thử
 
 | Phần | Số bước | Đạt | Không đạt | Bỏ qua |
 | :--- | :--- | :--- | :--- | :--- |
-| A — Quản trị | 18 | | | |
-| B — Tổ chức | 20 | | | |
+| A — Quản trị | 15 | 1 | 0 | 0 |
+| B — Tổ chức | 23 | 10 | 1 | 1 |
+| E — Chuyên viên PCCC | 6 | 6 | 0 | 0 |
 | C — Học viên | 20 | | | |
-| D — Từ chối quyền | 26 | | | |
-| Tổng | 84 | | | |
+| D — Từ chối quyền | 26 | 2 | 0 | 0 |
+| Tổng | 90 | 19 | 1 | 1 |
 
-## 11. Biên bản nghiệm thu
+Các số trên là của lượt chạy 26–27/11/2026 do nhóm tự chạy; các bước còn trống chưa chạy.
+
+## 12. Biên bản nghiệm thu
 
 Nghiệm thu đồ án tốt nghiệp FET3D, không phải chứng nhận PCCC.
 
@@ -239,7 +275,7 @@ Nghiệm thu đồ án tốt nghiệp FET3D, không phải chứng nhận PCCC.
 | Người kiểm thử (họ tên, vai trò) | |
 | Người chứng kiến (họ tên, vai trò) | |
 | Số bước Đạt / Không đạt / Bỏ qua | |
-| Lỗi còn mở (số thứ tự ở mục 9) | |
+| Lỗi còn mở (số thứ tự ở mục 10) | |
 | Kết luận (Chấp nhận / Chấp nhận kèm điều kiện / Không chấp nhận) | |
 | Điều kiện kèm theo (nếu có) | |
 
