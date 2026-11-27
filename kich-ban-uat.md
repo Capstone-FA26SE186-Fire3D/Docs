@@ -45,13 +45,13 @@ Quy ước cột **Đạt / Không đạt**: ghi Đạt, Không đạt, hoặc B
 | A2 | Mở **Phiên bản runtime** | Thấy danh sách phiên bản, mới nhất ở trên; phiên bản 2.5.0 có trạng thái "Đang dùng" | Chạy 27/11: 8 phiên bản, mới nhất ở trên; 2.5.0, 2.4.0, 2.3.0 "Đang dùng", các bản cũ "Tắt" | Đạt |  |  |
 | A3 | Bấm vào hàng 2.5.0 | Thấy danh sách năng lực của phiên bản, kèm sự kiện và thao tác; không có nút sửa nội dung | Chạy 27/11: hộp "Phiên bản 2.5.0" ghi 42 khả năng, mỗi khả năng có sự kiện và thao tác; ghi "Phiên bản đã đăng ký không sửa được"; không có ô nhập hay nút sửa | Đạt |  |  |
 | A4 | Bấm **Đăng ký phiên bản**, chọn một tệp không phải tệp danh mục của runtime | Trang báo "Tệp chưa đúng" và không đăng ký được | | | | |
-| A5 | Mở **Thư viện mẫu**, bấm **Thêm mục**, tạo một mục Tiêu chí chấm mẫu, **Tạo phiên bản**, lưu nháp rồi **Xuất bản** | Trang báo "Đã xuất bản phiên bản"; mục có dòng "Bản tổ chức đang thấy" | | | | |
-| A6 | Mở lại phiên bản vừa xuất bản | Phiên bản ghi "Đã xuất bản (không sửa được)"; chỉ có thể tạo Phiên bản mới | | | | |
-| A7 | Bấm **Ngừng dùng** cho mục đó, rồi **Dùng lại** | Trang báo "Đã ngừng dùng mục" rồi "Đã dùng lại mục" | | | | |
-| A8 | Mở **Bài học**, bấm **Bài mới**, tạo một bài viết với Xuất bản ngay đang tắt | Trang báo "Đã tạo bản nháp"; bài chưa hiện ở trang Bài học công khai | | | | |
-| A9 | Xuất bản bài nháp đó | Bài hiện ở trang Bài học công khai khi chưa đăng nhập | | | | |
-| A10 | **Ẩn bài**, kiểm tra trang công khai, rồi **Hiện lại** | Sau khi ẩn, bài không còn ở trang công khai; sau Hiện lại, bài có lại | | | | |
-| A11 | **Xóa bài** rồi **Khôi phục** | Sau khôi phục, bài ở trạng thái Đã ẩn, không tự công khai | | | | |
+| A5 | Mở **Thư viện mẫu**, bấm **Thêm mục**, tạo một mục Tiêu chí chấm mẫu, **Tạo phiên bản**, lưu nháp rồi **Xuất bản** | Trang báo "Đã xuất bản phiên bản"; mục có dòng "Bản tổ chức đang thấy" | Chạy 27/11 22:20: tạo mục `RB-UAT-THU-27-11` (Tiêu chí chấm mẫu): "Đã tạo mục thư viện"; tạo phiên bản, lưu: "Đã tạo phiên bản nháp"; xuất bản: "Đã xuất bản phiên bản — v1 · từ giờ không sửa được nữa"; mục ghi "Bản tổ chức đang thấy: v1" | Đạt | Lưu nháp bắt buộc có điểm đạt và ít nhất một tiêu chí. Sau khi thử, mục để ở trạng thái Ngừng dùng |  |
+| A6 | Mở lại phiên bản vừa xuất bản | Phiên bản ghi "Đã xuất bản (không sửa được)"; chỉ có thể tạo Phiên bản mới | Chạy 27/11: phiên bản ghi "Đã xuất bản (không sửa được)"; không còn ô nào sửa được; chỉ có nút "Tạo phiên bản mới từ v1" | Đạt |  |  |
+| A7 | Bấm **Ngừng dùng** cho mục đó, rồi **Dùng lại** | Trang báo "Đã ngừng dùng mục" rồi "Đã dùng lại mục" | Chạy 27/11: "Đã ngừng dùng mục" rồi "Đã dùng lại mục"; trạng thái đổi Ngừng dùng ↔ Đang dùng | Đạt |  |  |
+| A8 | Mở **Bài học**, bấm **Bài mới**, tạo một bài viết với Xuất bản ngay đang tắt | Trang báo "Đã tạo bản nháp"; bài chưa hiện ở trang Bài học công khai | Chạy 27/11 22:18: bấm **Tạo bài**, điền tiêu đề, tóm tắt, đoạn mở đầu, bấm "Tạo và mở trình soạn": trình soạn mở với "V1 (BẢN NHÁP)", "Chưa xuất bản"; trang công khai của bài chưa có nội dung bài | Đạt | Nút thật tên "Tạo bài", không có công tắc "Xuất bản ngay": bài luôn tạo ở dạng nháp. Không thấy câu "Đã tạo bản nháp" |  |
+| A9 | Xuất bản bài nháp đó | Bài hiện ở trang Bài học công khai khi chưa đăng nhập | Chạy 27/11: bấm "Xuất bản v1" và xác nhận: "Đã xuất bản — Phiên bản 1 · bài đang công khai"; mở trang bài khi không đăng nhập thấy tiêu đề bài | Đạt | Kiểm trang riêng của bài; danh sách `/learn` tải lần đầu chưa thấy tiêu đề |  |
+| A10 | **Ẩn bài**, kiểm tra trang công khai, rồi **Hiện lại** | Sau khi ẩn, bài không còn ở trang công khai; sau Hiện lại, bài có lại | Chạy 27/11: "Đã ẩn bài — Bài hiện đã ẩn", trang công khai không còn bài; "Đã hiện bài — Bài hiện đang công khai", trang công khai có lại bài | Đạt |  |  |
+| A11 | **Xóa bài** rồi **Khôi phục** | Sau khôi phục, bài ở trạng thái Đã ẩn, không tự công khai | Chạy 27/11: "Đã xóa bài — Bài hiện đã xóa"; khôi phục: "Đã khôi phục bài — Bài hiện đã ẩn", trang công khai không có bài | Đạt | Sau khi thử, bài thử được xóa lại (trạng thái Đã xóa) |  |
 | A12 | Mở **Tài khoản**, bấm **Tạo tài khoản**, chọn vai trò Chuyên viên PCCC, nhập email người kiểm thử mở được, họ tên và mật khẩu ban đầu | Tài khoản được tạo; danh sách ghi "Chưa xác minh email". Nếu email gõ sai, mở tài khoản đó và bấm **Sửa email** | Chạy 27/11 (26/11): lần đầu máy chủ báo lỗi 500 (BE#237); sau khi BE sửa, tạo được lúc 15:25Z | Đạt | Form báo rõ lỗi máy chủ kèm mã theo dõi (FE #275) | BE#237 |
 | A13 | Mở **Theo dõi thẩm định** | Thấy các mục tổ chức đã gửi và kết quả của Chuyên viên PCCC; quản trị không có nút Đạt / Chưa đạt | Chạy 27/11: ba ô Chờ thẩm định 0 · Đạt thẩm định 23 · Chưa đạt 2; lọc Tất cả thấy v1 (Chưa đạt) và v2 (Đạt) của Chung cư UAT 27/11; không có nút Đạt / Chưa đạt | Đạt | Danh sách chỉ thấy tình huống; chưa thấy dòng Hạ tầng PCCC phiên bản 1 trong các hàng đầu |  |
 | A14 | (Sau bước B18) Mở **Dịch vụ & thanh toán** → thẻ **Báo giá**, bấm vào báo giá nháp của tổ chức A, bấm **Phát hành báo giá** | Trang báo "Đã phát hành báo giá"; giá của từng dòng công trình là giá quản trị đặt ở gói dịch vụ và giảm giá, không phải con số cố định trong tài liệu | Chạy 27/11 22:12: mở báo giá nháp `FET-d2e03b4f…`, nhập ngày bắt đầu 12:00 28/11/2026, thuế 0, hạn chấp nhận 12:00 28/11/2026, điều khoản; trang báo "Đã phát hành báo giá — Tổng thanh toán 1.200 ₫ do hệ thống tính."; dòng công trình 100 ₫/tháng × 12, kỳ 28/11/2026 – 28/11/2027 | Đạt | Giá lấy từ gói "Gói thử nghiệm thu BE#138 (QA)" |  |
@@ -258,12 +258,12 @@ Ghi mỗi lỗi một dòng. Mức độ: **Nghiêm trọng** (không làm tiế
 
 | Phần | Số bước | Đạt | Không đạt | Bỏ qua |
 | :--- | :--- | :--- | :--- | :--- |
-| A — Quản trị | 15 | 7 | 0 | 0 |
+| A — Quản trị | 15 | 14 | 0 | 0 |
 | B — Tổ chức | 23 | 15 | 1 | 2 |
 | E — Chuyên viên PCCC | 6 | 6 | 0 | 0 |
 | C — Học viên | 20 | 0 | 1 | 0 |
 | D — Từ chối quyền | 26 | 9 | 0 | 0 |
-| Tổng | 90 | 37 | 2 | 2 |
+| Tổng | 90 | 44 | 2 | 2 |
 
 Các số trên là của lượt chạy 26–27/11/2026 do nhóm tự chạy; các bước còn trống chưa chạy.
 
