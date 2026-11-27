@@ -117,7 +117,7 @@ Quy ước cột **Đạt / Không đạt**: ghi Đạt, Không đạt, hoặc B
 | C15 | Bật mạng lại, mở mục **Kết quả** | Lượt chơi ở C14 được gửi lên và hiện kết quả | | | | |
 | C16 | Tắt mạng, vào **Bài đã tải**, bấm **Chơi lại** | Bài hiện "Sẵn sàng trên máy" nhưng không bắt đầu được lượt mới; ứng dụng ghi "Chơi lại cần mạng để kiểm tra quyền và bắt đầu lượt mới." | | | | |
 | C17 | Đăng xuất, ở màn đăng nhập bấm **Xem Learn không cần đăng nhập** | Đọc được bài công khai không cần đăng nhập | | | | |
-| C18 | Trên máy tính, mở trang tải ứng dụng (`https://fet3d.io.vn/download`) | Trang "Ứng dụng FET3D cho Android" giải thích cách nhận ứng dụng; bài tập 3D chỉ chơi trong ứng dụng Android, web không có bài 3D và không có bản iOS | | | | |
+| C18 | Trên máy tính, mở trang tải ứng dụng (`https://fet3d.io.vn/download`) | Trang "Ứng dụng FET3D cho Android" giải thích cách nhận ứng dụng; bài tập 3D chỉ chơi trong ứng dụng Android, web không có bài 3D và không có bản iOS | Chạy 27/11 (chưa đăng nhập): trang "Ứng dụng FET3D cho Android" nói ứng dụng đang thử nghiệm trên Google Play, cài qua lời mời, cần Android 10 trở lên, quét mã QR công trình trong ứng dụng. Trang không nói web không có bài 3D và không nói không có bản iOS | Không đạt | Thiếu hai ý trong kết quả mong đợi | Lỗi 13 |
 | C19 | Đăng nhập web bằng tài khoản học viên | Web chuyển tới Góc học tập; xem được lịch sử kết quả của chính mình | | | | |
 | C20 | Chơi liên tục khoảng 15 phút một bài | Chơi được không văng; ghi vào Ghi chú độ ấm của máy và có giật hình không (máy ấm lên khi chơi lâu là giới hạn đã biết) | | | | |
 
@@ -127,9 +127,9 @@ Mỗi ca dưới đây đạt khi hệ thống **chặn** thao tác và hiện t
 
 | # | Vai trò | Thao tác | Kết quả mong đợi | Kết quả thực tế | Đạt / Không đạt | Ghi chú | Mã lỗi / issue |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| D1 | Học viên hoặc Tổ chức | Trên web, gõ thẳng địa chỉ `/expert/reviews` | "Không có quyền truy cập" — "Chỉ Chuyên viên PCCC thẩm định được hạ tầng và tình huống." | | | | |
-| D2 | Tổ chức | Gõ thẳng địa chỉ `/admin/runtime` | "Không có quyền truy cập" — "Chỉ quản trị FET3D có thể quản lý phiên bản chương trình mô phỏng." | | | | |
-| D3 | Tổ chức | Gõ thẳng địa chỉ `/admin/learn` và `/admin/library` | "Không có quyền truy cập" ở cả hai trang | | | | |
+| D1 | Học viên hoặc Tổ chức | Trên web, gõ thẳng địa chỉ `/expert/reviews` | "Không có quyền truy cập" — "Chỉ Chuyên viên PCCC thẩm định được hạ tầng và tình huống." | Chạy 27/11 (tài khoản Tổ chức): "Không có quyền truy cập" — "Khu này chỉ dành cho Chuyên viên PCCC." | Đạt | Câu thật ngắn hơn câu trong tài liệu; chưa thử bằng tài khoản Học viên | |
+| D2 | Tổ chức | Gõ thẳng địa chỉ `/admin/runtime` | "Không có quyền truy cập" — "Chỉ quản trị FET3D có thể quản lý phiên bản chương trình mô phỏng." | Chạy 27/11: "Không có quyền truy cập" — "Chỉ quản trị FET3D được vào khu quản trị." | Đạt | Câu thật là câu chung của khu quản trị | |
+| D3 | Tổ chức | Gõ thẳng địa chỉ `/admin/learn` và `/admin/library` | "Không có quyền truy cập" ở cả hai trang | Chạy 27/11: cả hai trang hiện "Không có quyền truy cập" — "Chỉ quản trị FET3D được vào khu quản trị." | Đạt | | |
 | D4 | Học viên | Gõ thẳng địa chỉ `/workspace/ifc` | "Không có quyền truy cập" — "Tài khoản học viên không có quyền chuẩn bị mô hình IFC." | | | | |
 | D5 | Học viên hoặc Quản trị | Gõ thẳng địa chỉ `/workspace/billing` | "Không có quyền truy cập" — "Khu này dành cho tài khoản tổ chức." | | | | |
 | D6 | Học viên | Gõ thẳng địa chỉ `/workspace/analytics` | "Không có quyền truy cập" — "Báo cáo này dành cho tài khoản tổ chức." | | | | |
@@ -245,10 +245,12 @@ Ghi mỗi lỗi một dòng. Mức độ: **Nghiêm trọng** (không làm tiế
 | 6 | B5 | Áp mẫu ghi đè tên bản nháp bằng tên mẫu ("Cháy bếp căn hộ tầng 8…") dù kịch bản đã có tên và tòa chỉ có 4 tầng; tên này đi tiếp vào hộp gửi thẩm định và bài huấn luyện | Trung bình |  | FE `a84e66b` (PR #278) |  | Đã sửa trên web; chưa kiểm lại bằng một lượt chạy thật |
 | 7 | B5, E4 | Còn chữ kỹ thuật: tiêu chí "step_count", "route_efficiency"; "rubric"; mục "NPC"; "Spawn", "Hazard"; ở màn Chuyên viên còn các khoá objects, audience Evacuee, workingHours InHours, schemaVersion; điểm đạt ghi 0.7 thay vì 70% | Thấp |  | FE `a84e66b` (PR #278) |  | Đã sửa trên web; chưa kiểm lại bằng một lượt chạy thật |
 | 8 | B6 | Hộp tạo phiên bản hiện mã lần lưu dạng `"20805"` | Thấp |  | FE `a84e66b` (PR #278) |  | Đã sửa trên web; chưa kiểm lại bằng một lượt chạy thật |
-| 9 | B7 | Trạng thái dựng gói đầu trang chỉ đổi sau khi tải lại trang; lượt dựng v2 bị máy dựng nhận lại lần 2 mà không nói lý do | Thấp | BE#239 | FE `a84e66b` (PR #278) |  | Đã sửa trên web; chưa kiểm lại bằng một lượt chạy thật |
+| 9 | B7 | Trạng thái dựng gói đầu trang chỉ đổi sau khi tải lại trang; lượt dựng v2 bị máy dựng nhận lại lần 2 mà không nói lý do | Thấp | BE#239 | FE `a84e66b` (PR #278), lý do ở FE `90af1c4` (PR #280) | 27/11/2026 | Đạt phần lý do: nhật ký ghi lượt 1 "Bị ngắt" kèm "Máy xử lý bị ngắt giữa chừng (khởi động lại hoặc mất kết nối) nên hệ thống đã giao lại việc."; phần trạng thái tự cập nhật chưa kiểm lại |
 | 10 | B10, B10a | Thông báo sau khi gửi ghi "đã gửi cho quản trị FET3D" (người thẩm định là Chuyên viên PCCC); bảng quyết định có chữ "Rejected" | Thấp |  | FE `a84e66b` (PR #278) |  | Đã sửa trên web; chưa kiểm lại bằng một lượt chạy thật |
 | 11 | B10, B11 | Tab Gửi thẩm định và Phát hành hiện mã băm và mã gói dài cho người dùng tổ chức | Thấp |  | FE `a84e66b` (PR #278) |  | Đã sửa trên web; chưa kiểm lại bằng một lượt chạy thật |
 | 12 | B11 | Tab Phát hành còn chữ "Built"; bảng Bài huấn luyện ghi "Đang dùng" cho bài chưa phát hành được | Thấp |  | FE `a84e66b` (PR #278) | 27/11/2026 | Đạt: tab Phát hành ghi "Chưa phát hành", không còn chữ "Built" |
+| 13 | C18 | Trang `/download` không nói bài tập 3D chỉ chơi trong ứng dụng (web không có bài 3D) và không nói chưa có bản iOS | Thấp |  |  |  |  |
+| 14 | B3, B7 | Sau khi dựng gói, thẻ IFC đọc theo việc dựng gói: bước "Dựng mô hình 3D" ghi "lượt xử lý thứ 2", kết quả kiểm tra tự động lấy của việc dựng gói; nhật ký ghi "Bước khác" cho lượt dựng gói | Cao |  | FE `c357c24` (PR #282, #284) | 27/11/2026 | Đạt: "Dựng mô hình 3D · lượt xử lý thứ 1", kiểm tra 08:44 của việc dựng mô hình; nhật ký ghi "Dựng gói phát hành" |
 
 ## 11. Tổng kết lượt kiểm thử
 
@@ -257,9 +259,9 @@ Ghi mỗi lỗi một dòng. Mức độ: **Nghiêm trọng** (không làm tiế
 | A — Quản trị | 15 | 1 | 0 | 0 |
 | B — Tổ chức | 23 | 10 | 1 | 1 |
 | E — Chuyên viên PCCC | 6 | 6 | 0 | 0 |
-| C — Học viên | 20 | | | |
-| D — Từ chối quyền | 26 | 2 | 0 | 0 |
-| Tổng | 90 | 19 | 1 | 1 |
+| C — Học viên | 20 | 0 | 1 | 0 |
+| D — Từ chối quyền | 26 | 5 | 0 | 0 |
+| Tổng | 90 | 22 | 2 | 1 |
 
 Các số trên là của lượt chạy 26–27/11/2026 do nhóm tự chạy; các bước còn trống chưa chạy.
 
