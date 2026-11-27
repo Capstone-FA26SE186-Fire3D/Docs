@@ -131,7 +131,7 @@ Mỗi ca dưới đây đạt khi hệ thống **chặn** thao tác và hiện t
 | D2 | Tổ chức | Gõ thẳng địa chỉ `/admin/runtime` | "Không có quyền truy cập" — "Chỉ quản trị FET3D có thể quản lý phiên bản chương trình mô phỏng." | Chạy 27/11: "Không có quyền truy cập" — "Chỉ quản trị FET3D được vào khu quản trị." | Đạt | Câu thật là câu chung của khu quản trị | |
 | D3 | Tổ chức | Gõ thẳng địa chỉ `/admin/learn` và `/admin/library` | "Không có quyền truy cập" ở cả hai trang | Chạy 27/11: cả hai trang hiện "Không có quyền truy cập" — "Chỉ quản trị FET3D được vào khu quản trị." | Đạt | | |
 | D4 | Học viên | Gõ thẳng địa chỉ `/workspace/ifc` | "Không có quyền truy cập" — "Tài khoản học viên không có quyền chuẩn bị mô hình IFC." | | | | |
-| D5 | Học viên hoặc Quản trị | Gõ thẳng địa chỉ `/workspace/billing` | "Không có quyền truy cập" — "Khu này dành cho tài khoản tổ chức." | | | | |
+| D5 | Học viên hoặc Quản trị | Gõ thẳng địa chỉ `/workspace/billing` | "Không có quyền truy cập" — "Khu này dành cho tài khoản tổ chức." | Chạy 27/11 (tài khoản Quản trị): trang KHÔNG chặn. Trang "Dịch vụ và thanh toán" mở trong khung Không gian tổ chức, liệt kê công trình của mọi tổ chức với cột hành động "Chỉ xem", kèm một dòng lỗi "Dữ liệu chưa hợp lệ. Kiểm tra các trường được đánh dấu rồi gửi lại." | Không đạt | Quản trị vốn xem được dữ liệu này ở khu quản trị nên không lộ thêm dữ liệu, nhưng sai trang và có dòng lỗi vô nghĩa; chưa thử bằng tài khoản Học viên | Lỗi 17 |
 | D6 | Học viên | Gõ thẳng địa chỉ `/workspace/analytics` | "Không có quyền truy cập" — "Báo cáo này dành cho tài khoản tổ chức." | | | | |
 | D7 | Tổ chức B | Mở liên kết QR của công trình thuộc tổ chức A | "Không tìm thấy công trình"; không hiện tên công trình của tổ chức A | | | | |
 | D8 | Học viên | Quét mã QR cũ sau bước B17 | Ứng dụng báo "Mã QR này đã bị thu hồi" và nhắc quét mã mới | | | | |
@@ -253,6 +253,8 @@ Ghi mỗi lỗi một dòng. Mức độ: **Nghiêm trọng** (không làm tiế
 | 14 | B3, B7 | Sau khi dựng gói, thẻ IFC đọc theo việc dựng gói: bước "Dựng mô hình 3D" ghi "lượt xử lý thứ 2", kết quả kiểm tra tự động lấy của việc dựng gói; nhật ký ghi "Bước khác" cho lượt dựng gói | Cao |  | FE `c357c24` (PR #282, #284) | 27/11/2026 | Đạt: "Dựng mô hình 3D · lượt xử lý thứ 1", kiểm tra 08:44 của việc dựng mô hình; nhật ký ghi "Dựng gói phát hành" |
 | 15 | B20 | Thẻ "Nhắc gia hạn" trong Dịch vụ & thanh toán liệt kê cả thông báo kết quả thẩm định (hạ tầng, tình huống), không liên quan tới gia hạn | Thấp |  |  |  |  |
 | 16 | D26 | Báo giá đã nhận tiền vẫn hiện nút "Hủy báo giá" ngay dưới dòng "Đã có tiền: không hủy được báo giá này" (chưa bấm thử) | Thấp |  |  |  |  |
+| 17 | D5 | Quản trị gõ `/workspace/billing` không bị chặn: trang của tổ chức mở ra ở chế độ "Chỉ xem" với công trình của mọi tổ chức và dòng lỗi "Dữ liệu chưa hợp lệ…" | Trung bình |  |  |  |  |
+| 18 | A7 | Mục thư viện đang "Ngừng dùng" nhưng phiên bản v1 vẫn mang nhãn "Tổ chức đang thấy" và dòng "Bản tổ chức đang thấy: v1", trái với khung "Tổ chức không thấy mục này" ngay bên trên | Thấp |  |  |  |  |
 
 ## 11. Tổng kết lượt kiểm thử
 
@@ -262,8 +264,8 @@ Ghi mỗi lỗi một dòng. Mức độ: **Nghiêm trọng** (không làm tiế
 | B — Tổ chức | 23 | 15 | 1 | 2 |
 | E — Chuyên viên PCCC | 6 | 6 | 0 | 0 |
 | C — Học viên | 20 | 0 | 1 | 0 |
-| D — Từ chối quyền | 26 | 9 | 0 | 0 |
-| Tổng | 90 | 44 | 2 | 2 |
+| D — Từ chối quyền | 26 | 9 | 1 | 0 |
+| Tổng | 90 | 44 | 3 | 2 |
 
 Các số trên là của lượt chạy 26–27/11/2026 do nhóm tự chạy; các bước còn trống chưa chạy.
 
