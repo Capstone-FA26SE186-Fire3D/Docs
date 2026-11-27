@@ -41,9 +41,9 @@ Quy ước cột **Đạt / Không đạt**: ghi Đạt, Không đạt, hoặc B
 
 | # | Bước | Kết quả mong đợi | Kết quả thực tế | Đạt / Không đạt | Ghi chú | Mã lỗi / issue |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| A1 | Đăng nhập web bằng tài khoản quản trị | Web chuyển tới trang Tổng quan của khu Quản trị hệ thống; thanh bên có Theo dõi thẩm định, Tài khoản, Phiên bản runtime, Bài học, Thư viện mẫu, Dịch vụ & thanh toán | | | | |
-| A2 | Mở **Phiên bản runtime** | Thấy danh sách phiên bản, mới nhất ở trên; phiên bản 2.5.0 có trạng thái "Đang dùng" | | | | |
-| A3 | Bấm vào hàng 2.5.0 | Thấy danh sách năng lực của phiên bản, kèm sự kiện và thao tác; không có nút sửa nội dung | | | | |
+| A1 | Đăng nhập web bằng tài khoản quản trị | Web chuyển tới trang Tổng quan của khu Quản trị hệ thống; thanh bên có Theo dõi thẩm định, Tài khoản, Phiên bản runtime, Bài học, Thư viện mẫu, Dịch vụ & thanh toán | Chạy 27/11 22:15: vào "Tổng quan hệ thống"; thanh bên có Tổng quan, Theo dõi thẩm định, Hỗ trợ & nhật ký, Tài khoản, Tổ chức, Phiên bản runtime, Bài học, Thư viện mẫu, AI & nguồn tri thức, Dịch vụ & thanh toán | Đạt |  |  |
+| A2 | Mở **Phiên bản runtime** | Thấy danh sách phiên bản, mới nhất ở trên; phiên bản 2.5.0 có trạng thái "Đang dùng" | Chạy 27/11: 8 phiên bản, mới nhất ở trên; 2.5.0, 2.4.0, 2.3.0 "Đang dùng", các bản cũ "Tắt" | Đạt |  |  |
+| A3 | Bấm vào hàng 2.5.0 | Thấy danh sách năng lực của phiên bản, kèm sự kiện và thao tác; không có nút sửa nội dung | Chạy 27/11: hộp "Phiên bản 2.5.0" ghi 42 khả năng, mỗi khả năng có sự kiện và thao tác; ghi "Phiên bản đã đăng ký không sửa được"; không có ô nhập hay nút sửa | Đạt |  |  |
 | A4 | Bấm **Đăng ký phiên bản**, chọn một tệp không phải tệp danh mục của runtime | Trang báo "Tệp chưa đúng" và không đăng ký được | | | | |
 | A5 | Mở **Thư viện mẫu**, bấm **Thêm mục**, tạo một mục Tiêu chí chấm mẫu, **Tạo phiên bản**, lưu nháp rồi **Xuất bản** | Trang báo "Đã xuất bản phiên bản"; mục có dòng "Bản tổ chức đang thấy" | | | | |
 | A6 | Mở lại phiên bản vừa xuất bản | Phiên bản ghi "Đã xuất bản (không sửa được)"; chỉ có thể tạo Phiên bản mới | | | | |
@@ -53,9 +53,9 @@ Quy ước cột **Đạt / Không đạt**: ghi Đạt, Không đạt, hoặc B
 | A10 | **Ẩn bài**, kiểm tra trang công khai, rồi **Hiện lại** | Sau khi ẩn, bài không còn ở trang công khai; sau Hiện lại, bài có lại | | | | |
 | A11 | **Xóa bài** rồi **Khôi phục** | Sau khôi phục, bài ở trạng thái Đã ẩn, không tự công khai | | | | |
 | A12 | Mở **Tài khoản**, bấm **Tạo tài khoản**, chọn vai trò Chuyên viên PCCC, nhập email người kiểm thử mở được, họ tên và mật khẩu ban đầu | Tài khoản được tạo; danh sách ghi "Chưa xác minh email". Nếu email gõ sai, mở tài khoản đó và bấm **Sửa email** | Chạy 27/11 (26/11): lần đầu máy chủ báo lỗi 500 (BE#237); sau khi BE sửa, tạo được lúc 15:25Z | Đạt | Form báo rõ lỗi máy chủ kèm mã theo dõi (FE #275) | BE#237 |
-| A13 | Mở **Theo dõi thẩm định** | Thấy các mục tổ chức đã gửi và kết quả của Chuyên viên PCCC; quản trị không có nút Đạt / Chưa đạt | | | | |
-| A14 | (Sau bước B18) Mở **Dịch vụ & thanh toán** → thẻ **Báo giá**, bấm vào báo giá nháp của tổ chức A, bấm **Phát hành báo giá** | Trang báo "Đã phát hành báo giá"; giá của từng dòng công trình là giá quản trị đặt ở gói dịch vụ và giảm giá, không phải con số cố định trong tài liệu | | | | |
-| A15 | Mở lại báo giá đó và tìm nút hoàn tiền | Không có thao tác hoàn tiền ở bất kỳ đâu; báo giá chưa thanh toán chỉ có **Hủy báo giá** | | | | |
+| A13 | Mở **Theo dõi thẩm định** | Thấy các mục tổ chức đã gửi và kết quả của Chuyên viên PCCC; quản trị không có nút Đạt / Chưa đạt | Chạy 27/11: ba ô Chờ thẩm định 0 · Đạt thẩm định 23 · Chưa đạt 2; lọc Tất cả thấy v1 (Chưa đạt) và v2 (Đạt) của Chung cư UAT 27/11; không có nút Đạt / Chưa đạt | Đạt | Danh sách chỉ thấy tình huống; chưa thấy dòng Hạ tầng PCCC phiên bản 1 trong các hàng đầu |  |
+| A14 | (Sau bước B18) Mở **Dịch vụ & thanh toán** → thẻ **Báo giá**, bấm vào báo giá nháp của tổ chức A, bấm **Phát hành báo giá** | Trang báo "Đã phát hành báo giá"; giá của từng dòng công trình là giá quản trị đặt ở gói dịch vụ và giảm giá, không phải con số cố định trong tài liệu | Chạy 27/11 22:12: mở báo giá nháp `FET-d2e03b4f…`, nhập ngày bắt đầu 12:00 28/11/2026, thuế 0, hạn chấp nhận 12:00 28/11/2026, điều khoản; trang báo "Đã phát hành báo giá — Tổng thanh toán 1.200 ₫ do hệ thống tính."; dòng công trình 100 ₫/tháng × 12, kỳ 28/11/2026 – 28/11/2027 | Đạt | Giá lấy từ gói "Gói thử nghiệm thu BE#138 (QA)" |  |
+| A15 | Mở lại báo giá đó và tìm nút hoàn tiền | Không có thao tác hoàn tiền ở bất kỳ đâu; báo giá chưa thanh toán chỉ có **Hủy báo giá** | Chạy 27/11: báo giá đã phát hành chỉ có nút **Hủy báo giá**; không có thao tác hoàn tiền; trang ghi "Quản trị FET3D không chấp nhận hay thanh toán thay tổ chức." | Đạt |  |  |
 
 ## 4. Phần B — Tổ chức
 
@@ -144,7 +144,7 @@ Mỗi ca dưới đây đạt khi hệ thống **chặn** thao tác và hiện t
 | D15 | Học viên | Bấm **Bắt đầu phiên** khi công trình đã hết suất học viên của kỳ | Màn "Tòa nhà đã hết suất"; không vào được màn chơi | | | | |
 | D16 | Học viên | Mở công trình đã hết hạn dịch vụ | Xem được danh sách bài nhưng không bắt đầu được lượt mới; có dòng giải thích dịch vụ đã hết hạn | | | | |
 | D17 | Tổ chức | Bấm lưu một bài học công khai | "Chỉ tài khoản học viên mới lưu được bài." | Chạy 27/11: ở trang Bài học, nút "Lưu bài viết" bị khoá, bên cạnh ghi "Chỉ tài khoản học viên lưu được bài." | Đạt | Nút khoá sẵn nên không bấm được | |
-| D18 | Quản trị | Mở một báo giá của tổ chức và tìm nút thanh toán | Không thanh toán được thay tổ chức: "Quản trị FET3D có thể xem trạng thái nhưng không tạo thanh toán thay tổ chức." | | | | |
+| D18 | Quản trị | Mở một báo giá của tổ chức và tìm nút thanh toán | Không thanh toán được thay tổ chức: "Quản trị FET3D có thể xem trạng thái nhưng không tạo thanh toán thay tổ chức." | Chạy 27/11: báo giá đã phát hành không có nút thanh toán; ghi "Đang chờ tổ chức chấp nhận — Quản trị FET3D không chấp nhận hay thanh toán thay tổ chức." | Đạt | Câu thật khác câu trong tài liệu |  |
 | D19 | Chuyên viên PCCC (hai người) | Hai Chuyên viên cùng mở một mục chờ thẩm định; người thứ hai quyết định sau người thứ nhất | Người thứ hai bị từ chối; quyết định đầu giữ nguyên (hàng chờ dùng chung: ai thẩm định trước thì kết quả của người đó được ghi) | | | | |
 | D20 | Tổ chức | Xuất CSV báo cáo lần thứ 11 trong cùng một ngày | Bị từ chối vì quá 10 lần xuất mỗi ngày; không tải được tệp | | | | |
 | D21 | Tổ chức | Ở báo cáo, chọn khoảng thời gian dài hơn 90 ngày | Không áp dụng được; trang báo "Khoảng thời gian tối đa 90 ngày (đang chọn … ngày)." | Chạy 27/11: chọn 01/07–27/11/2026, bấm Áp dụng: "Khoảng thời gian tối đa 90 ngày (đang chọn 150 ngày)."; báo cáo giữ nguyên 30 ngày gần đây | Đạt | | |
@@ -152,7 +152,7 @@ Mỗi ca dưới đây đạt khi hệ thống **chặn** thao tác và hiện t
 | D23 | Tổ chức | Tạo bản phát hành cho phiên bản chưa được Chuyên viên PCCC thẩm định đạt | Không tạo được; tab Phát hành ghi "Tạo được khi nội dung đã đạt thẩm định và gói đã chốt." | Chạy 27/11: v1 (Chưa đạt) không có bản phát hành; chỉ v2 (Đạt) tạo được | Đạt | | |
 | D24 | Tổ chức | Sửa nội dung hoặc gửi thẩm định lại một phiên bản đã gửi | Không làm được trên phiên bản đó; phải tạo phiên bản mới và gửi thẩm định lại | Chạy 27/11: v1 ghi "v1 đã được gửi thẩm định nên không gửi lại. Tạo phiên bản mới để gửi nội dung khác." | Đạt | | |
 | D25 | Tổ chức | Trong ứng dụng, bấm **Tiếp tục với Google** bằng tài khoản Google của tổ chức | "Ứng dụng chỉ dành cho học viên. Tài khoản Google này thuộc tài khoản tổ chức hoặc quản trị, hãy đăng nhập trên trang web fet3d.io.vn." | | | | |
-| D26 | Quản trị | (Chỉ khi có báo giá đã thanh toán) Mở báo giá đó và tìm nút hủy hoặc hoàn tiền | Không hủy được: "Đã có tiền: không hủy được báo giá này"; không có thao tác hoàn tiền | | | | |
+| D26 | Quản trị | (Chỉ khi có báo giá đã thanh toán) Mở báo giá đó và tìm nút hủy hoặc hoàn tiền | Không hủy được: "Đã có tiền: không hủy được báo giá này"; không có thao tác hoàn tiền | Chạy 27/11: báo giá `FET-e776a515…` (đã nhận tiền 18/11) ghi "Đã có tiền: không hủy được báo giá này"; không có thao tác hoàn tiền | Đạt | Nút "Hủy báo giá" vẫn hiện bên dưới dòng đó; không bấm thử trên báo giá thật | Lỗi 16 |
 
 ## 8. Chỗ chưa xác nhận trên màn hình thật
 
@@ -252,17 +252,18 @@ Ghi mỗi lỗi một dòng. Mức độ: **Nghiêm trọng** (không làm tiế
 | 13 | C18 | Trang `/download` không nói bài tập 3D chỉ chơi trong ứng dụng (web không có bài 3D) và không nói chưa có bản iOS | Thấp |  |  |  |  |
 | 14 | B3, B7 | Sau khi dựng gói, thẻ IFC đọc theo việc dựng gói: bước "Dựng mô hình 3D" ghi "lượt xử lý thứ 2", kết quả kiểm tra tự động lấy của việc dựng gói; nhật ký ghi "Bước khác" cho lượt dựng gói | Cao |  | FE `c357c24` (PR #282, #284) | 27/11/2026 | Đạt: "Dựng mô hình 3D · lượt xử lý thứ 1", kiểm tra 08:44 của việc dựng mô hình; nhật ký ghi "Dựng gói phát hành" |
 | 15 | B20 | Thẻ "Nhắc gia hạn" trong Dịch vụ & thanh toán liệt kê cả thông báo kết quả thẩm định (hạ tầng, tình huống), không liên quan tới gia hạn | Thấp |  |  |  |  |
+| 16 | D26 | Báo giá đã nhận tiền vẫn hiện nút "Hủy báo giá" ngay dưới dòng "Đã có tiền: không hủy được báo giá này" (chưa bấm thử) | Thấp |  |  |  |  |
 
 ## 11. Tổng kết lượt kiểm thử
 
 | Phần | Số bước | Đạt | Không đạt | Bỏ qua |
 | :--- | :--- | :--- | :--- | :--- |
-| A — Quản trị | 15 | 1 | 0 | 0 |
+| A — Quản trị | 15 | 7 | 0 | 0 |
 | B — Tổ chức | 23 | 15 | 1 | 2 |
 | E — Chuyên viên PCCC | 6 | 6 | 0 | 0 |
 | C — Học viên | 20 | 0 | 1 | 0 |
-| D — Từ chối quyền | 26 | 7 | 0 | 0 |
-| Tổng | 90 | 29 | 2 | 2 |
+| D — Từ chối quyền | 26 | 9 | 0 | 0 |
+| Tổng | 90 | 37 | 2 | 2 |
 
 Các số trên là của lượt chạy 26–27/11/2026 do nhóm tự chạy; các bước còn trống chưa chạy.
 
