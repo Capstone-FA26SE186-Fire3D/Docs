@@ -44,7 +44,7 @@ Quy ước cột **Đạt / Không đạt**: ghi Đạt, Không đạt, hoặc B
 | A1 | Đăng nhập web bằng tài khoản quản trị | Web chuyển tới trang Tổng quan của khu Quản trị hệ thống; thanh bên có Theo dõi thẩm định, Tài khoản, Phiên bản runtime, Bài học, Thư viện mẫu, Dịch vụ & thanh toán | Chạy 27/11 22:15: vào "Tổng quan hệ thống"; thanh bên có Tổng quan, Theo dõi thẩm định, Hỗ trợ & nhật ký, Tài khoản, Tổ chức, Phiên bản runtime, Bài học, Thư viện mẫu, AI & nguồn tri thức, Dịch vụ & thanh toán | Đạt |  |  |
 | A2 | Mở **Phiên bản runtime** | Thấy danh sách phiên bản, mới nhất ở trên; phiên bản 2.5.0 có trạng thái "Đang dùng" | Chạy 27/11: 8 phiên bản, mới nhất ở trên; 2.5.0, 2.4.0, 2.3.0 "Đang dùng", các bản cũ "Tắt" | Đạt |  |  |
 | A3 | Bấm vào hàng 2.5.0 | Thấy danh sách năng lực của phiên bản, kèm sự kiện và thao tác; không có nút sửa nội dung | Chạy 27/11: hộp "Phiên bản 2.5.0" ghi 42 khả năng, mỗi khả năng có sự kiện và thao tác; ghi "Phiên bản đã đăng ký không sửa được"; không có ô nhập hay nút sửa | Đạt |  |  |
-| A4 | Bấm **Đăng ký phiên bản**, chọn một tệp không phải tệp danh mục của runtime | Trang báo "Tệp chưa đúng" và không đăng ký được | | | | |
+| A4 | Bấm **Đăng ký phiên bản**, chọn một tệp không phải tệp danh mục của runtime | Trang báo "Tệp chưa đúng" và không đăng ký được | Chạy 27/11 22:45: đưa vào tệp `tep-thu-uat.json` không phải danh mục runtime: khung "Tệp chưa đúng" liệt kê thiếu số phiên bản dạng 2.2.0, thiếu phiên bản giao thức, thiếu định dạng gói bài, thiếu danh sách khả năng; nút **Đăng ký** bị khoá; bấm Hủy, danh sách vẫn 8 phiên bản | Đạt | Ô chọn tệp chỉ nhận `.json`; tệp thử được tạo ngay trong trang thay vì chọn từ máy | |
 | A5 | Mở **Thư viện mẫu**, bấm **Thêm mục**, tạo một mục Tiêu chí chấm mẫu, **Tạo phiên bản**, lưu nháp rồi **Xuất bản** | Trang báo "Đã xuất bản phiên bản"; mục có dòng "Bản tổ chức đang thấy" | Chạy 27/11 22:20: tạo mục `RB-UAT-THU-27-11` (Tiêu chí chấm mẫu): "Đã tạo mục thư viện"; tạo phiên bản, lưu: "Đã tạo phiên bản nháp"; xuất bản: "Đã xuất bản phiên bản — v1 · từ giờ không sửa được nữa"; mục ghi "Bản tổ chức đang thấy: v1" | Đạt | Lưu nháp bắt buộc có điểm đạt và ít nhất một tiêu chí. Sau khi thử, mục để ở trạng thái Ngừng dùng |  |
 | A6 | Mở lại phiên bản vừa xuất bản | Phiên bản ghi "Đã xuất bản (không sửa được)"; chỉ có thể tạo Phiên bản mới | Chạy 27/11: phiên bản ghi "Đã xuất bản (không sửa được)"; không còn ô nào sửa được; chỉ có nút "Tạo phiên bản mới từ v1" | Đạt |  |  |
 | A7 | Bấm **Ngừng dùng** cho mục đó, rồi **Dùng lại** | Trang báo "Đã ngừng dùng mục" rồi "Đã dùng lại mục" | Chạy 27/11: "Đã ngừng dùng mục" rồi "Đã dùng lại mục"; trạng thái đổi Ngừng dùng ↔ Đang dùng | Đạt |  |  |
@@ -260,12 +260,12 @@ Ghi mỗi lỗi một dòng. Mức độ: **Nghiêm trọng** (không làm tiế
 
 | Phần | Số bước | Đạt | Không đạt | Bỏ qua |
 | :--- | :--- | :--- | :--- | :--- |
-| A — Quản trị | 15 | 14 | 0 | 0 |
+| A — Quản trị | 15 | 15 | 0 | 0 |
 | B — Tổ chức | 23 | 15 | 1 | 2 |
 | E — Chuyên viên PCCC | 6 | 6 | 0 | 0 |
 | C — Học viên | 20 | 0 | 1 | 0 |
 | D — Từ chối quyền | 26 | 9 | 1 | 0 |
-| Tổng | 90 | 44 | 3 | 2 |
+| Tổng | 90 | 45 | 3 | 2 |
 
 Các số trên là của lượt chạy 26–27/11/2026 do nhóm tự chạy; các bước còn trống chưa chạy.
 
