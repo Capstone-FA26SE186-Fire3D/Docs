@@ -237,18 +237,18 @@ Ghi mỗi lỗi một dòng. Mức độ: **Nghiêm trọng** (không làm tiế
 
 | STT | Bước | Mô tả (kèm ảnh chụp màn hình nếu có) | Mức độ | Issue | Đã sửa ở commit | Kiểm lại ngày (dd/mm/yyyy) | Kết quả kiểm lại |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| 1 | B4a | Hạ tầng PCCC lấy bình chữa cháy từ thiết bị đã xác nhận nhưng để trống loại chất chữa cháy và thời gian phun; phải điền tay từng bình | Trung bình | | | | |
-| 2 | B4a | Thông báo "Cần điền ô này." không nói đối tượng hay ô nào; chỉ có trong Thông tin cho bộ phận hỗ trợ | Trung bình | | | | |
-| 3 | B4a | Cửa chọn làm cửa thoát ở B4 vào hạ tầng thành thiết bị chứ không thành lối thoát, nên vẫn báo "Cần ít nhất một lối thoát nạn."; phải tự thêm Lối ra ngoài gắn vào cửa đó | Cao | | | | |
-| 4 | B3, B4a, E3 | Chữ kỹ thuật lộ ra: "IfcBuildingElementProxy", "IfcDoor", "Equipment", "Goal", "LightFixture", "bước Bước khác"; Chuyên viên không biết thiết bị là gì; tên tầng hiện tên thô trong IFC | Trung bình | | | | |
-| 5 | B2 | Chọn loại Chung cư vẫn hiện gợi ý "Trường học: từ tiểu học trở lên" | Thấp | | | | |
-| 6 | B5 | Áp mẫu ghi đè tên bản nháp bằng tên mẫu ("Cháy bếp căn hộ tầng 8…") dù kịch bản đã có tên và tòa chỉ có 4 tầng; tên này đi tiếp vào hộp gửi thẩm định và bài huấn luyện | Trung bình | | | | |
-| 7 | B5, E4 | Còn chữ kỹ thuật: tiêu chí "step_count", "route_efficiency"; "rubric"; mục "NPC"; "Spawn", "Hazard"; ở màn Chuyên viên còn các khoá objects, audience Evacuee, workingHours InHours, schemaVersion; điểm đạt ghi 0.7 thay vì 70% | Thấp | | | | |
-| 8 | B6 | Hộp tạo phiên bản hiện mã lần lưu dạng `"20805"` | Thấp | | | | |
-| 9 | B7 | Trạng thái dựng gói đầu trang chỉ đổi sau khi tải lại trang; lượt dựng v2 bị máy dựng nhận lại lần 2 mà không nói lý do | Thấp | | | | |
-| 10 | B10, B10a | Thông báo sau khi gửi ghi "đã gửi cho quản trị FET3D" (người thẩm định là Chuyên viên PCCC); bảng quyết định có chữ "Rejected" | Thấp | | | | |
-| 11 | B10, B11 | Tab Gửi thẩm định và Phát hành hiện mã băm và mã gói dài cho người dùng tổ chức | Thấp | | | | |
-| 12 | B11 | Tab Phát hành còn chữ "Built"; bảng Bài huấn luyện ghi "Đang dùng" cho bài chưa phát hành được | Thấp | | | | |
+| 1 | B4a | Hạ tầng PCCC lấy bình chữa cháy từ thiết bị đã xác nhận nhưng để trống loại chất chữa cháy và thời gian phun; phải điền tay từng bình | Trung bình |  | FE `a84e66b` (PR #278) |  | Đã sửa trên web; chưa kiểm lại bằng một lượt chạy thật |
+| 2 | B4a | Thông báo "Cần điền ô này." không nói đối tượng hay ô nào; chỉ có trong Thông tin cho bộ phận hỗ trợ | Trung bình |  | FE `a84e66b` (PR #278) |  | Đã sửa trên web; chưa kiểm lại bằng một lượt chạy thật |
+| 3 | B4a | Cửa chọn làm cửa thoát ở B4 vào hạ tầng thành thiết bị chứ không thành lối thoát, nên vẫn báo "Cần ít nhất một lối thoát nạn."; phải tự thêm Lối ra ngoài gắn vào cửa đó | Cao | BE#239 | FE `a84e66b` (PR #278) |  | Đã sửa trên web; chưa kiểm lại bằng một lượt chạy thật |
+| 4 | B3, B4a, E3 | Chữ kỹ thuật lộ ra: "IfcBuildingElementProxy", "IfcDoor", "Equipment", "Goal", "LightFixture", "bước Bước khác"; Chuyên viên không biết thiết bị là gì; tên tầng hiện tên thô trong IFC | Trung bình | BE#239 | FE `a84e66b` (PR #278) |  | Đã sửa trên web; chưa kiểm lại bằng một lượt chạy thật |
+| 5 | B2 | Chọn loại Chung cư vẫn hiện gợi ý "Trường học: từ tiểu học trở lên" | Thấp |  | FE `a84e66b` (PR #278) |  | Đã sửa trên web; chưa kiểm lại bằng một lượt chạy thật |
+| 6 | B5 | Áp mẫu ghi đè tên bản nháp bằng tên mẫu ("Cháy bếp căn hộ tầng 8…") dù kịch bản đã có tên và tòa chỉ có 4 tầng; tên này đi tiếp vào hộp gửi thẩm định và bài huấn luyện | Trung bình |  | FE `a84e66b` (PR #278) |  | Đã sửa trên web; chưa kiểm lại bằng một lượt chạy thật |
+| 7 | B5, E4 | Còn chữ kỹ thuật: tiêu chí "step_count", "route_efficiency"; "rubric"; mục "NPC"; "Spawn", "Hazard"; ở màn Chuyên viên còn các khoá objects, audience Evacuee, workingHours InHours, schemaVersion; điểm đạt ghi 0.7 thay vì 70% | Thấp |  | FE `a84e66b` (PR #278) |  | Đã sửa trên web; chưa kiểm lại bằng một lượt chạy thật |
+| 8 | B6 | Hộp tạo phiên bản hiện mã lần lưu dạng `"20805"` | Thấp |  | FE `a84e66b` (PR #278) |  | Đã sửa trên web; chưa kiểm lại bằng một lượt chạy thật |
+| 9 | B7 | Trạng thái dựng gói đầu trang chỉ đổi sau khi tải lại trang; lượt dựng v2 bị máy dựng nhận lại lần 2 mà không nói lý do | Thấp | BE#239 | FE `a84e66b` (PR #278) |  | Đã sửa trên web; chưa kiểm lại bằng một lượt chạy thật |
+| 10 | B10, B10a | Thông báo sau khi gửi ghi "đã gửi cho quản trị FET3D" (người thẩm định là Chuyên viên PCCC); bảng quyết định có chữ "Rejected" | Thấp |  | FE `a84e66b` (PR #278) |  | Đã sửa trên web; chưa kiểm lại bằng một lượt chạy thật |
+| 11 | B10, B11 | Tab Gửi thẩm định và Phát hành hiện mã băm và mã gói dài cho người dùng tổ chức | Thấp |  | FE `a84e66b` (PR #278) |  | Đã sửa trên web; chưa kiểm lại bằng một lượt chạy thật |
+| 12 | B11 | Tab Phát hành còn chữ "Built"; bảng Bài huấn luyện ghi "Đang dùng" cho bài chưa phát hành được | Thấp |  | FE `a84e66b` (PR #278) | 27/11/2026 | Đạt: tab Phát hành ghi "Chưa phát hành", không còn chữ "Built" |
 
 ## 11. Tổng kết lượt kiểm thử
 
